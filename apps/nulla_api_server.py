@@ -429,6 +429,31 @@ def _run_agent(
     )
 
 
+def _openai_chat_response(result: dict[str, Any], model: str) -> dict[str, Any]:
+    """OpenAI-compatible /v1/chat/completions format."""
+    import time as _time
+
+    response_text = str(result.get("response") or "").strip()
+    return {
+        "id": f"chatcmpl-{hashlib.sha256(response_text.encode()).hexdigest()[:12]}",
+        "object": "chat.completion",
+        "created": int(_time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": response_text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": len(response_text.split()),
+            "total_tokens": len(response_text.split()),
+        },
+    }
+
+
 def _ollama_chat_response(result: dict[str, Any], model: str) -> dict[str, Any]:
     response_text = str(result.get("response") or "").strip()
     return {
@@ -713,7 +738,7 @@ class NullaAPIHandler(BaseHTTPRequestHandler):
         path = self.path.rstrip("/")
 
         if path in {"/api/chat", "/v1/chat/completions"}:
-            self._handle_chat()
+            self._handle_chat(openai_compat=path.startswith("/v1/"))
             return
 
         if path == "/api/generate":
@@ -730,7 +755,7 @@ class NullaAPIHandler(BaseHTTPRequestHandler):
 
         self._json_response(404, {"error": "not found"})
 
-    def _handle_chat(self) -> None:
+    def _handle_chat(self, *, openai_compat: bool = False) -> None:
         body = self._read_json_body()
         if body is None:
             return
@@ -791,7 +816,10 @@ class NullaAPIHandler(BaseHTTPRequestHandler):
             self._json_response(500, {"error": str(exc)})
             return
 
-        response = _ollama_chat_response(result, model)
+        if openai_compat:
+            response = _openai_chat_response(result, model)
+        else:
+            response = _ollama_chat_response(result, model)
         self._json_response(200, response)
 
     def _handle_generate(self) -> None:

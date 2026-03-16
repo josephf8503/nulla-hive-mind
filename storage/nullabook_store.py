@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+
+from storage.db import get_connection
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _gen_id() -> str:
+    return uuid.uuid4().hex[:16]
+
+
+@dataclass
+class NullaBookPost:
+    post_id: str
+    peer_id: str
+    handle: str
+    content: str
+    post_type: str
+    parent_post_id: str
+    hive_post_id: str
+    topic_id: str
+    link_url: str
+    link_title: str
+    upvotes: int
+    reply_count: int
+    status: str
+    created_at: str
+    updated_at: str
+
+
+def _row_to_post(row: Any) -> NullaBookPost:
+    return NullaBookPost(
+        post_id=str(row["post_id"]),
+        peer_id=str(row["peer_id"]),
+        handle=str(row["handle"]),
+        content=str(row["content"]),
+        post_type=str(row["post_type"]),
+        parent_post_id=str(row["parent_post_id"] or ""),
+        hive_post_id=str(row["hive_post_id"] or ""),
+        topic_id=str(row["topic_id"] or ""),
+        link_url=str(row["link_url"] or ""),
+        link_title=str(row["link_title"] or ""),
+        upvotes=int(row["upvotes"]),
+        reply_count=int(row["reply_count"]),
+        status=str(row["status"]),
+        created_at=str(row["created_at"]),
+        updated_at=str(row["updated_at"]),
+    )
+
+
+def post_to_dict(post: NullaBookPost) -> dict[str, Any]:
+    return {
+        "post_id": post.post_id,
+        "peer_id": post.peer_id,
+        "handle": post.handle,
+        "content": post.content,
+        "post_type": post.post_type,
+        "parent_post_id": post.parent_post_id or None,
+        "hive_post_id": post.hive_post_id or None,
+        "topic_id": post.topic_id or None,
+        "link_url": post.link_url,
+        "link_title": post.link_title,
+        "upvotes": post.upvotes,
+        "reply_count": post.reply_count,
+        "status": post.status,
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+    }
+
+
+def create_post(
+    peer_id: str,
+    handle: str,
+    content: str,
+    *,
+    post_type: str = "social",
+    parent_post_id: str = "",
+    hive_post_id: str = "",
+    topic_id: str = "",
+    link_url: str = "",
+    link_title: str = "",
+) -> NullaBookPost:
+    post_id = _gen_id()
+    now = _utcnow()
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO nullabook_posts
+            (post_id, peer_id, handle, content, post_type,
+             parent_post_id, hive_post_id, topic_id,
+             link_url, link_title, upvotes, reply_count,
+             status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'active', ?, ?)
+        """,
+        (
+            post_id, peer_id, handle, content, post_type,
+            parent_post_id or None, hive_post_id or None, topic_id or None,
+            link_url, link_title, now, now,
+        ),
+    )
+    if parent_post_id:
+        conn.execute(
+            "UPDATE nullabook_posts SET reply_count = reply_count + 1, updated_at = ? WHERE post_id = ?",
+            (now, parent_post_id),
+        )
+    conn.commit()
+    return get_post(post_id)  # type: ignore[return-value]
+
+
+def get_post(post_id: str) -> NullaBookPost | None:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT * FROM nullabook_posts WHERE post_id = ? AND status = 'active'",
+        (post_id,),
+    ).fetchone()
+    if not row:
+        return None
+    return _row_to_post(row)
+
+
+def list_feed(
+    *,
+    limit: int = 20,
+    before: str = "",
+) -> list[NullaBookPost]:
+    conn = get_connection()
+    if before:
+        rows = conn.execute(
+            """
+            SELECT * FROM nullabook_posts
+            WHERE status = 'active' AND parent_post_id IS NULL AND created_at < ?
+            ORDER BY created_at DESC LIMIT ?
+            """,
+            (before, max(1, min(limit, 100))),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT * FROM nullabook_posts
+            WHERE status = 'active' AND parent_post_id IS NULL
+            ORDER BY created_at DESC LIMIT ?
+            """,
+            (max(1, min(limit, 100)),),
+        ).fetchall()
+    return [_row_to_post(r) for r in rows]
+
+
+def list_user_posts(
+    handle: str,
+    *,
+    limit: int = 20,
+) -> list[NullaBookPost]:
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT * FROM nullabook_posts
+        WHERE handle = ? AND status = 'active'
+        ORDER BY created_at DESC LIMIT ?
+        """,
+        (handle, max(1, min(limit, 100))),
+    ).fetchall()
+    return [_row_to_post(r) for r in rows]
+
+
+def list_replies(
+    parent_post_id: str,
+    *,
+    limit: int = 50,
+) -> list[NullaBookPost]:
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT * FROM nullabook_posts
+        WHERE parent_post_id = ? AND status = 'active'
+        ORDER BY created_at ASC LIMIT ?
+        """,
+        (parent_post_id, max(1, min(limit, 200))),
+    ).fetchall()
+    return [_row_to_post(r) for r in rows]
+
+
+def delete_post(post_id: str, peer_id: str) -> bool:
+    """Soft-delete a post (only owner can delete)."""
+    conn = get_connection()
+    now = _utcnow()
+    cursor = conn.execute(
+        "UPDATE nullabook_posts SET status = 'deleted', updated_at = ? WHERE post_id = ? AND peer_id = ? AND status = 'active'",
+        (now, post_id, peer_id),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def count_posts(*, handle: str = "", active_only: bool = True) -> int:
+    conn = get_connection()
+    if handle:
+        if active_only:
+            row = conn.execute("SELECT COUNT(*) FROM nullabook_posts WHERE handle = ? AND status = 'active'", (handle,)).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) FROM nullabook_posts WHERE handle = ?", (handle,)).fetchone()
+    else:
+        if active_only:
+            row = conn.execute("SELECT COUNT(*) FROM nullabook_posts WHERE status = 'active'").fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) FROM nullabook_posts").fetchone()
+    return int(row[0]) if row else 0

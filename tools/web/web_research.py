@@ -172,6 +172,80 @@ def _prebuilt_page_for_hit(pages: list[PageEvidence], hit: WebHit) -> PageEviden
     return None
 
 
+_CRYPTO_ALIASES: dict[str, str] = {
+    "bitcoin": "bitcoin", "btc": "bitcoin",
+    "ethereum": "ethereum", "eth": "ethereum",
+    "solana": "solana", "sol": "solana",
+    "cardano": "cardano", "ada": "cardano",
+    "polkadot": "polkadot", "dot": "polkadot",
+    "dogecoin": "dogecoin", "doge": "dogecoin",
+    "ripple": "ripple", "xrp": "ripple",
+    "litecoin": "litecoin", "ltc": "litecoin",
+    "avalanche": "avalanche-2", "avax": "avalanche-2",
+    "chainlink": "chainlink", "link": "chainlink",
+    "matic": "matic-network", "polygon": "matic-network",
+    "bnb": "binancecoin", "binance": "binancecoin",
+}
+
+_PRICE_KEYWORDS = (
+    "price", "cost", "worth", "value", "rate",
+    "how much", "trading at", "market cap",
+)
+
+
+def _looks_like_price_query(query: str) -> str:
+    """Return CoinGecko coin ID if query asks for a crypto price, else ''."""
+    lowered = str(query or "").lower()
+    if not any(kw in lowered for kw in _PRICE_KEYWORDS):
+        return ""
+    for alias, cg_id in _CRYPTO_ALIASES.items():
+        if alias in lowered:
+            return cg_id
+    return ""
+
+
+def _crypto_price_fallback(
+    query: str,
+    coin_id: str,
+    *,
+    timeout_s: float,
+) -> tuple[str, list[WebHit], list[PageEvidence], list[str]] | None:
+    api_url = (
+        f"https://api.coingecko.com/api/v3/simple/price"
+        f"?ids={urllib.parse.quote(coin_id)}"
+        f"&vs_currencies=usd,eur,btc"
+        f"&include_24hr_change=true&include_market_cap=true"
+    )
+    req = urllib.request.Request(api_url, headers={"User-Agent": "NULLA-PRICE/1.0"})
+    with urllib.request.urlopen(req, timeout=min(max(timeout_s, 3.0), 12.0)) as resp:
+        payload = json.loads(resp.read(100000).decode("utf-8", errors="ignore"))
+
+    data = payload.get(coin_id)
+    if not data:
+        return None
+    usd = data.get("usd")
+    if usd is None:
+        return None
+    eur = data.get("eur", "?")
+    change_24h = data.get("usd_24h_change")
+    mcap = data.get("usd_market_cap")
+    name = coin_id.replace("-", " ").title()
+
+    parts = [f"{name}: ${usd:,.2f} USD"]
+    if eur != "?":
+        parts.append(f"€{eur:,.2f} EUR")
+    if change_24h is not None:
+        parts.append(f"24h change: {change_24h:+.2f}%")
+    if mcap:
+        parts.append(f"market cap: ${mcap:,.0f}")
+    summary = " | ".join(parts)
+
+    cg_url = f"https://www.coingecko.com/en/coins/{coin_id}"
+    hit = WebHit(title=f"{name} Price", url=cg_url, snippet=summary, engine="coingecko_api", score=None)
+    page = PageEvidence(url=cg_url, final_url=cg_url, status="ok", title=hit.title, text=summary)
+    return ("coingecko_api", [hit], [page], ["live_price_fallback:coingecko_api"])
+
+
 def _specialized_live_research(
     query: str,
     *,
@@ -182,6 +256,12 @@ def _specialized_live_research(
         return _weather_fallback(query, timeout_s=fetch_timeout_s)
     if _looks_like_news_query(query):
         return _news_rss_fallback(query, max_hits=max_hits, timeout_s=fetch_timeout_s)
+    coin_id = _looks_like_price_query(query)
+    if coin_id:
+        try:
+            return _crypto_price_fallback(query, coin_id, timeout_s=fetch_timeout_s)
+        except Exception:
+            pass
     return None
 
 
@@ -513,7 +593,7 @@ def _duckduckgo_html_hits(query: str, *, max_hits: int) -> list[WebHit]:
     link_matches = re.findall(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"', html_text, re.IGNORECASE)
     title_matches = re.findall(r'<a[^>]+class="result__a"[^>]*>(.*?)</a>', html_text, re.IGNORECASE | re.DOTALL)
     hits: list[WebHit] = []
-    for raw_title, raw_snippet, raw_link in zip(title_matches, snippet_matches, link_matches, strict=False):
+    for raw_title, raw_snippet, raw_link in zip(title_matches, snippet_matches, link_matches):  # noqa: B905  -- strict= unsupported on Python 3.9
         resolved_url = _resolve_duckduckgo_result_url(raw_link)
         if not resolved_url:
             continue

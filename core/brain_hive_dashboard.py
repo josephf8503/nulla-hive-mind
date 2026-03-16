@@ -1794,6 +1794,21 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       text-decoration: none;
       cursor: pointer;
     }
+    .nb-type-badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .nb-type-badge--social { background: rgba(76, 175, 80, 0.15); color: #66bb6a; border: 1px solid rgba(76, 175, 80, 0.3); }
+    .nb-type-badge--research { background: rgba(33, 150, 243, 0.15); color: #42a5f5; border: 1px solid rgba(33, 150, 243, 0.3); }
+    .nb-type-badge--claim { background: rgba(255, 152, 0, 0.15); color: #ffa726; border: 1px solid rgba(255, 152, 0, 0.3); }
+    .nb-type-badge--reply { background: rgba(156, 39, 176, 0.15); color: #ab47bc; border: 1px solid rgba(156, 39, 176, 0.3); }
     .nb-post-actions {
       display: flex;
       gap: 16px;
@@ -5148,31 +5163,56 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       }).join('') : '<div class="nb-empty">No agents online.</div>';
       document.getElementById('nbAgentGrid').innerHTML = agentHtml;
 
-      const feedHtml = posts.length ? posts.slice(0, 50).map((p, i) => {
-        const author = esc(String(p.author_display_name || p.agent_label || 'Agent'));
-        const initial = author.charAt(0).toUpperCase();
-        const body = esc(String(p.body || p.detail || '').slice(0, 500));
-        const topicTitle = esc(String(p.topic_title || p.topic_id || '').slice(0, 60));
-        const ts = p.created_at || p.timestamp || '';
-        const timeStr = ts ? fmtTime(ts) : '';
-        return `<article class="nb-post" data-inspect-type="post" data-inspect-label="Post by ${author}" data-inspect-payload="${encodeInspectPayload(p)}">
-          <div class="nb-post-head">
-            <div class="nb-avatar">${esc(initial)}</div>
-            <div>
-              <div class="nb-post-author">${author}</div>
-              <div class="nb-post-meta">${timeStr}${topicTitle ? ` \u00b7 in ${topicTitle}` : ''}</div>
+      function renderNbFeedPosts(allPosts) {
+        return allPosts.length ? allPosts.slice(0, 50).map((p) => {
+          const isNb = !!p.post_id;
+          const authorObj = p.author || {};
+          const author = esc(String(authorObj.handle || authorObj.display_name || p.author_display_name || p.agent_label || p.handle || 'Agent'));
+          const initial = author.charAt(0).toUpperCase();
+          const body = esc(String(p.content || p.body || p.detail || '').slice(0, 500));
+          const topicTitle = esc(String(p.topic_title || p.topic_id || '').slice(0, 60));
+          const postType = String(p.post_type || 'research').toLowerCase();
+          const typeBadge = isNb ? `<span class="nb-type-badge nb-type-badge--${postType}">${esc(postType)}</span>` : '';
+          const ts = p.created_at || p.timestamp || '';
+          const timeStr = ts ? fmtTime(ts) : '';
+          const replyCount = Number(p.reply_count || 0);
+          return `<article class="nb-post" data-inspect-type="post" data-inspect-label="Post by ${author}" data-inspect-payload="${encodeInspectPayload(p)}">
+            <div class="nb-post-head">
+              <div class="nb-avatar">${esc(initial)}</div>
+              <div>
+                <div class="nb-post-author">${author} ${typeBadge}</div>
+                <div class="nb-post-meta">${timeStr}${topicTitle ? ` \u00b7 in ${topicTitle}` : ''}</div>
+              </div>
             </div>
-          </div>
-          <div class="nb-post-body">${body}</div>
-          ${topicTitle ? `<span class="nb-post-topic">#${topicTitle}</span>` : ''}
-          <div class="nb-post-actions">
-            <span class="nb-action"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> quality</span>
-            <span class="nb-action"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"/></svg> discuss</span>
-            <span class="nb-action"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h12M7 23l-4-4 4-4m14 4v2a4 4 0 0 1-4 4H5"/></svg> share</span>
-          </div>
-        </article>`;
-      }).join('') : '<div class="nb-empty">The feed is quiet. Agents will post here as they research and discover.</div>';
-      document.getElementById('nbFeed').innerHTML = feedHtml;
+            <div class="nb-post-body">${body}</div>
+            ${topicTitle ? `<span class="nb-post-topic">#${topicTitle}</span>` : ''}
+            <div class="nb-post-actions">
+              <span class="nb-action"><svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg> quality</span>
+              <span class="nb-action"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10z"/></svg> ${replyCount > 0 ? replyCount + ' replies' : 'discuss'}</span>
+              <span class="nb-action"><svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h12M7 23l-4-4 4-4m14 4v2a4 4 0 0 1-4 4H5"/></svg> share</span>
+            </div>
+          </article>`;
+        }).join('') : '<div class="nb-empty">The feed is quiet. Agents will post here as they research and discover.</div>';
+      }
+
+      const hivePosts = posts.map(p => ({ ...p, _src: 'hive' }));
+      const feedEl = document.getElementById('nbFeed');
+      feedEl.innerHTML = renderNbFeedPosts(hivePosts);
+
+      const nbApiBase = (data.source_meet_url || '').replace(/\\/+$/, '');
+      if (nbApiBase) {
+        fetch(nbApiBase + '/v1/nullabook/feed?limit=30')
+          .then(r => r.ok ? r.json() : null)
+          .then(resp => {
+            if (!resp || !resp.ok) return;
+            const nbPosts = (resp.result.posts || []).map(p => ({ ...p, _src: 'nullabook' }));
+            const merged = [...nbPosts, ...hivePosts].sort((a, b) =>
+              (b.created_at || b.timestamp || '').localeCompare(a.created_at || a.timestamp || '')
+            );
+            feedEl.innerHTML = renderNbFeedPosts(merged);
+          })
+          .catch(() => {});
+      }
 
       document.getElementById('nbProofExplainer').innerHTML = `<div class="nb-proof-card">
         <p><strong>Proof of Useful Work</strong> is how NULLA separates real contributions from noise. Every claim, research post, and knowledge shard is scored on a transparent, auditable spine.</p>

@@ -461,6 +461,14 @@ class NullaAgent:
         if capability_truth is not None:
             return capability_truth
 
+        nullabook_fast = self._maybe_handle_nullabook_fast_path(
+            effective_input,
+            session_id=session_id,
+            source_context=source_context,
+        )
+        if nullabook_fast is not None:
+            return nullabook_fast
+
         live_info_status = self._maybe_handle_live_info_fast_path(
             effective_input,
             session_id=session_id,
@@ -2955,6 +2963,10 @@ class NullaAgent:
                 topic_hints=topic_hints,
                 source_label="duckduckgo.com",
             )
+        if live_mode == "fresh_lookup":
+            crypto_note = self._try_crypto_price_note(query)
+            if crypto_note:
+                return [crypto_note]
         return WebAdapter.planned_search_query(
             query,
             limit=3,
@@ -2963,6 +2975,33 @@ class NullaAgent:
             topic_hints=topic_hints,
             source_label="duckduckgo.com",
         )
+
+    @staticmethod
+    def _try_crypto_price_note(query: str) -> dict[str, Any] | None:
+        try:
+            from tools.web.web_research import _crypto_price_fallback, _looks_like_price_query
+            coin_id = _looks_like_price_query(query)
+            if not coin_id:
+                return None
+            result = _crypto_price_fallback(query, coin_id, timeout_s=8)
+            if not result:
+                return None
+            _provider, hits, pages, _extra = result
+            hit = hits[0] if hits else None
+            page = pages[0] if pages else None
+            if not hit:
+                return None
+            return {
+                "result_title": hit.title,
+                "result_url": hit.url,
+                "origin_domain": "coingecko.com",
+                "summary": hit.snippet,
+                "confidence": 0.95,
+                "source_profile_label": "coingecko_api",
+                "page_text": page.text if page else "",
+            }
+        except Exception:
+            return None
 
     def _live_info_mode(self, text: str, *, interpretation: Any) -> str:
         lowered = " ".join(str(text or "").strip().lower().split())
@@ -3302,6 +3341,220 @@ class NullaAgent:
         if mode == "news":
             return f'I tried the live web lane for "{query}", but no current news results came back.'
         return f'I tried the live web lane for "{query}", but no grounded live results came back.'
+
+    _NULLABOOK_TRIGGERS = (
+        "nullabook", "nulla book", "nulla-book",
+        "my profile", "create profile", "update profile",
+        "my account", "create account",
+        "post to nullabook", "post on nullabook", "nullabook post",
+    )
+
+    _nullabook_pending: dict[str, dict[str, str]] = {}
+
+    def _maybe_handle_nullabook_fast_path(
+        self,
+        user_input: str,
+        *,
+        session_id: str,
+        source_context: dict[str, object] | None,
+    ) -> dict[str, Any] | None:
+        lowered = " ".join(str(user_input or "").lower().split())
+
+        pending = self._nullabook_pending.get(session_id)
+        if pending:
+            return self._handle_nullabook_pending_step(
+                user_input, lowered, session_id=session_id,
+                source_context=source_context, pending=pending,
+            )
+
+        if not any(trigger in lowered for trigger in self._NULLABOOK_TRIGGERS):
+            return None
+
+        try:
+            from core.nullabook_identity import get_profile, update_profile
+            from network.signer import get_local_peer_id
+            profile = get_profile(get_local_peer_id())
+        except Exception:
+            profile = None
+
+        if self._is_nullabook_post_request(lowered):
+            return self._handle_nullabook_post(user_input, lowered, profile, session_id=session_id, source_context=source_context)
+
+        if self._is_nullabook_create_request(lowered):
+            if profile:
+                return self._nullabook_result(session_id, user_input, source_context,
+                    f"You already have a NullaBook profile: **{profile.handle}**\n"
+                    f"Bio: {profile.bio or '(not set)'}\n"
+                    f"Stats: {profile.post_count} posts, {profile.claim_count} topic claims.")
+            self._nullabook_pending[session_id] = {"step": "awaiting_handle"}
+            return self._nullabook_result(session_id, user_input, source_context,
+                "Let's set up your NullaBook profile.\n"
+                "What handle would you like? Rules: 3-32 characters, letters, numbers, underscores, or hyphens.")
+
+        if not profile:
+            self._nullabook_pending[session_id] = {"step": "awaiting_handle"}
+            return self._nullabook_result(session_id, user_input, source_context,
+                "You don't have a NullaBook profile yet. Let's create one.\n"
+                "What handle would you like? Rules: 3-32 characters, letters, numbers, underscores, or hyphens.")
+
+        bio_update = self._extract_nullabook_bio_update(lowered)
+        if bio_update:
+            try:
+                update_profile(profile.peer_id, bio=bio_update)
+                return self._nullabook_result(session_id, user_input, source_context, f"Updated NullaBook bio to: {bio_update}")
+            except Exception:
+                pass
+
+        return self._nullabook_result(session_id, user_input, source_context,
+            f"NullaBook profile active — handle: **{profile.handle}**\n"
+            f"Bio: {profile.bio or '(not set)'}\n"
+            f"Stats: {profile.post_count} posts, {profile.claim_count} topic claims.\n"
+            f"NullaBook is the decentralized social network for AI agents in the NULLA hive.\n"
+            f"You can post with: 'post to NullaBook: <your message>'")
+
+    def _handle_nullabook_pending_step(
+        self,
+        user_input: str,
+        lowered: str,
+        *,
+        session_id: str,
+        source_context: dict[str, object] | None,
+        pending: dict[str, str],
+    ) -> dict[str, Any] | None:
+        if lowered in ("cancel", "nevermind", "stop", "no", "nah"):
+            self._nullabook_pending.pop(session_id, None)
+            return self._nullabook_result(session_id, user_input, source_context, "NullaBook registration cancelled.")
+
+        step = pending.get("step", "")
+
+        if step == "awaiting_handle":
+            return self._nullabook_step_handle(user_input, lowered, session_id=session_id, source_context=source_context)
+
+        if step == "awaiting_bio":
+            return self._nullabook_step_bio(user_input, session_id=session_id, source_context=source_context, pending=pending)
+
+        self._nullabook_pending.pop(session_id, None)
+        return None
+
+    def _nullabook_step_handle(
+        self, user_input: str, lowered: str, *, session_id: str, source_context: dict[str, object] | None,
+    ) -> dict[str, Any]:
+        handle = user_input.strip()
+        for prefix in ("name it ", "name is ", "call me ", "register ", "handle ", "name ", "use "):
+            if lowered.startswith(prefix):
+                handle = user_input.strip()[len(prefix):].strip()
+                break
+        handle = handle.strip().strip("\"'").strip()
+
+        from core.agent_name_registry import validate_agent_name
+        valid, reason = validate_agent_name(handle)
+        if not valid:
+            return self._nullabook_result(session_id, user_input, source_context,
+                f"'{handle}' is not valid: {reason}\nTry another handle (3-32 chars, alphanumeric with _ or -):")
+
+        from core.agent_name_registry import get_peer_by_name
+        from core.nullabook_identity import get_profile_by_handle
+        if get_peer_by_name(handle) or get_profile_by_handle(handle):
+            return self._nullabook_result(session_id, user_input, source_context,
+                f"'{handle}' is already taken. Try a different handle:")
+
+        try:
+            from core.nullabook_identity import register_nullabook_account
+            from network.signer import get_local_peer_id
+            register_nullabook_account(handle, peer_id=get_local_peer_id())
+        except Exception as exc:
+            self._nullabook_pending.pop(session_id, None)
+            return self._nullabook_result(session_id, user_input, source_context, f"Registration failed: {exc}")
+
+        self._nullabook_pending[session_id] = {"step": "awaiting_bio", "handle": handle}
+        return self._nullabook_result(session_id, user_input, source_context,
+            f"Registered as **{handle}** on NullaBook!\n"
+            f"Want to set a bio? Type your bio, or say 'skip' to finish.")
+
+    def _nullabook_step_bio(
+        self, user_input: str, *, session_id: str, source_context: dict[str, object] | None, pending: dict[str, str],
+    ) -> dict[str, Any]:
+        handle = pending.get("handle", "")
+        self._nullabook_pending.pop(session_id, None)
+        lowered = user_input.strip().lower()
+        if lowered in ("skip", "no", "later", "nah", "pass"):
+            return self._nullabook_result(session_id, user_input, source_context,
+                f"Profile ready! Handle: **{handle}**\n"
+                f"You can post with: 'post to NullaBook: <your message>'")
+        try:
+            from core.nullabook_identity import get_profile_by_handle, update_profile
+            profile = get_profile_by_handle(handle)
+            if profile:
+                update_profile(profile.peer_id, bio=user_input.strip()[:500])
+        except Exception:
+            pass
+        return self._nullabook_result(session_id, user_input, source_context,
+            f"Profile ready! Handle: **{handle}**\nBio: {user_input.strip()[:500]}\n"
+            f"You can post with: 'post to NullaBook: <your message>'")
+
+    def _handle_nullabook_post(
+        self, user_input: str, lowered: str, profile: Any, *, session_id: str, source_context: dict[str, object] | None,
+    ) -> dict[str, Any]:
+        if not profile:
+            self._nullabook_pending[session_id] = {"step": "awaiting_handle"}
+            return self._nullabook_result(session_id, user_input, source_context,
+                "You need a NullaBook profile first. What handle would you like?")
+
+        content = user_input.strip()
+        for prefix in ("post to nullabook:", "post on nullabook:", "nullabook post:", "post to nulla book:",
+                        "post to nullabook", "post on nullabook", "nullabook post", "post to nulla book"):
+            if lowered.startswith(prefix):
+                content = user_input.strip()[len(prefix):].strip()
+                break
+        content = content.strip().strip("\"'").strip()
+        if not content:
+            return self._nullabook_result(session_id, user_input, source_context,
+                "What would you like to post? Include your message after 'post to NullaBook:'")
+
+        try:
+            from core.nullabook_identity import increment_post_count
+            from storage.nullabook_store import create_post
+            post = create_post(
+                peer_id=profile.peer_id,
+                handle=profile.handle,
+                content=content[:5000],
+                post_type="social",
+            )
+            increment_post_count(profile.peer_id)
+            return self._nullabook_result(session_id, user_input, source_context,
+                f"Posted to NullaBook as **{profile.handle}**:\n"
+                f"> {content[:200]}\n\n"
+                f"Post ID: {post.post_id}")
+        except Exception as exc:
+            return self._nullabook_result(session_id, user_input, source_context, f"Failed to post: {exc}")
+
+    def _nullabook_result(
+        self, session_id: str, user_input: str, source_context: dict[str, object] | None, response: str,
+    ) -> dict[str, Any]:
+        return self._fast_path_result(
+            session_id=session_id, user_input=user_input, response=response,
+            confidence=0.95, source_context=source_context, reason="nullabook_fast_path",
+        )
+
+    @staticmethod
+    def _is_nullabook_post_request(lowered: str) -> bool:
+        return any(lowered.startswith(p) for p in (
+            "post to nullabook", "post on nullabook", "nullabook post", "post to nulla book",
+        ))
+
+    @staticmethod
+    def _is_nullabook_create_request(lowered: str) -> bool:
+        return any(p in lowered for p in ("create profile", "create account", "register", "sign up", "set up"))
+
+    @staticmethod
+    def _extract_nullabook_bio_update(lowered_text: str) -> str:
+        import re
+        for pattern in (r"(?:set|update|change)\s+(?:my\s+)?bio\s+(?:to\s+)?[\"'](.+?)[\"']",
+                        r"(?:set|update|change)\s+(?:my\s+)?bio\s+(?:to\s+)?(.+)$"):
+            match = re.search(pattern, lowered_text)
+            if match:
+                return match.group(1).strip()
+        return ""
 
     def _maybe_handle_capability_truth_request(
         self,

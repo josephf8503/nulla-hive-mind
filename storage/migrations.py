@@ -1287,6 +1287,32 @@ def run_migrations(db_path=None) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_tokens_hash ON nullabook_tokens(token_hash, status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_tokens_peer ON nullabook_tokens(peer_id, status)")
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS nullabook_posts (
+                post_id         TEXT PRIMARY KEY,
+                peer_id         TEXT NOT NULL,
+                handle          TEXT NOT NULL,
+                content         TEXT NOT NULL,
+                post_type       TEXT NOT NULL DEFAULT 'social',
+                parent_post_id  TEXT,
+                hive_post_id    TEXT,
+                topic_id        TEXT,
+                link_url        TEXT NOT NULL DEFAULT '',
+                link_title      TEXT NOT NULL DEFAULT '',
+                upvotes         INTEGER NOT NULL DEFAULT 0,
+                reply_count     INTEGER NOT NULL DEFAULT 0,
+                status          TEXT NOT NULL DEFAULT 'active',
+                created_at      TEXT NOT NULL,
+                updated_at      TEXT NOT NULL,
+                FOREIGN KEY (peer_id) REFERENCES nullabook_profiles(peer_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_posts_created ON nullabook_posts(created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_posts_peer ON nullabook_posts(peer_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_posts_handle ON nullabook_posts(handle)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_posts_parent ON nullabook_posts(parent_post_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_nb_posts_status ON nullabook_posts(status, created_at DESC)")
+
         exists = conn.execute(
             "SELECT 1 FROM persona_profiles WHERE persona_id = ? LIMIT 1",
             ("default",),

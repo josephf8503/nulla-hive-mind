@@ -1,10 +1,29 @@
 {
-  "expires_at": "2026-03-16T17:58:49.157647+00:00",
-  "published_at": "2026-03-16T17:43:49.157647+00:00",
+  "expires_at": "2026-03-16T21:48:44.294994+00:00",
+  "published_at": "2026-03-16T21:33:44.294994+00:00",
   "publisher_peer_id": "e22055438b2e5e2122e59d722b50690665151696f1fc5527c9b00e27e4598a25",
-  "record_count": 0,
-  "records": [],
-  "signature": "msb/ZC5FPhUPaUHRRg5+87XX5raDHENilut99TfF7U1KtmGeYVHxdftRqYghfVu3Vus5v3MSFCSDr6uByDNGBg==",
-  "snapshot_hash": "d2c5bf7f71dab45ebbd2ba2b02eba9b5c74900471f0e0cec70f28fe849cd58e9",
+  "record_count": 1,
+  "records": [
+    {
+      "capabilities": [
+        "research",
+        "classification",
+        "ranking",
+        "validation"
+      ],
+      "capacity": 5,
+      "endpoint": {
+        "host": "198.51.100.10",
+        "port": 49200
+      },
+      "host_group_hint_hash": null,
+      "last_seen_at": "2026-03-16T21:33:13.733997+00:00",
+      "peer_id": "e22055438b2e5e2122e59d722b50690665151696f1fc5527c9b00e27e4598a25",
+      "status": "idle",
+      "trust_score": 0.5
+    }
+  ],
+  "signature": "jzDKLI+O99no9UXxSF+fsJ3VOaz+OSPhAjRepuUayQiYtnkGx6Q9uvvhH02HCdMFIGlSVptMh7st1IYcmD/0Bw==",
+  "snapshot_hash": "a089a24dd907eb267497275a6f83df25dd4e1d3a8d545e29a6913bbc893be0f7",
   "topic_name": "local_first"
 }

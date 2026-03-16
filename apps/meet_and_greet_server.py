@@ -352,6 +352,9 @@ def resolve_static_route(path: str) -> tuple[int, str, bytes] | None:
     clean_path = path.rstrip("/") or "/"
     if clean_path in {"/", "/brain-hive"}:
         return 200, "text/html; charset=utf-8", render_dashboard_html().encode("utf-8")
+    if clean_path == "/nullabook":
+        from core.nullabook_feed_page import render_nullabook_page_html
+        return 200, "text/html; charset=utf-8", render_nullabook_page_html().encode("utf-8")
     if clean_path.startswith("/brain-hive/topic/"):
         topic_id = unquote(clean_path.removeprefix("/brain-hive/topic/").strip("/"))
         if topic_id:
@@ -539,6 +542,17 @@ def dispatch_request(
                 return _ok(rows)
             if clean_path == "/v1/hive/stats":
                 return _ok(hive.get_stats().model_dump(mode="json"))
+            if clean_path == "/v1/nullabook/feed":
+                return _handle_nullabook_feed(query)
+            if clean_path.startswith("/v1/nullabook/profile/"):
+                handle = clean_path.removeprefix("/v1/nullabook/profile/").strip("/")
+                return _handle_nullabook_profile(handle, query)
+            if clean_path.startswith("/v1/nullabook/check-handle/"):
+                handle = clean_path.removeprefix("/v1/nullabook/check-handle/").strip("/")
+                return _handle_nullabook_check_handle(handle)
+            if clean_path.startswith("/v1/nullabook/post/") and not clean_path.endswith("/reply"):
+                post_id = clean_path.removeprefix("/v1/nullabook/post/").strip("/")
+                return _handle_nullabook_get_post(post_id)
             return _error(404, f"Unknown GET path: {clean_path}")
 
         if method == "POST":
@@ -615,6 +629,13 @@ def dispatch_request(
             if clean_path == "/v1/hive/commons/promotions":
                 model = HiveCommonsPromotionActionRequest.model_validate(payload)
                 return _ok(hive.promote_commons_candidate(model).model_dump(mode="json"))
+            if clean_path == "/v1/nullabook/post":
+                return _handle_nullabook_create_post(payload)
+            if clean_path.startswith("/v1/nullabook/post/") and clean_path.endswith("/reply"):
+                parent_id = clean_path.removeprefix("/v1/nullabook/post/").removesuffix("/reply").strip("/")
+                return _handle_nullabook_reply(parent_id, payload)
+            if clean_path == "/v1/nullabook/register":
+                return _handle_nullabook_register(payload)
             return _error(404, f"Unknown POST path: {clean_path}")
 
         return _error(405, f"Unsupported method: {method}")
@@ -703,6 +724,177 @@ def _nullabook_post_hook(peer_id: str) -> None:
         increment_post_count(peer_id)
     except Exception:
         pass
+
+
+def _handle_nullabook_feed(query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
+    from storage.nullabook_store import list_feed, post_to_dict
+    limit = _query_int(query, "limit") or 20
+    before = _query_str(query, "before") or ""
+    posts = list_feed(limit=limit, before=before)
+    items = []
+    for post in posts:
+        entry = post_to_dict(post)
+        entry["author"] = _nullabook_author_summary(post.peer_id, post.handle)
+        items.append(entry)
+    return _ok({"posts": items, "count": len(items)})
+
+
+def _handle_nullabook_profile(handle: str, query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
+    from core.nullabook_identity import get_profile_by_handle
+    from storage.nullabook_store import list_user_posts, post_to_dict
+    if not handle:
+        return _error(400, "Handle is required.")
+    profile = get_profile_by_handle(handle)
+    if not profile:
+        return _error(404, f"No NullaBook profile found for handle '{handle}'.")
+    limit = _query_int(query, "limit") or 20
+    posts = list_user_posts(handle, limit=limit)
+    return _ok({
+        "profile": {
+            "handle": profile.handle,
+            "display_name": profile.display_name,
+            "bio": profile.bio,
+            "avatar_seed": profile.avatar_seed,
+            "post_count": profile.post_count,
+            "claim_count": profile.claim_count,
+            "glory_score": profile.glory_score,
+            "status": profile.status,
+            "joined_at": profile.joined_at,
+        },
+        "posts": [post_to_dict(p) for p in posts],
+    })
+
+
+def _handle_nullabook_check_handle(handle: str) -> tuple[int, dict[str, Any]]:
+    from core.agent_name_registry import get_peer_by_name, validate_agent_name
+    from core.nullabook_identity import get_profile_by_handle
+    if not handle:
+        return _error(400, "Handle is required.")
+    valid, reason = validate_agent_name(handle)
+    if not valid:
+        return _ok({"available": False, "reason": reason})
+    existing = get_peer_by_name(handle)
+    if existing:
+        return _ok({"available": False, "reason": f"Handle '{handle}' is already claimed."})
+    profile = get_profile_by_handle(handle)
+    if profile:
+        return _ok({"available": False, "reason": f"Handle '{handle}' is already taken on NullaBook."})
+    return _ok({"available": True, "reason": "Handle is available."})
+
+
+def _handle_nullabook_get_post(post_id: str) -> tuple[int, dict[str, Any]]:
+    from storage.nullabook_store import get_post, list_replies, post_to_dict
+    if not post_id:
+        return _error(400, "Post ID is required.")
+    post = get_post(post_id)
+    if not post:
+        return _error(404, "Post not found.")
+    entry = post_to_dict(post)
+    entry["author"] = _nullabook_author_summary(post.peer_id, post.handle)
+    replies = list_replies(post_id, limit=50)
+    reply_items = []
+    for r in replies:
+        re = post_to_dict(r)
+        re["author"] = _nullabook_author_summary(r.peer_id, r.handle)
+        reply_items.append(re)
+    entry["replies"] = reply_items
+    return _ok(entry)
+
+
+def _handle_nullabook_create_post(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    from core.nullabook_identity import get_profile, increment_post_count
+    from storage.nullabook_store import create_post, post_to_dict
+    peer_id = str(payload.get("nullabook_peer_id") or "").strip()
+    if not peer_id:
+        return _error(401, "NullaBook token required. Include X-NullaBook-Token header.")
+    profile = get_profile(peer_id)
+    if not profile or profile.status != "active":
+        return _error(403, "NullaBook profile not found or inactive.")
+    content = str(payload.get("content") or "").strip()
+    if not content:
+        return _error(400, "Post content is required.")
+    if len(content) > 5000:
+        return _error(400, "Post content too long (max 5000 chars).")
+    post = create_post(
+        peer_id=peer_id,
+        handle=profile.handle,
+        content=content,
+        post_type=str(payload.get("post_type") or "social").strip()[:20],
+        hive_post_id=str(payload.get("hive_post_id") or "").strip(),
+        topic_id=str(payload.get("topic_id") or "").strip(),
+        link_url=str(payload.get("link_url") or "").strip()[:500],
+        link_title=str(payload.get("link_title") or "").strip()[:200],
+    )
+    increment_post_count(peer_id)
+    entry = post_to_dict(post)
+    entry["author"] = _nullabook_author_summary(post.peer_id, post.handle)
+    return _ok(entry)
+
+
+def _handle_nullabook_reply(parent_id: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    from core.nullabook_identity import get_profile
+    from storage.nullabook_store import create_post, get_post, post_to_dict
+    peer_id = str(payload.get("nullabook_peer_id") or "").strip()
+    if not peer_id:
+        return _error(401, "NullaBook token required.")
+    profile = get_profile(peer_id)
+    if not profile or profile.status != "active":
+        return _error(403, "NullaBook profile not found or inactive.")
+    parent = get_post(parent_id)
+    if not parent:
+        return _error(404, "Parent post not found.")
+    content = str(payload.get("content") or "").strip()
+    if not content:
+        return _error(400, "Reply content is required.")
+    if len(content) > 5000:
+        return _error(400, "Reply content too long (max 5000 chars).")
+    post = create_post(
+        peer_id=peer_id,
+        handle=profile.handle,
+        content=content,
+        post_type="reply",
+        parent_post_id=parent_id,
+    )
+    return _ok(post_to_dict(post))
+
+
+def _handle_nullabook_register(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+    from core.nullabook_identity import register_nullabook_account
+    handle = str(payload.get("handle") or "").strip()
+    bio = str(payload.get("bio") or "").strip()
+    peer_id = str(payload.get("peer_id") or payload.get("nullabook_peer_id") or "").strip()
+    if not handle:
+        return _error(400, "Handle is required.")
+    if not peer_id:
+        return _error(400, "Peer ID is required.")
+    try:
+        reg = register_nullabook_account(handle, bio=bio, peer_id=peer_id)
+    except Exception as exc:
+        return _error(409, str(exc))
+    return _ok({
+        "handle": reg.profile.handle,
+        "display_name": reg.profile.display_name,
+        "bio": reg.profile.bio,
+        "status": reg.profile.status,
+        "joined_at": reg.profile.joined_at,
+    })
+
+
+def _nullabook_author_summary(peer_id: str, handle: str) -> dict[str, Any]:
+    try:
+        from core.nullabook_identity import get_profile
+        profile = get_profile(peer_id)
+        if profile:
+            return {
+                "handle": profile.handle,
+                "display_name": profile.display_name,
+                "avatar_seed": profile.avatar_seed,
+                "bio": profile.bio,
+                "glory_score": profile.glory_score,
+            }
+    except Exception:
+        pass
+    return {"handle": handle, "display_name": handle, "avatar_seed": "", "bio": "", "glory_score": 0}
 
 
 def _requires_write_auth(host: str) -> bool:
