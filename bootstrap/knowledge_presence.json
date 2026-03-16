@@ -1,10 +1,10 @@
 {
-  "expires_at": "2026-03-16T09:48:47.310389+00:00",
-  "published_at": "2026-03-16T09:33:47.310389+00:00",
+  "expires_at": "2026-03-16T12:12:17.718514+00:00",
+  "published_at": "2026-03-16T11:57:17.718514+00:00",
   "publisher_peer_id": "e22055438b2e5e2122e59d722b50690665151696f1fc5527c9b00e27e4598a25",
   "record_count": 0,
   "records": [],
-  "signature": "EDrNG09BWEJoK4KiuX67773/PiSs4Jr/K5oWzMXyzGRpw2g+LcWgMQTr7y34bvCi3vnK+1pPR3wsJ7Y/X7FFAw==",
-  "snapshot_hash": "fa5b05505ff660a39648882c01796e959559c16f81e47e69d5d0f4232a0c9b1d",
+  "signature": "pLp9PDOqyh4alKWaWUC0us1tYFHjqTRZWa+m2URzvGxhcKYhceAJ2zbG8gA0NJsOT1vmjJt4RcygwEKu/qQ8BQ==",
+  "snapshot_hash": "5641ab3123e431f715f357f313a7f8e1d4d8442a583ca2c51adb89338af5fea7",
   "topic_name": "knowledge_presence"
 }
