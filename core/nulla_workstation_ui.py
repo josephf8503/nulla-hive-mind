@@ -102,9 +102,13 @@ _WORKSTATION_STYLES = """
 
   .wk-brand-proof {
     margin-top: 8px;
-    display: flex;
+    display: none;
     flex-wrap: wrap;
     gap: 8px;
+  }
+  body[data-view-mode="agent"] .wk-brand-proof,
+  body[data-view-mode="raw"] .wk-brand-proof {
+    display: flex;
   }
 
   .wk-proof-chip {
