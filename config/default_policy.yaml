@@ -112,6 +112,12 @@ shards:
   allow_tokens_in_shards: false
   force_abstract_resolution_patterns: true
   default_expiry_days: 90
+  default_share_scope: "public_knowledge"
+  auto_promote_min_quality: 0.60
+  replication_target: 2
+  freshness_audit_interval_ticks: 10
+  marketplace_auto_list: true
+  marketplace_default_price: 1.0
   quarantine_if_risk_flags_include:
     - destructive_command
     - privileged_action

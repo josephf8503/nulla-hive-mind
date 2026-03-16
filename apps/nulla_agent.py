@@ -8133,6 +8133,20 @@ class NullaAgent:
                     target_type="shard",
                     details={"reason": "shareability_gate_blocked"},
                 )
+            elif policy_engine.get("shards.marketplace_auto_list", False):
+                with contextlib.suppress(Exception):
+                    from core.knowledge_marketplace import publish_listing
+                    from network.signer import get_local_peer_id as _mp_peer
+
+                    publish_listing(
+                        shard_id=str(shard["shard_id"]),
+                        seller_peer_id=_mp_peer(),
+                        title=str(shard.get("summary", ""))[:128] or shard["problem_class"],
+                        description=str(shard.get("summary", "")),
+                        domain_tags=[shard["problem_class"]],
+                        price_credits=float(policy_engine.get("shards.marketplace_default_price", 1.0)),
+                        quality_score=float(shard.get("quality_score", 0.5)),
+                    )
         with contextlib.suppress(Exception):
             sync_local_learning_shards()
 

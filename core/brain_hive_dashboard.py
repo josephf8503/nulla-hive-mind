@@ -910,6 +910,20 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       font-size: 12px;
       color: var(--muted);
     }
+    .loading-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent, #61dafb);
+      animation: pulse-dot 1.2s ease-in-out infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 0.3; transform: scale(0.85); }
+      50% { opacity: 1; transform: scale(1.15); }
+    }
     .mono {
       font-family: "SFMono-Regular", Menlo, Consolas, monospace;
       word-break: break-all;
@@ -978,6 +992,8 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       padding: 9px 14px;
       font-size: 13px;
       cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .tab-button.active {
       background: var(--accent);
@@ -1452,10 +1468,13 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
     }
     .dashboard-tab-row {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: 8px;
       margin: 0;
       padding: 10px 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.03);
@@ -1493,6 +1512,26 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       overflow-wrap: anywhere;
       font-size: 12px;
       line-height: 1.5;
+    }
+    .inspector-view-toggle {
+      display: flex;
+      gap: 4px;
+      margin: 8px 0 4px;
+    }
+    .inspector-view-btn {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .inspector-view-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
     }
     .dashboard-inspector-raw {
       display: none;
@@ -1658,7 +1697,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
           <div class="meta-row">
             <div class="meta-label">Watcher</div>
             <div>
-              <div id="lastUpdated">Waiting for first refresh</div>
+              <div id="lastUpdated"><span class="loading-dot"></span> Loading dashboard\u2026</div>
               <div class="small" id="sourceMeet">Upstream: pending</div>
             </div>
           </div>
@@ -1907,6 +1946,11 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       <aside class="wk-panel dashboard-inspector">
         <div class="wk-panel-eyebrow">Inspector</div>
         <h2 class="dashboard-inspector-title" id="brainInspectorTitle">Select an object</h2>
+        <nav class="inspector-view-toggle" aria-label="Inspector view mode">
+          <button class="inspector-view-btn active" data-view="human" type="button">Human</button>
+          <button class="inspector-view-btn" data-view="agent" type="button">Agent</button>
+          <button class="inspector-view-btn" data-view="raw" type="button">Raw JSON</button>
+        </nav>
         <div class="dashboard-inspector-body">Every important row drills into this panel. Human, agent, and raw views all point at the same object state.</div>
         <div class="wk-chip-grid" id="brainInspectorBadges"></div>
         <div class="dashboard-inspector-body dashboard-inspector-human" id="brainInspectorHuman" style="margin-top:12px;">
@@ -2167,7 +2211,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       document.getElementById('brainInspectorRaw').textContent = JSON.stringify(payload || {}, null, 2);
     }
 
-    function activateDashboardTab(tab) {
+    function activateDashboardTab(tab, pushState) {
       const safeTab = String(tab || 'overview');
       document.querySelectorAll('.tab-button[data-tab]').forEach((button) => {
         button.classList.toggle('active', button.dataset.tab === safeTab);
@@ -2175,6 +2219,12 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       document.querySelectorAll('.tab-panel').forEach((panel) => {
         panel.classList.toggle('active', panel.id === `tab-${safeTab}`);
       });
+      if (pushState !== false) {
+        const url = new URL(window.location);
+        url.searchParams.set('tab', safeTab);
+        url.searchParams.delete('mode');
+        history.replaceState(null, '', url);
+      }
     }
 
     async function copyText(value, button) {
@@ -4224,14 +4274,16 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       renderWorkstationChrome(data);
     }
 
-    async function refresh() {
-      const response = await fetch('__API_ENDPOINT__');
-      const payload = await response.json();
-      if (!payload.ok) throw new Error(payload.error || 'Dashboard request failed');
-      renderAll(payload.result);
-    }
-
     document.addEventListener('click', (event) => {
+      const viewBtn = event.target.closest('.inspector-view-btn[data-view]');
+      if (viewBtn) {
+        const mode = viewBtn.getAttribute('data-view') || 'human';
+        document.body.setAttribute('data-view-mode', mode);
+        document.querySelectorAll('.inspector-view-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.getAttribute('data-view') === mode);
+        });
+        return;
+      }
       const tabTarget = event.target.closest('[data-tab-target]');
       if (tabTarget) {
         activateDashboardTab(tabTarget.dataset.tabTarget || 'overview');
@@ -4251,18 +4303,33 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
         );
       }
     });
-    const dashboardMode = new URLSearchParams(window.location.search).get('mode');
-    if (dashboardMode === 'hive') activateDashboardTab('hive');
-    else activateDashboardTab('overview');
+    const _urlParams = new URLSearchParams(window.location.search);
+    const _initTab = _urlParams.get('tab') || (_urlParams.get('mode') === 'hive' ? 'hive' : 'overview');
+    activateDashboardTab(_initTab, false);
     renderAll(state);
-    refresh().catch((error) => {
-      document.getElementById('lastUpdated').textContent = `Dashboard error: ${error.message}`;
-    });
-    setInterval(() => {
-      refresh().catch((error) => {
-        document.getElementById('lastUpdated').textContent = `Dashboard error: ${error.message}`;
-      });
-    }, 15000);
+
+    const _refreshIndicator = document.getElementById('lastUpdated');
+    let _refreshing = false;
+    async function refresh() {
+      if (_refreshing) return;
+      _refreshing = true;
+      if (_refreshIndicator) _refreshIndicator.textContent = 'Refreshing\u2026';
+      try {
+        const response = await fetch('__API_ENDPOINT__');
+        const payload = await response.json();
+        if (!payload.ok) throw new Error(payload.error || 'Dashboard request failed');
+        renderAll(payload.result);
+      } catch (error) {
+        if (_refreshIndicator) {
+          _refreshIndicator.innerHTML = `<span style="color:#f5a623">Error: ${esc(error.message)}</span> <button onclick="refresh()" style="cursor:pointer;background:transparent;border:1px solid currentColor;color:inherit;border-radius:4px;padding:2px 8px;font-size:0.85em">Retry</button>`;
+        }
+      } finally {
+        _refreshing = false;
+      }
+    }
+    window.refresh = refresh;
+    refresh();
+    setInterval(refresh, 15000);
   </script>
 </body>
 </html>"""
@@ -4503,8 +4570,8 @@ def render_topic_detail_html(
     __WORKSTATION_HEADER__
     <div class="shell topic-frame">
       <div class="topbar">
-        <a class="back" href="/brain-hive?mode=hive">Back to Hive</a>
-        <div id="lastUpdated" class="chip">Waiting for topic refresh</div>
+        <a class="back" href="/brain-hive?tab=hive">Back to Hive</a>
+        <div id="lastUpdated" class="chip"><span class="loading-dot"></span> Loading topic\u2026</div>
       </div>
       <section class="hero">
       <div class="chip">Topic flow</div>
@@ -4541,6 +4608,16 @@ def render_topic_detail_html(
       return String(value ?? '').replace(/[&<>\"']/g, (ch) => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       })[ch]);
+    }
+
+    function fmtNumber(value) {
+      return new Intl.NumberFormat().format(Number(value || 0));
+    }
+
+    function fmtPct(value) {
+      const num = Number(value || 0);
+      if (!Number.isFinite(num)) return '0.0%';
+      return `${num >= 0 ? '+' : ''}${num.toFixed(1)}%`;
     }
 
     function fmtTime(value) {
@@ -4705,16 +4782,25 @@ def render_topic_detail_html(
       document.getElementById('lastUpdated').textContent = `Last refresh ${fmtTime(new Date().toISOString())}`;
     }
 
-    loadTopic().catch((error) => {
-      document.getElementById('topicSummary').textContent = `Topic load failed: ${error.message}`;
-      document.getElementById('topicLog').innerHTML = '<div class="empty">The watcher could not load this topic right now.</div>';
-      document.getElementById('lastUpdated').textContent = `Error ${error.message}`;
-    });
-    setInterval(() => {
-      loadTopic().catch((error) => {
-        document.getElementById('lastUpdated').textContent = `Error ${error.message}`;
-      });
-    }, 12000);
+    let _topicRefreshing = false;
+    async function refreshTopic() {
+      if (_topicRefreshing) return;
+      _topicRefreshing = true;
+      const indicator = document.getElementById('lastUpdated');
+      if (indicator) indicator.textContent = 'Refreshing\u2026';
+      try {
+        await loadTopic();
+      } catch (error) {
+        document.getElementById('topicSummary').textContent = `Topic load failed: ${error.message}`;
+        document.getElementById('topicLog').innerHTML = '<div class="empty">The watcher could not load this topic right now.</div>';
+        if (indicator) indicator.innerHTML = `<span style="color:#f5a623">Error: ${esc(error.message)}</span> <button onclick="refreshTopic()" style="cursor:pointer;background:transparent;border:1px solid currentColor;color:inherit;border-radius:4px;padding:2px 8px;font-size:0.85em">Retry</button>`;
+      } finally {
+        _topicRefreshing = false;
+      }
+    }
+    window.refreshTopic = refreshTopic;
+    refreshTopic();
+    setInterval(refreshTopic, 12000);
   </script>
 </body>
 </html>"""

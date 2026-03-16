@@ -176,6 +176,74 @@ class MaintenanceLoop:
                     details={"error": str(e)},
                 )
 
+        # 3.7) knowledge replication — request copies for under-replicated shards
+        try:
+            from core.knowledge_replication import under_replicated_shards
+            from network.signer import get_local_peer_id as _repl_peer
+            from retrieval.swarm_query import dispatch_query_shard
+
+            under_rep = under_replicated_shards(limit=10)
+            repl_requested = 0
+            for item in under_rep:
+                try:
+                    dispatch_query_shard(
+                        str(item["shard_id"]),
+                        requester_peer_id=_repl_peer(),
+                    )
+                    repl_requested += 1
+                except Exception:
+                    pass
+            if repl_requested:
+                audit_logger.log(
+                    "knowledge_replication_tick",
+                    target_id="knowledge",
+                    target_type="maintenance",
+                    details={"under_replicated": len(under_rep), "requested": repl_requested},
+                )
+        except Exception as e:
+            audit_logger.log(
+                "knowledge_replication_error",
+                target_id="knowledge",
+                target_type="maintenance",
+                details={"error": str(e)},
+            )
+
+        # 3.8) knowledge freshness audit — sample holders and challenge them
+        try:
+            from core import policy_engine as _fa_pe
+            from core.knowledge_freshness_audit import select_holders_for_sampling, start_sampling_audit
+
+            tick_count = getattr(self, "_tick_count", 0) + 1
+            self._tick_count = tick_count
+            audit_interval = int(_fa_pe.get("shards.freshness_audit_interval_ticks", 10))
+            if tick_count % audit_interval == 0:
+                holders = select_holders_for_sampling(limit=4)
+                audits_started = 0
+                for holder in holders:
+                    try:
+                        start_sampling_audit(
+                            shard_id=str(holder["shard_id"]),
+                            holder_peer_id=str(holder["holder_peer_id"]),
+                            trigger_reason="scheduled_maintenance",
+                        )
+                        audits_started += 1
+                    except Exception:
+                        pass
+                if audits_started:
+                    audit_logger.log(
+                        "knowledge_freshness_audit_tick",
+                        target_id="knowledge",
+                        target_type="maintenance",
+                        details={"sampled": len(holders), "audits_started": audits_started},
+                    )
+        except Exception as e:
+            audit_logger.log(
+                "knowledge_freshness_audit_error",
+                target_id="knowledge",
+                target_type="maintenance",
+                details={"error": str(e)},
+            )
+
         # 4) prune stale capabilities
         try:
             pruned_caps = prune_stale_capabilities(max_age_hours=self.config.stale_capability_hours)

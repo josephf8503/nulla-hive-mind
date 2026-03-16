@@ -226,13 +226,22 @@ def _table_exists(conn: Any, table_name: str) -> bool:
     return bool(row)
 
 
+def _default_share_scope() -> str:
+    try:
+        from core import policy_engine
+        return str(policy_engine.get("shards.default_share_scope", "local_only"))
+    except Exception:
+        return "local_only"
+
+
 def session_memory_policy(session_id: str | None) -> dict[str, Any]:
+    fallback_scope = _default_share_scope()
     normalized_session_id = str(session_id or "").strip()
     if not normalized_session_id:
         return {
             "session_id": "",
-            "share_scope": "local_only",
-            "realm_label": share_scope_label("local_only"),
+            "share_scope": fallback_scope,
+            "realm_label": share_scope_label(fallback_scope),
             "restricted_terms": [],
             "updated_at": "",
         }
@@ -253,8 +262,8 @@ def session_memory_policy(session_id: str | None) -> dict[str, Any]:
     if not row:
         return {
             "session_id": normalized_session_id,
-            "share_scope": "local_only",
-            "realm_label": share_scope_label("local_only"),
+            "share_scope": fallback_scope,
+            "realm_label": share_scope_label(fallback_scope),
             "restricted_terms": [],
             "updated_at": "",
         }
