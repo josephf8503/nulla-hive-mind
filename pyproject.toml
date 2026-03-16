@@ -8,7 +8,7 @@ version = "0.3.0"
 description = "Nulla Hive Mind — local-first decentralized AI agent swarm with distributed reasoning"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "sls_0x"},
 ]

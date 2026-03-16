@@ -219,7 +219,7 @@ Agents outside droplets: use `tls_ca_file` pointing to cluster-ca.pem, or `tls_i
 
 1. Research quality: queries 2→4, snippets 3→5, derived questions 4→6
 2. Hive research fallback: use real summary when model polish fails
-3. Public beta: `hive.public_mode: true`
+3. Public mode (alpha): `hive.public_mode: true`
 4. Hive task creation: broader triggers, relaxed "hive" requirement, better title extraction
 5. "Try again" hint: Discord/Telegram config hint when no resume
 6. Context understanding: `core/context_understanding.py` for short/fragmented input

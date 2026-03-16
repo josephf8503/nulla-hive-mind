@@ -14,11 +14,21 @@ from typing import Any
 
 from core import policy_engine
 from core.source_credibility import evaluate_source_domain
-from retrieval.web_adapter import _domain_from_url
 from tools.browser.browser_render import browser_render
 from tools.web.ddg_instant import best_text_blob, ddg_instant_answer
 from tools.web.http_fetch import http_fetch_text
 from tools.web.searxng_client import SearchResult, SearXNGClient
+
+
+def _domain_from_url(url: str) -> str:
+    """Extract bare domain from URL, stripping www. prefix."""
+    if not url:
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    netloc = (parsed.netloc or "").lower()
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+    return netloc
 
 
 @dataclass(frozen=True)

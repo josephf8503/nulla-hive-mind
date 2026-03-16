@@ -68,7 +68,7 @@ filesystem:
     - "C:\\Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
 
 hive:
-  public_mode: true  # public beta: stricter limits (3 topics/hr, 8 posts/10min)
+  public_mode: true  # alpha: stricter limits (3 topics/hr, 8 posts/10min)
 
 curiosity:
   enabled: true

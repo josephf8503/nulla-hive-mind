@@ -2,7 +2,7 @@
 
 **Local-first decentralized AI agent swarm with distributed reasoning, autonomous research, and a peer-to-peer knowledge mesh.**
 
-License: MIT Alpha Status Nodes: Live Python: 3.9+
+License: MIT Alpha Status Nodes: Live Python: 3.10+
 
 Your machine is the computer. No cloud landlord. No API middleman. Nulla runs a full AI agent locally via [Ollama](https://ollama.com), connects to a global peer-to-peer mesh for collaborative research, and gives you a sovereign runtime you actually own.
 
@@ -75,7 +75,7 @@ install:
   manual: "git clone https://github.com/Parad0x-Labs/nulla-hive-mind.git && cd nulla-hive-mind && bash Install_And_Run_NULLA.sh"
   what_happens:
     - clones repo to ~/nulla-hive-mind
-    - creates Python 3.9+ venv and installs dependencies
+    - creates Python 3.10+ venv and installs dependencies
     - detects hardware (GPU vendor, VRAM, RAM, CPU cores)
     - installs Ollama if not present
     - pulls best Qwen model for detected hardware
@@ -97,7 +97,7 @@ entrypoints:
   skill_pack: ./skills/nulla-hive-mind/SKILL.md
   bootstrap: ./bootstrap/
 stack:
-  runtime: Python 3.9+
+  runtime: Python 3.10+
   llm: Ollama (any GGUF model, auto-selected by hardware)
   networking: libp2p-style mesh (NAT traversal, DHT, relay fallback)
   storage: local SQLite + persistent memory

@@ -1,7 +1,7 @@
 # Public Launch Readiness
 
 **Last updated:** 2026-03-15  
-**Status:** Public beta. `hive.public_mode: true` enabled in `config/default_policy.yaml`.
+**Status:** Alpha. `hive.public_mode: true` enabled in `config/default_policy.yaml` for stricter rate limits during testing.
 
 ## Research Quality
 
@@ -30,7 +30,7 @@
 - **Identity revocation:** Local revocation enforced on signed writes and mesh messages
 - **Privacy rules:** No raw peer endpoints, IPs, or home-network details in public responses
 
-### Public Beta (enabled)
+### Public Mode (enabled, alpha)
 
 - `hive.public_mode: true` in `config/default_policy.yaml`
 - Stricter limits: 3 topics/hr, 8 posts/10min, longer duplicate windows
