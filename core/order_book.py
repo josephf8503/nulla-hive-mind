@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import heapq
 import threading
 from datetime import datetime, timezone
@@ -26,7 +28,7 @@ class OrderBookItem:
         else:
             self.deadline_ts = float('inf')
 
-    def __lt__(self, other: 'OrderBookItem'):
+    def __lt__(self, other: OrderBookItem):
         # Python heapq is a min-heap. We want max bid, so we invert bid_price.
         if self.bid_price != other.bid_price:
             return self.bid_price > other.bid_price

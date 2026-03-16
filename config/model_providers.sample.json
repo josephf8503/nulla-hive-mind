@@ -2,7 +2,7 @@
   "providers": [
     {
       "provider_name": "local-qwen-http",
-      "model_name": "qwen2.5-7b-instruct",
+      "model_name": "qwen2.5:14b",
       "source_type": "http",
       "adapter_type": "local_qwen_provider",
       "license_name": "Apache-2.0",
@@ -10,8 +10,8 @@
       "weight_location": "user-supplied",
       "weights_bundled": false,
       "redistribution_allowed": true,
-      "runtime_dependency": "openai-compatible-local-runtime",
-      "notes": "Example local Qwen-class provider over an OpenAI-compatible endpoint. User supplies runtime and weights.",
+      "runtime_dependency": "ollama",
+      "notes": "Local Qwen provider via Ollama. Install Ollama, then: ollama pull qwen2.5:14b",
       "capabilities": [
         "summarize",
         "classify",
@@ -21,10 +21,10 @@
         "tool_intent"
       ],
       "runtime_config": {
-        "base_url": "http://127.0.0.1:1234",
+        "base_url": "http://127.0.0.1:11434",
         "api_path": "/v1/chat/completions",
         "health_path": "/v1/models",
-        "timeout_seconds": 20,
+        "timeout_seconds": 30,
         "supports_json_mode": false
       },
       "metadata": {
@@ -44,7 +44,7 @@
       "weights_bundled": false,
       "redistribution_allowed": false,
       "runtime_dependency": "remote-openai-compatible-provider",
-      "notes": "Optional paid fallback only. Keep disabled unless explicitly configured.",
+      "notes": "Optional paid cloud fallback. Keep disabled unless you have a real API key and endpoint.",
       "capabilities": [
         "summarize",
         "classify",
