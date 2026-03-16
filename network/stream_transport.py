@@ -5,8 +5,8 @@ import socket
 import ssl
 import struct
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from core import policy_engine
 

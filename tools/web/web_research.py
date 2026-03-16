@@ -513,7 +513,7 @@ def _duckduckgo_html_hits(query: str, *, max_hits: int) -> list[WebHit]:
     link_matches = re.findall(r'<a[^>]+class="result__a"[^>]+href="([^"]+)"', html_text, re.IGNORECASE)
     title_matches = re.findall(r'<a[^>]+class="result__a"[^>]*>(.*?)</a>', html_text, re.IGNORECASE | re.DOTALL)
     hits: list[WebHit] = []
-    for raw_title, raw_snippet, raw_link in zip(title_matches, snippet_matches, link_matches):
+    for raw_title, raw_snippet, raw_link in zip(title_matches, snippet_matches, link_matches, strict=False):
         resolved_url = _resolve_duckduckgo_result_url(raw_link)
         if not resolved_url:
             continue

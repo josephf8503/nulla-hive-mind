@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from core import audit_logger
 from core.adaptation_autopilot import schedule_adaptation_autopilot_tick

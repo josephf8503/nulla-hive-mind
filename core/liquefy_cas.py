@@ -1,7 +1,7 @@
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from core.runtime_paths import data_path
 
@@ -38,7 +38,7 @@ def store_chunk(data: bytes) -> str:
 
     return chunk_hash
 
-def get_chunk(chunk_hash: str) -> Optional[bytes]:
+def get_chunk(chunk_hash: str) -> bytes | None:
     """Retrieves a chunk from disk by its hash."""
     chunk_path = get_chunk_path(chunk_hash)
     if chunk_path.exists():

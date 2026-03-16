@@ -8,10 +8,11 @@ import re
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from core import audit_logger, feedback_engine, policy_engine

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import threading
 import uuid
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from core.runtime_continuity import (
     append_runtime_event,

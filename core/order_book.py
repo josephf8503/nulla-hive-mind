@@ -1,7 +1,7 @@
 import heapq
 import threading
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 
 class OrderBookItem:
@@ -48,7 +48,7 @@ class OrderBookQueue:
         with self._lock:
             heapq.heappush(self._heap, item)
 
-    def pop_best_offer(self) -> Optional[OrderBookItem]:
+    def pop_best_offer(self) -> OrderBookItem | None:
         """
         Pulls the highest bidding task that hasn't expired.
         """

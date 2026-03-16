@@ -7,8 +7,8 @@ import secrets
 import socket
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 from uuid import uuid4
 
 from core import audit_logger, policy_engine
@@ -367,7 +367,7 @@ class UDPTransportServer:
         while not self._stop.is_set():
             try:
                 data, addr = self._sock.recvfrom(max_bytes)
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break

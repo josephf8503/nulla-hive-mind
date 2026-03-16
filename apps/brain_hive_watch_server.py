@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import ssl
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Callable
 from urllib import request
 from urllib.parse import unquote, urlparse, urlsplit, urlunsplit
 
