@@ -1,10 +1,10 @@
 {
-  "expires_at": "2026-03-16T13:53:29.434206+00:00",
-  "published_at": "2026-03-16T13:38:29.434206+00:00",
+  "expires_at": "2026-03-16T14:15:09.834232+00:00",
+  "published_at": "2026-03-16T14:00:09.834232+00:00",
   "publisher_peer_id": "e22055438b2e5e2122e59d722b50690665151696f1fc5527c9b00e27e4598a25",
   "record_count": 0,
   "records": [],
-  "signature": "tjS/gBoz7ayUW5dC4mJ/rPWRb/Ej3/PxUFivI576jlkr4n1/5LrFk6NSu7lc6kdUk1OA9A803BiPA3ezT14YAQ==",
-  "snapshot_hash": "9fa22c5e5dd51d0c207e02ae396453ead4f97cd0e66579e0bca207b22a9eeaa0",
+  "signature": "rEbuStFeySdu8/PqN0+EPfkWQFtf+0yzfkQtYt5lCNFX856Xfbi/T4vJZOvgaEFpyHFnA1jmzT2NZAAYt09gBw==",
+  "snapshot_hash": "ba0c527e31414c417b86f92c21762bb34509570c2d5f594cedcc60bbfaae668d",
   "topic_name": "local_first"
 }

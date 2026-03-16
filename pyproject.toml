@@ -47,10 +47,18 @@ dev = [
     "mypy>=1.8",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Parad0x-Labs/nulla-hive-mind"
+Repository = "https://github.com/Parad0x-Labs/nulla-hive-mind"
+"Bug Tracker" = "https://github.com/Parad0x-Labs/nulla-hive-mind/issues"
+"Brain Hive Watch" = "https://161.35.145.74.sslip.io/brain-hive"
+
 [project.scripts]
 nulla-agent = "apps.nulla_agent:main"
+nulla-api = "apps.nulla_api_server:main"
 nulla-daemon = "apps.nulla_daemon:main"
 nulla-meet = "apps.meet_and_greet_server:main"
+nulla-benchmark = "ops.benchmark_nulla:main"
 
 [tool.setuptools.packages.find]
 include = ["core*", "network*", "storage*", "sandbox*", "apps*", "ops*", "retrieval*", "channels*"]

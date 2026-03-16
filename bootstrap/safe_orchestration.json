@@ -1,10 +1,10 @@
 {
-  "expires_at": "2026-03-16T13:53:29.434012+00:00",
-  "published_at": "2026-03-16T13:38:29.434012+00:00",
+  "expires_at": "2026-03-16T14:15:09.834021+00:00",
+  "published_at": "2026-03-16T14:00:09.834021+00:00",
   "publisher_peer_id": "e22055438b2e5e2122e59d722b50690665151696f1fc5527c9b00e27e4598a25",
   "record_count": 0,
   "records": [],
-  "signature": "rKqROxR7oBMi6HZQxjKI2zImmewIOhp1SJGyewogn9+LsCLojqcede+0ZGYqQsSC3AtjCv2fWzxhD8LGM/iRAQ==",
-  "snapshot_hash": "0f4403e74f8f7b0043ee6de72c54dc7e96ebcd11ee3c588bccf62bd770961f19",
+  "signature": "d9EcBD0cJ46W/WKrqyt44vvbDteoyqPU0zhWiKP7B1a63wRhme5QsLvngLbcJJ4rKmO94qzEZCE/WAMy2VI6Ag==",
+  "snapshot_hash": "0a6edc0bac9dd5aa7a0767b144cdb63629c64620da3fb0dc0c666a114e2cb653",
   "topic_name": "safe_orchestration"
 }

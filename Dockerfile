@@ -1,15 +1,16 @@
 FROM python:3.12-slim AS base
 
-LABEL maintainer="NULLA Team"
-LABEL description="Decentralized NULLA Agent Node"
+LABEL maintainer="Parad0x Labs"
+LABEL description="NULLA Hive Mind — local-first decentralized AI agent"
+LABEL org.opencontainers.image.source="https://github.com/Parad0x-Labs/nulla-hive-mind"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libffi-dev && \
+    build-essential libffi-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY pyproject.toml requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
@@ -22,6 +23,10 @@ RUN mkdir -p /data
 
 EXPOSE 49152/udp
 EXPOSE 8765
+EXPOSE 11435
 
-# Default: run the agent
-CMD ["python3", "apps/nulla_agent.py"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -sf http://localhost:11435/health || exit 1
+
+# Default: run the agent API server
+CMD ["python3", "-m", "apps.nulla_api_server"]

@@ -1,15 +1,17 @@
 # Nulla Hive Mind
 
-**Local-first decentralized AI agent swarm with distributed reasoning, autonomous research, and a peer-to-peer knowledge mesh.**
+**Private AI that runs on your own machine first — and can borrow trusted helpers when you want more power.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)](#status)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
 [![CI](https://github.com/Parad0x-Labs/nulla-hive-mind/actions/workflows/ci.yml/badge.svg)](https://github.com/Parad0x-Labs/nulla-hive-mind/actions/workflows/ci.yml)
 
-Your machine is the computer. No cloud landlord. No API middleman. Nulla runs a full AI agent locally via [Ollama](https://ollama.com), connects to a peer-to-peer mesh for collaborative research, and gives you a sovereign runtime you actually own.
+Nulla is a local-first AI agent. It runs entirely on your machine via [Ollama](https://ollama.com) — your data never leaves unless you say so. When you want more power, trusted peers on your LAN (or the internet) can help with research, knowledge sharing, and collaborative tasks through an encrypted peer-to-peer mesh.
 
-> **Alpha — LAN mesh works today, WAN/internet-scale transport is in hardening.** See [implementation status](docs/WHAT_WE_HAVE_NOW.md) for what is live vs. planned.
+No cloud landlord. No API middleman. No telemetry. You own the runtime.
+
+> **Alpha — [see exactly what works today](docs/STATUS.md).** LAN mesh is operational, WAN transport is in hardening, payments are simulated.
 
 ---
 
@@ -146,15 +148,15 @@ stack:
 
 ---
 
-## What It Does
+## What You Get
 
-- **Runs entirely on your machine.** Ollama serves the LLM. Your data stays local. No tokens leave unless you tell them to.
-- **Autonomous research pipeline.** Give it a topic — it generates search queries, crawls the web, scores evidence, and delivers graded research bundles.
-- **Brain Hive mesh.** Agents across the network publish tasks, claim research, and share knowledge through a distributed task queue with quality gates.
-- **Persistent memory.** Conversations, preferences, and context survive restarts. The agent remembers who you are and what you're working on.
-- **Tool execution.** Creates folders, writes files, builds projects, runs sandboxed code — not just chat, actual work.
-- **Multi-model support.** Ollama models locally, OpenAI-compatible APIs as fallback, cloud providers for heavy lifting. Tiered by hardware capability.
-- **P2P networking.** NAT traversal, DHT peer discovery, encrypted stream transport, relay fallback. Real distributed infrastructure, not a wrapper around a REST API.
+- **Private by default.** Your data stays on your machine. Ollama serves the LLM locally. Nothing phones home — ever.
+- **Actually does work.** Not just chat — creates folders, writes files, builds projects, runs sandboxed code, executes research end-to-end.
+- **Remembers you.** Conversations, preferences, and context survive restarts. The agent learns who you are and what you care about.
+- **Autonomous research.** Give it a topic — it generates search queries, crawls the web, scores evidence, and delivers graded research bundles.
+- **Borrow trusted helpers.** Peers on your LAN (or internet) can claim tasks, share research, and contribute knowledge through an encrypted mesh. You decide who to trust.
+- **Any model, your choice.** Ollama models locally, OpenAI-compatible APIs as fallback, cloud providers for heavy lifting. Auto-selected by your hardware.
+- **Real networking, not a wrapper.** NAT traversal, DHT peer discovery, encrypted streams, relay fallback. Actual distributed infrastructure.
 
 ---
 
@@ -186,6 +188,26 @@ curl -X POST http://localhost:11435/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "What tasks are on the hive?"}'
 ```
+
+---
+
+## Try It in Docker (Demo Cluster)
+
+Spin up a full demo cluster — 1 brain node, 2 helpers, and a meet server — in one command:
+
+```bash
+docker compose up --build
+```
+
+This starts:
+- **agent-1** — primary NULLA agent (brain)
+- **agent-2** — helper agent
+- **meet-eu** + **meet-us** — discovery/coordination nodes
+- **daemon-1** — background swarm maintenance
+
+No Ollama or Python install needed on your machine. See [docker-compose.yml](docker-compose.yml) for the full config.
+
+> Want just the local agent without Docker? Use the one-click install above.
 
 ---
 
@@ -377,7 +399,7 @@ Multi-platform presence through bridge workers:
 
 ---
 
-## Security Model
+## Security & Trust
 
 - **Local-first by default.** Nothing leaves your machine unless explicitly configured.
 - **Execution gate.** Dangerous operations (shell, network, filesystem writes) require policy approval.
@@ -386,30 +408,83 @@ Multi-platform presence through bridge workers:
 - **Capability tokens.** Cryptographic tokens gate access to sensitive operations.
 - **No telemetry.** Zero phone-home. Zero tracking. Zero data collection.
 
+**[Full trust document →](docs/TRUST.md)** — threat model, data handling policy, what leaves your machine, safe defaults, audit log details, and crash recovery behavior.
+
+---
+
+## Extend It — Skill Packs & Plugins
+
+NULLA supports third-party extensions through OpenClaw skill packs:
+
+```bash
+# Register a custom skill pack
+python -m installer.register_openclaw_agent --skill-pack ./my-skills/
+
+# Skill packs live in ~/.openclaw/agents/nulla/skills/
+```
+
+A skill pack is a directory with a `SKILL.md` manifest and Python modules. The agent discovers them at boot and registers their capabilities. See [skills/nulla-hive-mind/SKILL.md](skills/nulla-hive-mind/SKILL.md) for the built-in pack format.
+
+**What you can build:**
+- Custom research workflows (specialized search, domain-specific scoring)
+- Tool executors (integrate with your own APIs, databases, services)
+- Knowledge processors (custom shard types, domain ontologies)
+- Channel bridges (new platforms beyond Discord/Telegram)
+
 ---
 
 ## Status
 
-**Alpha.** The plumbing works — P2P mesh, research pipeline, hive task flow, persistent memory, tool execution. The primary bottleneck is LLM output quality when running small local models (7B class). Larger models or cloud fallback significantly improve results.
+**Alpha.** The core product works — local agent, research pipeline, persistent memory, tool execution, LAN mesh. The primary bottleneck is LLM quality on small models (7B class); larger models or cloud fallback significantly improve results.
 
-### What Works
+**[Full status matrix →](docs/STATUS.md)** — see exactly what works, what's partial, what's simulated, and what's not yet built.
 
-- Full agent loop: input → classify → route → execute → respond
-- Brain Hive task creation, research, delivery, and grading
-- P2P node discovery and encrypted communication
-- Persistent memory across restarts
-- Web research with evidence scoring
-- Sandboxed code execution
-- Multi-platform relay (Discord, Telegram)
+### Quick Summary
 
-### Known Limitations
+| Works now | Partial | Simulated | Not yet |
+|-----------|---------|-----------|---------|
+| Local agent loop | WAN transport | Credit payments | Mobile UI |
+| Research pipeline | DHT routing | Token settlement | Trustless DEX |
+| Persistent memory | Channel gateway | | Plugin marketplace |
+| Brain Hive tasks | Meet cluster replication | | |
+| LAN mesh + discovery | | | |
+| Sandboxed code exec | | | |
+| Discord/Telegram relay | | | |
 
-- Small local models (7B) can produce shallow research and miss tool intents
-- Persona persistence requires `persona_core_locked: true` in policy
-- Research quality scales directly with model capability
-- WAN transport hardening and public multi-node proof are in progress
-- Trustless payments are simulated (credit ledger is local, not on-chain)
-- Mobile UI is planned but not yet implemented
+---
+
+## Benchmarks
+
+Run the benchmark suite to get reproducible numbers for your hardware:
+
+```bash
+python -m ops.benchmark_nulla
+
+# Or JSON output for CI integration
+python -m ops.benchmark_nulla --json
+```
+
+Measures cold start time, memory retrieval hit rate, prompt assembly speed, task classification latency, and knowledge pipeline throughput.
+
+---
+
+## Install from PyPI (Coming Soon)
+
+```bash
+pip install nulla-hive-mind
+
+# Then:
+nulla-agent          # Interactive agent
+nulla-api            # API server (port 11435)
+nulla-daemon         # Background swarm daemon
+nulla-meet           # Meet & Greet discovery node
+nulla-benchmark      # Run benchmark suite
+```
+
+Or use Docker:
+```bash
+docker compose up --build
+```
 
 ---
 
@@ -426,6 +501,9 @@ pytest tests/ -v
 
 # Check lints
 ruff check .
+
+# Run benchmarks
+python -m ops.benchmark_nulla
 ```
 
 ---

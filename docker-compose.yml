@@ -1,10 +1,10 @@
 version: "3.9"
 
 services:
-  # ── Meet & Greet Server (Central Index) ──────────────────────────────
+  # ── Meet & Greet (peer discovery) ─────────────────────────────────────
   meet-eu:
     build: .
-    command: ["python3", "apps/meet_and_greet_server.py"]
+    command: ["python3", "-m", "apps.meet_and_greet_server"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_HOST: "0.0.0.0"
@@ -19,7 +19,7 @@ services:
 
   meet-us:
     build: .
-    command: ["python3", "apps/meet_and_greet_server.py"]
+    command: ["python3", "-m", "apps.meet_and_greet_server"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_HOST: "0.0.0.0"
@@ -32,13 +32,16 @@ services:
       - meet-us-data:/data
     restart: unless-stopped
 
-  # ── Agent Nodes ──────────────────────────────────────────────────────
+  # ── Agent Nodes ───────────────────────────────────────────────────────
   agent-1:
     build: .
-    command: ["python3", "apps/nulla_agent.py"]
+    command: ["python3", "-m", "apps.nulla_api_server"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_URL: "http://meet-eu:8765"
+      NULLA_API_PORT: "11435"
+    ports:
+      - "11435:11435"
     volumes:
       - agent-1-data:/data
     depends_on:
@@ -47,7 +50,7 @@ services:
 
   agent-2:
     build: .
-    command: ["python3", "apps/nulla_agent.py"]
+    command: ["python3", "-m", "apps.nulla_agent"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_URL: "http://meet-eu:8765"
@@ -57,10 +60,10 @@ services:
       - meet-eu
     restart: unless-stopped
 
-  # ── Daemon Node (listens for swarm work) ─────────────────────────────
+  # ── Daemon (background swarm maintenance) ─────────────────────────────
   daemon-1:
     build: .
-    command: ["python3", "apps/nulla_daemon.py"]
+    command: ["python3", "-m", "apps.nulla_daemon"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_URL: "http://meet-eu:8765"
@@ -72,9 +75,25 @@ services:
       - meet-eu
     restart: unless-stopped
 
+  # ── Brain Hive Watch (read-only dashboard) ────────────────────────────
+  brain-hive-watch:
+    build: .
+    command: ["python3", "-m", "apps.brain_hive_watch_server"]
+    environment:
+      NULLA_HOME: /data
+      NULLA_WATCH_UPSTREAM: "http://meet-eu:8765"
+    ports:
+      - "8788:8788"
+    volumes:
+      - watch-data:/data
+    depends_on:
+      - meet-eu
+    restart: unless-stopped
+
 volumes:
   meet-eu-data:
   meet-us-data:
   agent-1-data:
   agent-2-data:
   daemon-1-data:
+  watch-data:
