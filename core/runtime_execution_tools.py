@@ -42,17 +42,12 @@ _EXECUTION_REQUEST_MARKERS = (
     "grep ",
     "proceed",
     "do it",
-    "do all",
     "go ahead",
     "carry on",
-    "continue",
     "start working",
     "just do it",
     "deliver it",
     "submit it",
-    "deliver",
-    "create it",
-    "build it",
 )
 _TOOL_INTENTS = {
     "workspace.list_files",
