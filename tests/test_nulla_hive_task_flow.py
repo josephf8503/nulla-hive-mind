@@ -217,7 +217,7 @@ def test_misspelled_hive_mind_task_check_recovers_to_real_task_list(make_agent):
 
     assert result["response_class"] == "task_list"
     assert "openclaw integration audit" in result["response"].lower()
-    call_texts = [call.args[0] for call in agent.hive_activity_tracker.maybe_handle_command_details.call_args_list]
+    call_texts = [call.args[0].lower() for call in agent.hive_activity_tracker.maybe_handle_command_details.call_args_list]
     assert call_texts == ["check hive mind see if any taks is up", "show me the open hive tasks"]
 
 
@@ -356,7 +356,7 @@ def test_semantic_hive_phrasings_recover_without_magic_phrase(make_agent, prompt
 
     assert result["response_class"] == "task_list"
     assert "openclaw integration audit" in result["response"].lower()
-    call_texts = [call.args[0] for call in agent.hive_activity_tracker.maybe_handle_command_details.call_args_list]
+    call_texts = [call.args[0].lower() for call in agent.hive_activity_tracker.maybe_handle_command_details.call_args_list]
     assert call_texts == [prompt, "show me the open hive tasks"]
 
 

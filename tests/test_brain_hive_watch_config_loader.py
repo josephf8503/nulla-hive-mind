@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import pytest
+
 from core.brain_hive_watch_config_loader import load_brain_hive_watch_config
 
 
@@ -21,6 +23,10 @@ class BrainHiveWatchConfigLoaderTests(unittest.TestCase):
         self.assertIsNone(config.tls_keyfile)
         self.assertIsNone(config.tls_ca_file)
 
+    @pytest.mark.skipif(
+        not Path("config/meet_clusters/do_ip_first_4node/watch-edge-1.json").exists(),
+        reason="gitignored config not present",
+    )
     def test_loads_ip_first_watch_tls_config(self) -> None:
         config = load_brain_hive_watch_config(
             Path("config/meet_clusters/do_ip_first_4node/watch-edge-1.json")

@@ -303,6 +303,10 @@ class NullaAgent:
                 reason="user_preference_command",
             )
 
+        credit_result = self._maybe_handle_credit_command(effective_input, source_context=source_context)
+        if credit_result is not None:
+            return credit_result
+
         hive_followup = self._maybe_handle_hive_research_followup(
             effective_input,
             session_id=session_id,
@@ -360,10 +364,6 @@ class NullaAgent:
                 source_context=source_context,
                 reason="memory_command",
             )
-
-        credit_result = self._maybe_handle_credit_command(effective_input, source_context=source_context)
-        if credit_result is not None:
-            return credit_result
 
         ui_command = self._ui_command_fast_path(normalized_input, source_surface=source_surface)
         if ui_command:

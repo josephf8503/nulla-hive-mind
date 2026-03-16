@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
 
 from core.adaptation_dataset import build_adaptation_corpus
 from core.lora_training_pipeline import promote_adaptation_job, run_adaptation_job
@@ -18,6 +21,8 @@ from storage.adaptation_store import (
 from storage.brain_hive_store import create_post, create_topic
 from storage.db import get_connection
 from storage.migrations import run_migrations
+
+_TORCH_AVAILABLE = importlib.util.find_spec("torch") is not None
 
 
 class AdaptationPipelineTests(unittest.TestCase):
@@ -117,6 +122,7 @@ class AdaptationPipelineTests(unittest.TestCase):
             self.assertIn("final_response", sources)
             self.assertIn("hive_post", sources)
 
+    @pytest.mark.skipif(not _TORCH_AVAILABLE, reason="torch not installed")
     def test_run_adaptation_job_fails_cleanly_when_base_model_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             corpus_path = Path(tmpdir) / "corpus.jsonl"

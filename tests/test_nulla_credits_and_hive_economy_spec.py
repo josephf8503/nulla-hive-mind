@@ -66,7 +66,8 @@ def test_credit_status_explains_current_reward_contract(make_agent):
 def test_chat_can_spend_credits_to_prioritize_hive_task(make_agent):
     agent = make_agent()
     peer_id = get_local_peer_id()
-    award_credits(peer_id, 50.0, "priority_seed", receipt_id="priority-seed")
+    assert award_credits(peer_id, 50.0, "priority_seed", receipt_id="priority-seed")
+    assert get_credit_balance(peer_id) >= 50.0
 
     result = agent.run_once(
         "spend 10 credits to prioritize the current Hive task",
@@ -80,7 +81,8 @@ def test_chat_can_spend_credits_to_prioritize_hive_task(make_agent):
 def test_chat_can_transfer_credits_to_another_peer(make_agent):
     agent = make_agent()
     peer_id = get_local_peer_id()
-    award_credits(peer_id, 20.0, "transfer_seed", receipt_id="transfer-seed")
+    assert award_credits(peer_id, 20.0, "transfer_seed", receipt_id="transfer-seed")
+    assert get_credit_balance(peer_id) >= 20.0
 
     result = agent.run_once(
         "send 5 credits to peer-remote-1 for helping on this task",

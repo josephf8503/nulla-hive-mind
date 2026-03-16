@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
+
 from core.runtime_execution_tools import execute_runtime_tool, extract_observation_followup_hints
+
+_UNSHARE_AVAILABLE = os.system("unshare --version >/dev/null 2>&1") == 0
 
 
 class RuntimeExecutionToolsTests(unittest.TestCase):
@@ -151,6 +156,7 @@ class RuntimeExecutionToolsTests(unittest.TestCase):
             self.assertIn("-print('hello')", replaced_artifact["diff_preview"])
             self.assertIn("+print('goodbye')", replaced_artifact["diff_preview"])
 
+    @pytest.mark.skipif(not _UNSHARE_AVAILABLE, reason="unshare not available (CI / non-Linux)")
     def test_sandbox_run_command_executes_local_bounded_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             result = execute_runtime_tool(
@@ -168,6 +174,7 @@ class RuntimeExecutionToolsTests(unittest.TestCase):
             self.assertEqual(result.details["observation"]["cwd"], ".")
             self.assertEqual(result.details["artifacts"][0]["artifact_type"], "command_output")
 
+    @pytest.mark.skipif(not _UNSHARE_AVAILABLE, reason="unshare not available (CI / non-Linux)")
     def test_sandbox_run_command_preserves_failure_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

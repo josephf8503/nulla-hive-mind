@@ -224,6 +224,7 @@ def test_sync_public_hive_auth_from_ssh_writes_runtime_bootstrap() -> None:
             ssh_key_path=str(key_path),
             project_root=Path(tmp_dir),
             watch_host="watch.example.test",
+            remote_config_path="/etc/nulla-hive-mind/watch-config.json",
             target_path=target_path,
             runner=fake_runner,
         )
@@ -356,6 +357,7 @@ def test_ensure_public_hive_auth_marks_ssh_sync_as_ok() -> None:
             result = ensure_public_hive_auth(
                 project_root=Path(tmp_dir),
                 target_path=Path(tmp_dir) / "agent-bootstrap.json",
+                remote_config_path="/etc/nulla-hive-mind/watch-config.json",
                 require_auth=True,
             )
 

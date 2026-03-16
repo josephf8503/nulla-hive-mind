@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import pytest
+
 from core.meet_and_greet_config_loader import load_meet_node_config
 
 
@@ -20,6 +22,10 @@ class MeetAndGreetConfigLoaderTests(unittest.TestCase):
         self.assertEqual(len(config.seed_peers), 2)
         self.assertEqual({seed.region for seed in config.seed_peers}, {"us", "apac"})
 
+    @pytest.mark.skipif(
+        not Path("config/meet_clusters/do_ip_first_4node/seed-eu-1.json").exists(),
+        reason="gitignored config not present",
+    )
     def test_loads_do_ip_first_seed_config(self) -> None:
         config = load_meet_node_config(
             Path("config/meet_clusters/do_ip_first_4node/seed-eu-1.json")
