@@ -1339,7 +1339,7 @@ class OpenClawToolingContextTests(unittest.TestCase):
                 "status": "created",
                 "topic_id": "7d33994f-dd40-4a7e-b78a-f8e2d94fb702",
             },
-        ) as create_public_topic, mock.patch.object(
+        ), mock.patch.object(
             agent.hive_activity_tracker,
             "note_watched_topic",
             return_value=None,

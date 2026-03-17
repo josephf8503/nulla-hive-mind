@@ -745,7 +745,7 @@ def _nullabook_post_hook(peer_id: str) -> None:
 
 
 def _handle_nullabook_feed(query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
-    from storage.nullabook_store import list_feed, list_replies, post_to_dict, get_post_by_id
+    from storage.nullabook_store import get_post_by_id, list_feed, list_replies, post_to_dict
     post_id = _query_str(query, "post_id") or ""
     if post_id:
         post = get_post_by_id(post_id)
@@ -947,7 +947,7 @@ def _handle_nullabook_register(payload: dict[str, Any]) -> tuple[int, dict[str, 
 
 
 def _handle_nullabook_edit_post(post_id: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    from storage.nullabook_store import update_post, post_to_dict
+    from storage.nullabook_store import post_to_dict, update_post
     peer_id = str(payload.get("nullabook_peer_id") or "").strip()
     new_content = str(payload.get("content") or "").strip()
     if not peer_id:
@@ -974,7 +974,7 @@ def _handle_nullabook_delete_post(post_id: str, payload: dict[str, Any]) -> tupl
 
 
 def _handle_nullabook_upvote(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    from storage.nullabook_store import upvote_post, ensure_upvote_columns, post_to_dict
+    from storage.nullabook_store import ensure_upvote_columns, post_to_dict, upvote_post
     ensure_upvote_columns()
     post_id = str(payload.get("post_id") or "").strip()
     vote_type = str(payload.get("vote_type") or "human").strip()
@@ -989,7 +989,7 @@ def _handle_nullabook_upvote(payload: dict[str, Any]) -> tuple[int, dict[str, An
 
 
 def _handle_nullabook_search(query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
-    from storage.nullabook_store import search_posts, post_to_dict
+    from storage.nullabook_store import post_to_dict, search_posts
     q = _query_str(query, "q") or ""
     if not q or len(q) < 2:
         return _error(400, "Query parameter 'q' is required (min 2 chars).")
@@ -1005,8 +1005,8 @@ def _handle_nullabook_search(query: dict[str, list[str]]) -> tuple[int, dict[str
 
 
 def _handle_hive_search(query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
-    from storage.brain_hive_store import search_topics
     from core.agent_name_registry import get_agent_name
+    from storage.brain_hive_store import search_topics
     q = _query_str(query, "q") or ""
     if not q or len(q) < 2:
         return _error(400, "Query parameter 'q' is required (min 2 chars).")
@@ -1039,7 +1039,7 @@ def _handle_hive_search(query: dict[str, list[str]]) -> tuple[int, dict[str, Any
                 break
         results["agents"] = matched
     if kind in ("all", "post"):
-        from storage.nullabook_store import search_posts, post_to_dict
+        from storage.nullabook_store import post_to_dict, search_posts
         posts = search_posts(q, limit=limit)
         results["posts"] = [post_to_dict(p) for p in posts]
     return _ok(results)

@@ -3609,14 +3609,14 @@ class NullaAgent:
                     profile = get_profile(profile.peer_id)
                     from core.nullabook_identity import increment_post_count
                     from storage.nullabook_store import create_post
-                    post = create_post(
+                    create_post(
                         peer_id=profile.peer_id,
                         handle=profile.handle,
                         content=content,
                         post_type="social",
                     )
                     increment_post_count(profile.peer_id)
-                    try:
+                    with contextlib.suppress(Exception):
                         self.public_hive_bridge.sync_nullabook_post(
                             peer_id=profile.peer_id,
                             handle=profile.handle,
@@ -3626,8 +3626,6 @@ class NullaAgent:
                             twitter_handle=profile.twitter_handle or "",
                             display_name=profile.display_name or "",
                         )
-                    except Exception:
-                        pass
                     results.append(f"Posted: {content[:100]}")
                 except Exception as exc:
                     results.append(f"Post failed: {exc}")
@@ -3728,7 +3726,7 @@ class NullaAgent:
                 f"'{handle}' is already taken. Try a different handle:")
 
         try:
-            from core.nullabook_identity import register_nullabook_account, get_profile
+            from core.nullabook_identity import get_profile, register_nullabook_account
             from network.signer import get_local_peer_id
             peer_id = get_local_peer_id()
             register_nullabook_account(handle, peer_id=peer_id)
@@ -3797,7 +3795,7 @@ class NullaAgent:
             )
             increment_post_count(profile.peer_id)
             sync_result = {"ok": False}
-            try:
+            with contextlib.suppress(Exception):
                 sync_result = self.public_hive_bridge.sync_nullabook_post(
                     peer_id=profile.peer_id,
                     handle=profile.handle,
@@ -3807,8 +3805,6 @@ class NullaAgent:
                     twitter_handle=profile.twitter_handle or "",
                     display_name=profile.display_name or "",
                 )
-            except Exception:
-                pass
             display = profile.display_name or profile.handle
             sync_status = " (live on nullabook.com)" if sync_result.get("ok") else ""
             return self._nullabook_result(session_id, content, source_context,
@@ -3885,14 +3881,12 @@ class NullaAgent:
             from storage.nullabook_store import delete_post
             ok = delete_post(post_id, profile.peer_id)
             if ok:
-                try:
+                with contextlib.suppress(Exception):
                     self.public_hive_bridge._post_json(
                         str(self.public_hive_bridge.config.topic_target_url),
                         f"/v1/nullabook/post/{post_id}/delete",
                         {"nullabook_peer_id": profile.peer_id},
                     )
-                except Exception:
-                    pass
                 return self._nullabook_result(session_id, user_input, source_context, f"Deleted post `{post_id}`.")
             return self._nullabook_result(session_id, user_input, source_context,
                 "Couldn't delete that post. Either it doesn't exist, isn't yours, or is a task-linked post (tasks can't be deleted).")
@@ -3923,17 +3917,15 @@ class NullaAgent:
                 return self._nullabook_result(session_id, user_input, source_context,
                     'Try: edit post <post_id> to: <new content>')
         try:
-            from storage.nullabook_store import update_post, post_to_dict
+            from storage.nullabook_store import update_post
             updated = update_post(post_id, profile.peer_id, new_content)
             if updated:
-                try:
+                with contextlib.suppress(Exception):
                     self.public_hive_bridge._post_json(
                         str(self.public_hive_bridge.config.topic_target_url),
                         f"/v1/nullabook/post/{post_id}/edit",
                         {"nullabook_peer_id": profile.peer_id, "content": new_content},
                     )
-                except Exception:
-                    pass
                 return self._nullabook_result(session_id, user_input, source_context,
                     f"Updated post `{post_id}`:\n> {new_content[:200]}")
             return self._nullabook_result(session_id, user_input, source_context,
