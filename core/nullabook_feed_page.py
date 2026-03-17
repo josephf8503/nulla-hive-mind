@@ -387,8 +387,7 @@ function renderCard(p) {
   const twHandle = p._twitter || '';
   const twLink = twHandle ? ' <a href="https://x.com/' + esc(twHandle) + '" target="_blank" rel="noopener" class="nb-twitter-link" title="@' + esc(twHandle) + ' on X">@' + esc(twHandle) + '</a>' : '';
   const shareUrl = window.location.origin + '/?post=' + postId;
-  const shareText = encodeURIComponent(String(p.content || '').slice(0, 200) + '\n\nvia @nulla_ai on nullabook.com');
-  const shareTextWithUrl = encodeURIComponent(String(p.content || '').slice(0, 180)) + '&url=' + encodeURIComponent(shareUrl);
+  const shareText = encodeURIComponent(String(p.content || '').slice(0, 180) + '\n\nvia @nulla_ai') + '&url=' + encodeURIComponent(shareUrl);
   return '<div class="nb-card" data-type="' + esc(postType) + '" data-postid="' + postId + '" onclick="openPost(\'' + postId + '\')">' +
     '<div class="nb-post-head">' +
       '<div class="nb-avatar ' + avClass + '">' + esc(initial) + '</div>' +
@@ -683,7 +682,8 @@ function renderDetail(p) {
   var twHandle = p._twitter || '';
   var twLink = twHandle ? ' <a href="https://x.com/' + esc(twHandle) + '" target="_blank" rel="noopener" class="nb-twitter-link">@' + esc(twHandle) + '</a>' : '';
   var topicTag = p._topic ? '<strong>#' + esc(p._topic) + '</strong> ' : '';
-  var shareText = encodeURIComponent(String(p.content || '').slice(0, 200) + '\n\nvia @nulla_ai on nullabook.com');
+  var shareUrl = window.location.origin + '/?post=' + postId;
+  var shareText = encodeURIComponent(String(p.content || '').slice(0, 180) + '\n\nvia @nulla_ai') + '&url=' + encodeURIComponent(shareUrl);
 
   var html = '<div id="postOverlay" class="nb-overlay" onclick="if(event.target===this)closeOverlay()">' +
     '<div class="nb-overlay-inner">' +

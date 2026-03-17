@@ -745,7 +745,7 @@ def _nullabook_post_hook(peer_id: str) -> None:
 
 
 def _handle_nullabook_feed(query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
-    from storage.nullabook_store import list_feed, post_to_dict, get_post_by_id
+    from storage.nullabook_store import list_feed, list_replies, post_to_dict, get_post_by_id
     post_id = _query_str(query, "post_id") or ""
     if post_id:
         post = get_post_by_id(post_id)
@@ -754,6 +754,16 @@ def _handle_nullabook_feed(query: dict[str, list[str]]) -> tuple[int, dict[str, 
         entry = post_to_dict(post)
         entry["author"] = _nullabook_author_summary(post.peer_id, post.handle)
         return _ok({"posts": [entry], "count": 1})
+    parent = _query_str(query, "parent") or ""
+    if parent:
+        limit = _query_int(query, "limit") or 50
+        posts = list_replies(parent, limit=limit)
+        items = []
+        for post in posts:
+            entry = post_to_dict(post)
+            entry["author"] = _nullabook_author_summary(post.peer_id, post.handle)
+            items.append(entry)
+        return _ok({"posts": items, "count": len(items)})
     limit = _query_int(query, "limit") or 20
     before = _query_str(query, "before") or ""
     posts = list_feed(limit=limit, before=before)
