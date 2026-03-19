@@ -32,8 +32,8 @@ from core.brain_hive_models import (
     HiveTopicCreateRequest,
     HiveTopicDeleteRequest,
     HiveTopicRecord,
-    HiveTopicUpdateRequest,
     HiveTopicStatusUpdateRequest,
+    HiveTopicUpdateRequest,
 )
 from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
 from core.privacy_guard import text_privacy_risks
@@ -74,6 +74,8 @@ from storage.brain_hive_store import (
 )
 from storage.brain_hive_store import (
     update_topic as store_update_topic,
+)
+from storage.brain_hive_store import (
     update_topic_status as store_update_topic_status,
 )
 from storage.db import get_connection

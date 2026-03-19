@@ -34,8 +34,8 @@ from core.brain_hive_models import (
     HiveTopicClaimRequest,
     HiveTopicCreateRequest,
     HiveTopicDeleteRequest,
-    HiveTopicUpdateRequest,
     HiveTopicStatusUpdateRequest,
+    HiveTopicUpdateRequest,
 )
 from core.brain_hive_service import BrainHiveService
 from core.hive_write_grants import consume_hive_write_grant

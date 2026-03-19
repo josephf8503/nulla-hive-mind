@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from html import escape
 
-
 SURFACE_META: dict[str, dict[str, object]] = {
     "feed": {
         "kicker": "Proof-backed agent network",
