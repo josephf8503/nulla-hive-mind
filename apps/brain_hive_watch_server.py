@@ -5,7 +5,7 @@ import ssl
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
 from dataclasses import dataclass, field
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -201,8 +201,7 @@ def _proxy_nullabook_get(
         for base, token in dict(auth_tokens_by_base_url or {}).items()
         if str(base).strip() and str(token).strip()
     }
-    errors: list[str] = []
-    for base in upstream_base_urls:
+    def _fetch_one(base: str) -> tuple[bool, str, dict | str]:
         clean = str(base).rstrip("/")
         target = f"{clean}{path}"
         token = tokens.get(_normalize_base_url(clean)) or auth_token
@@ -214,11 +213,23 @@ def _proxy_nullabook_get(
                 tls_ca_file=tls_ca_file,
                 tls_insecure_skip_verify=tls_insecure_skip_verify,
             )
-            if result.get("ok"):
-                return result
-            errors.append(f"{clean}: {result.get('error') or 'not ok'}")
         except Exception as exc:
-            errors.append(f"{clean}: {exc}")
+            return False, clean, str(exc)
+        if result.get("ok"):
+            return True, clean, result
+        return False, clean, str(result.get("error") or "not ok")
+
+    errors: list[str] = []
+    max_workers = max(1, min(len(upstream_base_urls), 8))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_fetch_one, base) for base in upstream_base_urls]
+        for future in as_completed(futures):
+            ok, clean, payload_or_error = future.result()
+            if ok:
+                for pending in futures:
+                    pending.cancel()
+                return dict(payload_or_error)
+            errors.append(f"{clean}: {payload_or_error}")
     raise ValueError("NullaBook proxy failed: " + "; ".join(errors))
 
 
@@ -264,18 +275,30 @@ def fetch_dashboard_from_upstreams(
     errors: list[str] = []
     best_result: dict | None = None
     best_key: tuple[float, float, int] | None = None
+    settle_deadline: float | None = None
     max_workers = max(1, min(len(upstream_base_urls), 8))
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(_fetch_one, base) for base in upstream_base_urls]
-        for future in as_completed(futures):
-            ok, clean, payload_or_error, freshness = future.result()
-            if ok:
-                result = dict(payload_or_error)
-                if best_result is None or (freshness or (0.0, 0.0, 0)) > (best_key or (0.0, 0.0, 0)):
-                    best_result = result
-                    best_key = freshness
-            else:
-                errors.append(f"{clean}: {payload_or_error}")
+        pending = {executor.submit(_fetch_one, base) for base in upstream_base_urls}
+        while pending:
+            timeout = None
+            if settle_deadline is not None:
+                timeout = max(0.0, settle_deadline - time.monotonic())
+            done, pending = wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
+            if not done:
+                break
+            for future in done:
+                ok, clean, payload_or_error, freshness = future.result()
+                if ok:
+                    result = dict(payload_or_error)
+                    if best_result is None or (freshness or (0.0, 0.0, 0)) > (best_key or (0.0, 0.0, 0)):
+                        best_result = result
+                        best_key = freshness
+                    if settle_deadline is None:
+                        settle_deadline = time.monotonic() + 0.15
+                else:
+                    errors.append(f"{clean}: {payload_or_error}")
+        for future in pending:
+            future.cancel()
     if best_result is not None:
         return best_result
     raise ValueError("All upstream meet nodes failed for dashboard fetch: " + "; ".join(errors))
@@ -408,39 +431,50 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             clean_path = parsed.path.rstrip("/") or "/"
-            if clean_path in {"/", "/brain-hive"}:
-                req_host = (self.headers.get("Host") or "").split(":")[0].lower()
-                if "nullabook" in req_host and clean_path == "/":
-                    from core.nullabook_feed_page import render_nullabook_page_html
-                    qs = parse_qs(parsed.query or "")
-                    post_id = str((qs.get("post") or [""])[0]).strip()
-                    og_kw: dict[str, str] = {}
-                    if post_id:
-                        try:
-                            for base in cfg.upstream_base_urls:
-                                url = f"{str(base).rstrip('/')}/v1/nullabook/feed?limit=1&post_id={post_id}"
-                                token = (cfg.auth_tokens_by_base_url or {}).get(base) or cfg.auth_token
-                                payload = _http_get_json(
-                                    url, timeout_seconds=3, auth_token=token,
-                                    tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
-                                )
-                                posts = ((payload.get("result") or {}).get("posts") or [])
-                                if posts:
-                                    p = posts[0]
-                                    author = (p.get("author") or {})
-                                    name = author.get("display_name") or author.get("handle") or p.get("handle") or "Agent"
-                                    og_kw = {
+            req_host = (self.headers.get("Host") or "").split(":")[0].lower()
+            nullabook_surface_by_path = {
+                "/": "feed",
+                "/feed": "feed",
+                "/tasks": "tasks",
+                "/agents": "agents",
+                "/proof": "proof",
+            }
+            if clean_path in nullabook_surface_by_path and (clean_path != "/" or "nullabook" in req_host):
+                from core.nullabook_feed_page import render_nullabook_page_html
+                qs = parse_qs(parsed.query or "")
+                post_id = str((qs.get("post") or [""])[0]).strip()
+                og_kw: dict[str, str] = {"initial_tab": nullabook_surface_by_path[clean_path]}
+                if post_id:
+                    try:
+                        for base in cfg.upstream_base_urls:
+                            url = f"{str(base).rstrip('/')}/v1/nullabook/feed?limit=1&post_id={post_id}"
+                            token = (cfg.auth_tokens_by_base_url or {}).get(base) or cfg.auth_token
+                            payload = _http_get_json(
+                                url,
+                                timeout_seconds=3,
+                                auth_token=token,
+                                tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
+                            )
+                            posts = ((payload.get("result") or {}).get("posts") or [])
+                            if posts:
+                                p = posts[0]
+                                author = (p.get("author") or {})
+                                name = author.get("display_name") or author.get("handle") or p.get("handle") or "Agent"
+                                og_kw.update(
+                                    {
                                         "og_title": f"{name} on NullaBook",
                                         "og_description": str(p.get("content") or "")[:300],
-                                        "og_url": f"https://nullabook.com/?post={post_id}",
+                                        "og_url": f"https://nullabook.com{clean_path if clean_path != '/' else ''}?post={post_id}",
                                     }
-                                    break
-                        except Exception:
-                            pass
-                    html = render_nullabook_page_html(**og_kw)
-                    self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
-                    return
-                html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/brain-hive/topic")
+                                )
+                                break
+                    except Exception:
+                        pass
+                html = render_nullabook_page_html(**og_kw)
+                self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
+                return
+            if clean_path in {"/", "/brain-hive", "/hive"}:
+                html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task")
                 self._write_bytes(
                     200,
                     "text/html; charset=utf-8",
@@ -451,6 +485,30 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
                     },
                 )
                 return
+            if clean_path.startswith("/agent/"):
+                from core.nullabook_profile_page import render_nullabook_profile_page_html
+                handle = unquote(clean_path.removeprefix("/agent/").strip("/"))
+                if handle:
+                    html = render_nullabook_profile_page_html(handle=handle)
+                    self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
+                    return
+            if clean_path.startswith("/task/"):
+                topic_id = unquote(clean_path.removeprefix("/task/").strip("/"))
+                if topic_id:
+                    html = render_topic_detail_html(
+                        topic_api_endpoint=f"/api/topic/{topic_id}",
+                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
+                    )
+                    self._write_bytes(
+                        200,
+                        "text/html; charset=utf-8",
+                        html.encode("utf-8"),
+                        headers={
+                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
+                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
+                        },
+                    )
+                    return
             if clean_path.startswith("/brain-hive/topic/"):
                 topic_id = unquote(clean_path.removeprefix("/brain-hive/topic/").strip("/"))
                 if topic_id:

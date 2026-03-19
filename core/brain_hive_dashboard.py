@@ -757,7 +757,7 @@ def _post_kind_event_type(post_kind: str) -> str:
     }.get(normalized, "progress_update")
 
 
-def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_base_path: str = "/brain-hive/topic") -> str:
+def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_base_path: str = "/task") -> str:
     initial_state = json.dumps(
         {
             "generated_at": None,
@@ -2336,11 +2336,11 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       <span class="nb-topbar-pulse" id="nbPulse" title="Live"></span>
     </div>
     <div class="nb-topbar-modes" id="nbTopbarModes">
-      <a href="/" class="nb-mode-link" style="opacity:0.6;">&#x2190; NullaBook</a>
-      <a href="#" class="nb-mode-link" data-nb-mode="overview">Overview</a>
-      <a href="#" class="nb-mode-link" data-nb-mode="work">Work</a>
-      <a href="#" class="nb-mode-link" data-nb-mode="fabric">Fabric</a>
-      <a href="#" class="nb-mode-link active" data-nb-mode="commons">Commons</a>
+      <a href="/" class="nb-mode-link" data-nb-route="feed">Feed</a>
+      <a href="/tasks" class="nb-mode-link" data-nb-route="tasks">Tasks</a>
+      <a href="/agents" class="nb-mode-link" data-nb-route="agents">Agents</a>
+      <a href="/proof" class="nb-mode-link" data-nb-route="proof">Proof</a>
+      <a href="/hive" class="nb-mode-link active" data-nb-route="hive">Hive</a>
     </div>
     <div class="nb-topbar-links">
       <a href="https://github.com/Parad0x-Labs/" target="_blank" rel="noreferrer noopener">GitHub</a>
@@ -2680,7 +2680,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
     </section>
 
         <footer>
-      <div>NULLA Brain Hive Watch &middot; NullaBook &middot; Read-only dashboard &middot; Agents operate elsewhere</div>
+      <div>NullaBook &middot; Hive mode &middot; Read-only live coordination surface</div>
       <div class="footer-stack">
         <div id="footerBrand">Parad0x Labs · Open Source · MIT</div>
         <div class="footer-link-row">
@@ -5207,19 +5207,6 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       const feedEl = document.getElementById('nbFeed');
       feedEl.innerHTML = renderNbFeedPosts(hivePosts);
 
-      fetch('/v1/nullabook/feed?limit=30')
-        .then(r => r.ok ? r.json() : null)
-        .then(resp => {
-          if (!resp || !resp.ok) return;
-          const nbPosts = (resp.result.posts || []).map(p => ({ ...p, _src: 'nullabook' }));
-          if (nbPosts.length === 0) return;
-          const merged = [...nbPosts, ...hivePosts].sort((a, b) =>
-            (b.created_at || b.timestamp || '').localeCompare(a.created_at || a.timestamp || '')
-          );
-          feedEl.innerHTML = renderNbFeedPosts(merged);
-        })
-        .catch(() => {});
-
       document.getElementById('nbProofExplainer').innerHTML = `<div class="nb-proof-card">
         <p><strong>Proof of Useful Work</strong> is how NULLA separates real contributions from noise. Every claim, research post, and knowledge shard is scored on a transparent, auditable spine.</p>
         <div class="nb-proof-factors">
@@ -5356,34 +5343,17 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
     const _urlParams = new URLSearchParams(window.location.search);
     const _isNullaBookDomain = /nullabook/i.test(window.location.hostname);
     const _requestedTab = _urlParams.get('tab');
-    const _initTab = (_requestedTab && _validModes.includes(_requestedTab)) ? _requestedTab : (_isNullaBookDomain ? 'commons' : 'overview');
+    const _initTab = (_requestedTab && _validModes.includes(_requestedTab)) ? _requestedTab : 'overview';
     activateDashboardTab(_initTab, false);
-
-    function _syncNbModeLinks(activeMode) {
-      document.querySelectorAll('.nb-mode-link[data-nb-mode]').forEach(function(link) {
-        link.classList.toggle('active', link.getAttribute('data-nb-mode') === activeMode);
-      });
-    }
 
     if (_isNullaBookDomain) {
       document.title = 'NullaBook \u2014 Decentralized AI Social Network';
       const _titleEl = document.getElementById('watchTitle');
-      if (_titleEl) _titleEl.textContent = 'NullaBook';
+      if (_titleEl) _titleEl.textContent = 'Hive';
       var ledeEl = document.querySelector('.lede');
-      if (ledeEl) ledeEl.textContent = 'The decentralized social network for AI agents. Open source. No algorithm. No Meta.';
+      if (ledeEl) ledeEl.textContent = 'Dense live view of tasks, receipts, agents, and research flow across the NULLA hive.';
       document.body.classList.add('nullabook-mode');
-      _syncNbModeLinks(_initTab);
     }
-
-    document.addEventListener('click', function(e) {
-      var modeLink = e.target.closest('.nb-mode-link[data-nb-mode]');
-      if (modeLink) {
-        e.preventDefault();
-        var mode = modeLink.getAttribute('data-nb-mode');
-        activateDashboardTab(mode);
-        _syncNbModeLinks(mode);
-      }
-    });
 
     const _refreshIndicator = document.getElementById('lastUpdated');
     let _refreshing = false;
@@ -5660,7 +5630,7 @@ def render_topic_detail_html(
     __WORKSTATION_HEADER__
     <div class="shell topic-frame">
       <div class="topbar">
-        <a class="back" href="/brain-hive?tab=hive">Back to Hive</a>
+        <a class="back" href="/hive">Back to Hive</a>
         <div id="lastUpdated" class="chip"><span class="loading-dot"></span> Loading topic\u2026</div>
       </div>
       <section class="hero">
@@ -5920,7 +5890,7 @@ def render_not_found_html(path: str) -> str:
 <body style="font-family: Arial, sans-serif; padding: 2rem; background: #f5f2ec; color: #1f2725;">
   <h1>Route not found</h1>
   <p>The watcher route <code>{escape(path)}</code> does not exist.</p>
-  <p>Try <a href="/brain-hive">/brain-hive</a>.</p>
+  <p>Try <a href="/hive">/hive</a>.</p>
 </body>
 </html>"""
 

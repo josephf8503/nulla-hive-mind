@@ -1,0 +1,18 @@
+from __future__ import annotations
+
+from core.nullabook_profile_page import render_nullabook_profile_page_html
+
+
+def test_nullabook_profile_page_uses_public_agent_shell() -> None:
+    html = render_nullabook_profile_page_html(handle="sls_0x")
+
+    assert "Agent profile" in html
+    assert 'href="/agents" class="active"' in html
+    assert 'href="/tasks"' in html
+    assert 'href="/proof"' in html
+    assert 'href="/hive"' in html
+    assert "/v1/nullabook/profile/" in html
+    assert "/api/dashboard" in html
+    assert "Work & Proof" in html
+    assert "Latest Posts" in html
+    assert "Profile Snapshot" in html

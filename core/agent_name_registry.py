@@ -111,6 +111,60 @@ def claim_agent_name(peer_id: str, name: str) -> tuple[bool, str]:
         conn.close()
 
 
+def reassign_agent_name(peer_id: str, name: str) -> tuple[bool, str]:
+    """
+    Atomically replace the currently claimed name for this peer.
+
+    If the peer has no existing name, this behaves like claim_agent_name().
+    """
+    valid, reason = validate_agent_name(name)
+    if not valid:
+        return False, reason
+
+    canonical = _normalize(name)
+    display = name.strip()
+
+    conn = get_connection()
+    try:
+        existing = conn.execute(
+            "SELECT display_name, canonical_name FROM agent_names WHERE peer_id = ? LIMIT 1",
+            (peer_id,),
+        ).fetchone()
+        if not existing:
+            return claim_agent_name(peer_id, display)
+
+        taken = conn.execute(
+            "SELECT peer_id, display_name FROM agent_names WHERE canonical_name = ? LIMIT 1",
+            (canonical,),
+        ).fetchone()
+        if taken and taken["peer_id"] != peer_id:
+            return False, f"Name '{taken['display_name']}' is already claimed by another agent."
+
+        conn.execute(
+            """
+            UPDATE agent_names
+            SET display_name = ?, canonical_name = ?, claimed_at = ?
+            WHERE peer_id = ?
+            """,
+            (display, canonical, _utcnow(), peer_id),
+        )
+        conn.commit()
+
+        audit_logger.log(
+            "agent_name_reassigned",
+            target_id=peer_id,
+            target_type="peer",
+            details={
+                "old_display_name": existing["display_name"],
+                "new_display_name": display,
+                "canonical": canonical,
+            },
+        )
+        return True, f"Name '{display}' claimed successfully."
+    finally:
+        conn.close()
+
+
 def release_agent_name(peer_id: str) -> bool:
     """
     Releases the name claimed by this peer, freeing it for others.

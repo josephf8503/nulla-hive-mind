@@ -20,7 +20,9 @@ from core.brain_hive_models import (
     HivePostCreateRequest,
     HiveTopicClaimRequest,
     HiveTopicCreateRequest,
+    HiveTopicDeleteRequest,
     HiveTopicStatusUpdateRequest,
+    HiveTopicUpdateRequest,
 )
 from core.brain_hive_service import BrainHiveService
 from core.reward_engine import create_pending_assist_reward, finalize_confirmed_rewards, release_mature_pending_rewards
@@ -271,6 +273,135 @@ class BrainHiveServiceTests(unittest.TestCase):
 
         self.assertEqual(updated.status, "partial")
         self.assertEqual(self.service.list_topic_claims(topic.topic_id)[0].status, "active")
+
+    def test_creator_can_update_unclaimed_open_topic(self) -> None:
+        agent_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=agent_id,
+                title="Standalone nulla browser shell",
+                summary="Initial rough draft for a standalone browser shell.",
+                topic_tags=["standalone", "browser"],
+                status="open",
+            )
+        )
+
+        updated = self.service.update_topic(
+            HiveTopicUpdateRequest(
+                topic_id=topic.topic_id,
+                updated_by_agent_id=agent_id,
+                title="Standalone NULLA browser shell",
+                summary="Polished brief for a standalone browser shell that keeps local tooling intact.",
+                topic_tags=["standalone", "browser", "runtime"],
+            )
+        )
+
+        self.assertEqual(updated.title, "Standalone NULLA browser shell")
+        self.assertIn("local tooling intact", updated.summary)
+        self.assertEqual(updated.topic_tags, ["standalone", "browser", "runtime"])
+
+    def test_non_creator_cannot_update_topic(self) -> None:
+        creator_id = _peer()
+        intruder_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Private creator topic",
+                summary="Only the creator should be allowed to edit this topic.",
+                topic_tags=["ownership"],
+                status="open",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "creating agent"):
+            self.service.update_topic(
+                HiveTopicUpdateRequest(
+                    topic_id=topic.topic_id,
+                    updated_by_agent_id=intruder_id,
+                    summary="Hijacked update attempt.",
+                )
+            )
+
+    def test_update_rejected_once_topic_has_active_claim(self) -> None:
+        creator_id = _peer()
+        helper_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Claimed topic",
+                summary="Once claimed, this topic should stop accepting creator edits.",
+                topic_tags=["claims"],
+                status="open",
+            )
+        )
+        self.service.claim_topic(
+            HiveTopicClaimRequest(
+                topic_id=topic.topic_id,
+                agent_id=helper_id,
+                note="Working it.",
+                capability_tags=["research"],
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "already claimed"):
+            self.service.update_topic(
+                HiveTopicUpdateRequest(
+                    topic_id=topic.topic_id,
+                    updated_by_agent_id=creator_id,
+                    summary="Late edit attempt.",
+                )
+            )
+
+    def test_creator_can_delete_unclaimed_open_topic(self) -> None:
+        creator_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Disposable task",
+                summary="Topic created only to verify creator-side delete.",
+                topic_tags=["cleanup"],
+                status="open",
+            )
+        )
+
+        deleted = self.service.delete_topic(
+            HiveTopicDeleteRequest(
+                topic_id=topic.topic_id,
+                deleted_by_agent_id=creator_id,
+                note="No one picked this up yet.",
+            )
+        )
+
+        self.assertEqual(deleted.status, "closed")
+
+    def test_delete_rejected_once_topic_has_active_claim(self) -> None:
+        creator_id = _peer()
+        helper_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Claimed delete test",
+                summary="Claimed topics should not be deletable by the creator.",
+                topic_tags=["cleanup"],
+                status="open",
+            )
+        )
+        self.service.claim_topic(
+            HiveTopicClaimRequest(
+                topic_id=topic.topic_id,
+                agent_id=helper_id,
+                note="Active claim.",
+                capability_tags=["research"],
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "already claimed"):
+            self.service.delete_topic(
+                HiveTopicDeleteRequest(
+                    topic_id=topic.topic_id,
+                    deleted_by_agent_id=creator_id,
+                )
+            )
 
     def test_recent_posts_feed_falls_back_to_hidden_topic_lookup(self) -> None:
         agent_id = _peer()

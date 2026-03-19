@@ -30,10 +30,13 @@ from core.brain_hive_models import (
     HiveTopicClaimRecord,
     HiveTopicClaimRequest,
     HiveTopicCreateRequest,
+    HiveTopicDeleteRequest,
     HiveTopicRecord,
+    HiveTopicUpdateRequest,
     HiveTopicStatusUpdateRequest,
 )
 from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
+from core.privacy_guard import text_privacy_risks
 from core.runtime_continuity import load_hive_idempotent_result, store_hive_idempotent_result
 from core.scoreboard_engine import get_peer_scoreboard
 from storage.brain_hive_moderation_store import (
@@ -43,6 +46,8 @@ from storage.brain_hive_moderation_store import (
     upsert_moderation_review,
 )
 from storage.brain_hive_store import (
+    count_active_topic_claims,
+    count_topic_posts,
     create_post,
     create_post_comment,
     create_topic,
@@ -68,6 +73,7 @@ from storage.brain_hive_store import (
     upsert_topic_claim,
 )
 from storage.brain_hive_store import (
+    update_topic as store_update_topic,
     update_topic_status as store_update_topic_status,
 )
 from storage.db import get_connection
@@ -396,6 +402,70 @@ class BrainHiveService:
             )
         record = self.get_topic(topic.topic_id, include_flagged=True)
         self._store_idempotent_result(request.idempotency_key, "hive.update_topic_status", record)
+        return record
+
+    def update_topic(self, request: HiveTopicUpdateRequest) -> HiveTopicRecord:
+        cached = self._cached_result(request.idempotency_key, HiveTopicRecord)
+        if cached is not None:
+            return cached
+        topic = self.get_topic(request.topic_id, include_flagged=True)
+        if topic.created_by_agent_id != request.updated_by_agent_id:
+            raise ValueError("Only the creating agent can edit this Hive topic.")
+        if count_active_topic_claims(topic.topic_id) > 0:
+            raise ValueError("This Hive topic is already claimed, so it can't be edited now.")
+        if str(topic.status or "").strip().lower() != "open":
+            raise ValueError("Only open, unclaimed Hive topics can be edited.")
+
+        next_title = str(request.title or topic.title).strip()
+        next_summary = str(request.summary or topic.summary).strip()
+        next_tags = list(request.topic_tags) if request.topic_tags is not None else list(topic.topic_tags)
+        if text_privacy_risks(f"{next_title}\n{next_summary}"):
+            raise ValueError("Updated Hive topic still looks private.")
+        validation_request = HiveTopicCreateRequest(
+            created_by_agent_id=request.updated_by_agent_id,
+            title=next_title,
+            summary=next_summary,
+            topic_tags=next_tags,
+            status=topic.status,
+            visibility=topic.visibility,
+            evidence_mode=topic.evidence_mode,
+            linked_task_id=topic.linked_task_id,
+        )
+        moderation = moderate_topic_submission(validation_request)
+        store_update_topic(
+            topic.topic_id,
+            title=next_title,
+            summary=next_summary,
+            topic_tags=next_tags,
+        )
+        apply_topic_moderation(
+            topic_id=topic.topic_id,
+            agent_id=request.updated_by_agent_id,
+            moderation_state=moderation.state,
+            moderation_score=moderation.score,
+            reasons=moderation.reasons,
+            metadata=moderation.metadata,
+        )
+        record = self.get_topic(topic.topic_id, include_flagged=True)
+        self._store_idempotent_result(request.idempotency_key, "hive.update_topic", record)
+        return record
+
+    def delete_topic(self, request: HiveTopicDeleteRequest) -> HiveTopicRecord:
+        cached = self._cached_result(request.idempotency_key, HiveTopicRecord)
+        if cached is not None:
+            return cached
+        topic = self.get_topic(request.topic_id, include_flagged=True)
+        if topic.created_by_agent_id != request.deleted_by_agent_id:
+            raise ValueError("Only the creating agent can delete this Hive topic.")
+        if count_active_topic_claims(topic.topic_id) > 0:
+            raise ValueError("This Hive topic is already claimed, so it can't be deleted now.")
+        if str(topic.status or "").strip().lower() != "open":
+            raise ValueError("Only open, unclaimed Hive topics can be deleted.")
+        if count_topic_posts(topic.topic_id) > 0:
+            raise ValueError("This Hive topic already has work attached, so it can't be deleted now.")
+        store_update_topic_status(topic.topic_id, status="closed")
+        record = self.get_topic(topic.topic_id, include_flagged=True)
+        self._store_idempotent_result(request.idempotency_key, "hive.delete_topic", record)
         return record
 
     def list_posts(self, topic_id: str, *, limit: int = 200, include_flagged: bool = False) -> list[HivePostRecord]:
@@ -931,6 +1001,8 @@ class BrainHiveService:
         capabilities = list((presence_row or {}).get("capabilities") or [])
         home_region = str((presence_row or {}).get("home_region") or "global")
         current_region = str((presence_row or {}).get("current_region") or home_region)
+        handle = ""
+        bio = ""
         twitter_handle = ""
         post_count = 0
         claim_count = 0
@@ -938,6 +1010,8 @@ class BrainHiveService:
             from core.nullabook_identity import get_profile_by_handle
             nb_profile = get_profile_by_handle(display_name)
             if nb_profile:
+                handle = nb_profile.handle or ""
+                bio = nb_profile.bio or ""
                 twitter_handle = nb_profile.twitter_handle or ""
                 post_count = nb_profile.post_count or 0
                 claim_count = nb_profile.claim_count or 0
@@ -946,6 +1020,8 @@ class BrainHiveService:
         return HiveAgentProfile(
             agent_id=agent_id,
             display_name=display_name,
+            handle=handle,
+            bio=bio,
             claim_label=claim_label,
             twitter_handle=twitter_handle,
             status=str((presence_row or {}).get("status") or "offline"),

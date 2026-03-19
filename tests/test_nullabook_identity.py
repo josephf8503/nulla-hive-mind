@@ -134,6 +134,18 @@ class NullaBookIdentityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             register_nullabook_account("special!char", peer_id="cccc" * 16)
 
+    def test_registration_can_replace_existing_mesh_name_claim_for_same_peer(self):
+        from core.agent_name_registry import claim_agent_name, get_agent_name
+        from core.nullabook_identity import register_nullabook_account
+
+        peer_id = "eeee" * 16
+        ok, _ = claim_agent_name(peer_id, "NULLA")
+        self.assertTrue(ok)
+
+        reg = register_nullabook_account("sls_0x", peer_id=peer_id)
+        self.assertEqual(reg.profile.handle, "sls_0x")
+        self.assertEqual(get_agent_name(peer_id), "sls_0x")
+
     def test_bio_truncated_at_280(self):
         from core.nullabook_identity import register_nullabook_account
 

@@ -10,6 +10,7 @@ from urllib import request
 
 from apps.brain_hive_watch_server import (
     BrainHiveWatchServerConfig,
+    _proxy_nullabook_get,
     build_server,
     fetch_dashboard_from_upstreams,
     fetch_topic_from_upstreams,
@@ -138,6 +139,36 @@ class BrainHiveWatchServerTests(unittest.TestCase):
             fetch_json=fake_fetch,
         )
 
+        self.assertGreaterEqual(peak_calls, 2)
+
+    def test_proxy_nullabook_get_queries_upstreams_in_parallel_and_returns_first_ok(self) -> None:
+        active_calls = 0
+        peak_calls = 0
+        lock = threading.Lock()
+
+        def fake_fetch(url: str, *, timeout_seconds: int, auth_token: str | None = None, tls_ca_file: str | None = None, tls_insecure_skip_verify: bool = False) -> dict:
+            nonlocal active_calls, peak_calls
+            with lock:
+                active_calls += 1
+                peak_calls = max(peak_calls, active_calls)
+            try:
+                if "seed-eu" in url:
+                    time.sleep(0.08)
+                    return {"ok": False, "error": "slow not ok"}
+                time.sleep(0.01)
+                return {"ok": True, "result": {"posts": [{"post_id": "p1"}]}}
+            finally:
+                with lock:
+                    active_calls -= 1
+
+        with patch("apps.brain_hive_watch_server._http_get_json", side_effect=fake_fetch):
+            result = _proxy_nullabook_get(
+                ("https://seed-eu.example.nulla", "https://seed-us.example.nulla"),
+                "/v1/nullabook/feed?limit=1",
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["result"]["posts"][0]["post_id"], "p1")
         self.assertGreaterEqual(peak_calls, 2)
 
     def test_fetch_dashboard_collapses_duplicate_visible_agents_but_keeps_raw_presence_counts(self) -> None:
@@ -462,9 +493,9 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         self.assertEqual(len(snapshot["agents"]), 1)
 
     def test_dashboard_html_uses_custom_api_endpoint(self) -> None:
-        html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/brain-hive/topic")
+        html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task")
         self.assertIn("/api/dashboard", html)
-        self.assertIn("/brain-hive/topic", html)
+        self.assertIn("/task", html)
         self.assertIn("NULLA Brain Hive", html)
         self.assertIn("NULLA Operator Workstation", html)
         self.assertIn("Brain Hive Watch", html)
@@ -487,6 +518,12 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         self.assertNotIn("footerCopyToken", html)
         self.assertNotIn("footerTokenLink", html)
         self.assertIn("Follow NULLA on X", html)
+        self.assertIn('data-nb-route="feed">Feed<', html)
+        self.assertIn('data-nb-route="tasks">Tasks<', html)
+        self.assertIn('data-nb-route="agents">Agents<', html)
+        self.assertIn('data-nb-route="proof">Proof<', html)
+        self.assertIn('data-nb-route="hive">Hive<', html)
+        self.assertIn("/hive", html)
         self.assertIn("Active learnings", html)
         self.assertIn("learningProgramList", html)
         self.assertIn("fold-card", html)

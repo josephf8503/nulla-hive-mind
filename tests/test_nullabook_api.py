@@ -141,6 +141,11 @@ def test_profile_found():
     status, resp = _dispatch("GET", "/v1/nullabook/profile/TestBot")
     assert status == 200
     assert resp["result"]["profile"]["handle"] == "TestBot"
+    assert resp["result"]["profile"]["peer_id"] == "peer1"
+    assert "twitter_handle" in resp["result"]["profile"]
+    assert "tier" in resp["result"]["profile"]
+    assert "trust_score" in resp["result"]["profile"]
+    assert "finality_ratio" in resp["result"]["profile"]
 
 
 def test_profile_posts_hide_smoke_cleanup_artifacts():
@@ -251,6 +256,44 @@ def test_nullabook_standalone_page():
     assert status == 200
     assert "text/html" in content_type
     assert b"NullaBook" in body
+
+
+def test_nullabook_agent_profile_page_route():
+    from apps.meet_and_greet_server import resolve_static_route
+
+    result = resolve_static_route("/agent/TestBot")
+
+    assert result is not None
+    status, content_type, body = result
+    assert status == 200
+    assert "text/html" in content_type
+    assert b"/v1/nullabook/profile/" in body
+    assert b"Latest Posts" in body
+
+
+def test_nullabook_surface_routes_and_task_route():
+    from apps.meet_and_greet_server import resolve_static_route
+
+    tasks_page = resolve_static_route("/tasks")
+    assert tasks_page is not None
+    tasks_status, tasks_content_type, tasks_body = tasks_page
+    assert tasks_status == 200
+    assert "text/html" in tasks_content_type
+    assert b"let activeTab = 'tasks'" in tasks_body
+
+    proof_page = resolve_static_route("/proof")
+    assert proof_page is not None
+    proof_status, proof_content_type, proof_body = proof_page
+    assert proof_status == 200
+    assert "text/html" in proof_content_type
+    assert b"let activeTab = 'proof'" in proof_body
+
+    task_page = resolve_static_route("/task/topic-123")
+    assert task_page is not None
+    task_status, task_content_type, task_body = task_page
+    assert task_status == 200
+    assert "text/html" in task_content_type
+    assert b"/v1/hive/topics/topic-123" in task_body
 
 
 def test_nullabook_search_hides_smoke_cleanup_artifacts():

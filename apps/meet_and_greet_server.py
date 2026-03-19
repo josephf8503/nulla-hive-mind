@@ -33,6 +33,8 @@ from core.brain_hive_models import (
     HivePostCreateRequest,
     HiveTopicClaimRequest,
     HiveTopicCreateRequest,
+    HiveTopicDeleteRequest,
+    HiveTopicUpdateRequest,
     HiveTopicStatusUpdateRequest,
 )
 from core.brain_hive_service import BrainHiveService
@@ -59,6 +61,8 @@ _SCOPED_HIVE_WRITE_PATHS = {
     "/v1/hive/posts",
     "/v1/hive/topic-claims",
     "/v1/hive/topic-status",
+    "/v1/hive/topic-update",
+    "/v1/hive/topic-delete",
     "/v1/hive/commons/endorsements",
     "/v1/hive/commons/comments",
     "/v1/hive/commons/promotion-candidates",
@@ -356,11 +360,38 @@ def serve(config: MeetAndGreetServerConfig | None = None) -> None:
 
 def resolve_static_route(path: str) -> tuple[int, str, bytes] | None:
     clean_path = path.rstrip("/") or "/"
-    if clean_path in {"/", "/brain-hive"}:
+    if clean_path in {"/", "/brain-hive", "/hive"}:
         return 200, "text/html; charset=utf-8", render_dashboard_html().encode("utf-8")
-    if clean_path == "/nullabook":
+    nullabook_surface_by_path = {
+        "/nullabook": "feed",
+        "/feed": "feed",
+        "/tasks": "tasks",
+        "/agents": "agents",
+        "/proof": "proof",
+    }
+    if clean_path in nullabook_surface_by_path:
         from core.nullabook_feed_page import render_nullabook_page_html
-        return 200, "text/html; charset=utf-8", render_nullabook_page_html().encode("utf-8")
+        return (
+            200,
+            "text/html; charset=utf-8",
+            render_nullabook_page_html(initial_tab=nullabook_surface_by_path[clean_path]).encode("utf-8"),
+        )
+    if clean_path.startswith("/agent/"):
+        from core.nullabook_profile_page import render_nullabook_profile_page_html
+        handle = unquote(clean_path.removeprefix("/agent/").strip("/"))
+        if handle:
+            return 200, "text/html; charset=utf-8", render_nullabook_profile_page_html(handle=handle).encode("utf-8")
+    if clean_path.startswith("/task/"):
+        topic_id = unquote(clean_path.removeprefix("/task/").strip("/"))
+        if topic_id:
+            return (
+                200,
+                "text/html; charset=utf-8",
+                render_topic_detail_html(
+                    topic_api_endpoint=f"/v1/hive/topics/{topic_id}",
+                    posts_api_endpoint=f"/v1/hive/topics/{topic_id}/posts",
+                ).encode("utf-8"),
+            )
     if clean_path.startswith("/brain-hive/topic/"):
         topic_id = unquote(clean_path.removeprefix("/brain-hive/topic/").strip("/"))
         if topic_id:
@@ -618,6 +649,12 @@ def dispatch_request(
             if clean_path == "/v1/hive/topic-status":
                 model = HiveTopicStatusUpdateRequest.model_validate(payload)
                 return _ok(hive.update_topic_status(model).model_dump(mode="json"))
+            if clean_path == "/v1/hive/topic-update":
+                model = HiveTopicUpdateRequest.model_validate(payload)
+                return _ok(hive.update_topic(model).model_dump(mode="json"))
+            if clean_path == "/v1/hive/topic-delete":
+                model = HiveTopicDeleteRequest.model_validate(payload)
+                return _ok(hive.delete_topic(model).model_dump(mode="json"))
             if clean_path == "/v1/hive/claim-links":
                 model = HiveClaimLinkRequest.model_validate(payload)
                 return _ok(hive.claim_link(model).model_dump(mode="json"))
@@ -777,6 +814,7 @@ def _handle_nullabook_feed(query: dict[str, list[str]]) -> tuple[int, dict[str, 
 
 def _handle_nullabook_profile(handle: str, query: dict[str, list[str]]) -> tuple[int, dict[str, Any]]:
     from core.nullabook_identity import get_profile_by_handle
+    from core.scoreboard_engine import get_peer_scoreboard
     from storage.nullabook_store import count_posts, list_user_posts, post_to_dict
     if not handle:
         return _error(400, "Handle is required.")
@@ -786,17 +824,30 @@ def _handle_nullabook_profile(handle: str, query: dict[str, list[str]]) -> tuple
     limit = _query_int(query, "limit") or 20
     posts = list_user_posts(handle, limit=limit)
     active_post_count = count_posts(handle=profile.handle)
+    board = get_peer_scoreboard(profile.peer_id)
     return _ok({
         "profile": {
+            "peer_id": profile.peer_id,
             "handle": profile.handle,
             "display_name": profile.display_name,
             "bio": profile.bio,
             "avatar_seed": profile.avatar_seed,
+            "twitter_handle": profile.twitter_handle or "",
             "post_count": active_post_count,
             "claim_count": profile.claim_count,
             "glory_score": profile.glory_score,
             "status": profile.status,
             "joined_at": profile.joined_at,
+            "tier": board.tier,
+            "trust_score": board.trust,
+            "provider_score": board.provider,
+            "validator_score": board.validator,
+            "finality_ratio": board.finality_ratio,
+            "pending_work_count": board.pending_work_count,
+            "confirmed_work_count": board.confirmed_work_count,
+            "finalized_work_count": board.finalized_work_count,
+            "rejected_work_count": board.rejected_work_count,
+            "slashed_work_count": board.slashed_work_count,
         },
         "posts": [post_to_dict(p) for p in posts],
     })

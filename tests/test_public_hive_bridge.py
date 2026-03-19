@@ -171,6 +171,66 @@ def test_public_hive_write_enabled_requires_auth_for_public_seed_urls() -> None:
     assert public_hive_write_enabled(cfg) is False
 
 
+def test_public_hive_bridge_update_reports_not_owner_for_semantic_http_error() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=io.BytesIO(json.dumps({"ok": False, "error": "Only the creating agent can edit this Hive topic."}).encode("utf-8")),
+        )
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("https://seed-eu.example.test:8766",),
+            topic_target_url="https://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+            tls_insecure_skip_verify=True,
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.update_public_topic(
+        topic_id="topic-1234567890abcdef",
+        summary="updated summary",
+        topic_tags=["validation"],
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "not_owner"
+
+
+def test_public_hive_bridge_delete_reports_claimed_for_semantic_http_error() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=io.BytesIO(json.dumps({"ok": False, "error": "This Hive topic is already claimed, so it can't be deleted now."}).encode("utf-8")),
+        )
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("https://seed-eu.example.test:8766",),
+            topic_target_url="https://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+            tls_insecure_skip_verify=True,
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.delete_public_topic(topic_id="topic-1234567890abcdef")
+
+    assert result["ok"] is False
+    assert result["status"] == "already_claimed"
+
+
 def test_public_hive_bridge_discovers_real_auth_token_from_local_watch_config() -> None:
     watch_config = {
         "auth_token": "real-cluster-token",
@@ -883,6 +943,193 @@ def test_public_hive_bridge_reads_review_summary_and_updates_topic_status() -> N
     assert summary["current_state"] == "review_required"
     assert status["ok"] is True
     assert seen[-1][2]["payload"]["status"] == "closed"
+
+
+def test_public_hive_bridge_updates_topic_via_dedicated_route() -> None:
+    seen: list[tuple[str, str, dict[str, object]]] = []
+
+    def fake_urlopen(req, timeout=0, context=None):
+        del timeout, context
+        payload = json.loads(req.data.decode("utf-8")) if getattr(req, "data", None) else {}
+        seen.append((req.get_method(), req.full_url, payload))
+        if req.get_method() == "POST" and req.full_url.endswith("/v1/hive/topic-update"):
+            return _FakeResponse(
+                {
+                    "ok": True,
+                    "result": {
+                        "topic_id": "topic-update-123456",
+                        "title": "Standalone NULLA browser shell",
+                        "summary": "Updated brief.",
+                    },
+                    "error": None,
+                }
+            )
+        raise AssertionError(f"Unexpected request: {req.get_method()} {req.full_url}")
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.update_public_topic(
+        topic_id="topic-update-123456",
+        title="Standalone NULLA browser shell",
+        summary="Updated brief.",
+        topic_tags=["standalone", "browser"],
+    )
+
+    assert result["ok"] is True
+    assert seen[-1][1].endswith("/v1/hive/topic-update")
+    assert seen[-1][2]["payload"]["title"] == "Standalone NULLA browser shell"
+
+
+def test_public_hive_bridge_deletes_topic_via_dedicated_route() -> None:
+    seen: list[tuple[str, str, dict[str, object]]] = []
+
+    def fake_urlopen(req, timeout=0, context=None):
+        del timeout, context
+        payload = json.loads(req.data.decode("utf-8")) if getattr(req, "data", None) else {}
+        seen.append((req.get_method(), req.full_url, payload))
+        if req.get_method() == "POST" and req.full_url.endswith("/v1/hive/topic-delete"):
+            return _FakeResponse(
+                {
+                    "ok": True,
+                    "result": {
+                        "topic_id": "topic-delete-123456",
+                        "status": "closed",
+                    },
+                    "error": None,
+                }
+            )
+        raise AssertionError(f"Unexpected request: {req.get_method()} {req.full_url}")
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.delete_public_topic(
+        topic_id="topic-delete-123456",
+        note="Discard unused task.",
+    )
+
+    assert result["ok"] is True
+    assert seen[-1][1].endswith("/v1/hive/topic-delete")
+    assert seen[-1][2]["payload"]["topic_id"] == "topic-delete-123456"
+
+
+def test_public_hive_bridge_update_reports_route_unavailable_for_stale_deploy() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        del timeout, context, req
+        raise RuntimeError("Unknown POST path: /v1/hive/topic-update")
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.update_public_topic(
+        topic_id="topic-update-123456",
+        title="Standalone NULLA browser shell",
+        summary="Updated brief.",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "route_unavailable"
+
+
+def test_public_hive_bridge_update_reports_route_unavailable_for_stale_http_error() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        del timeout, context, req
+        raise ValueError("Unknown POST path: /v1/hive/topic-update")
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.update_public_topic(
+        topic_id="topic-update-123456",
+        title="Standalone NULLA browser shell",
+        summary="Updated brief.",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "route_unavailable"
+
+
+def test_public_hive_bridge_delete_reports_route_unavailable_for_stale_deploy() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        del timeout, context, req
+        raise RuntimeError("Unknown POST path: /v1/hive/topic-delete")
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.delete_public_topic(
+        topic_id="topic-delete-123456",
+        note="Discard unused task.",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "route_unavailable"
+
+
+def test_public_hive_bridge_delete_reports_route_unavailable_for_stale_http_error() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        del timeout, context, req
+        raise ValueError("Unknown POST path: /v1/hive/topic-delete")
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.delete_public_topic(
+        topic_id="topic-delete-123456",
+        note="Discard unused task.",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "route_unavailable"
 
 
 def test_public_hive_bridge_default_topic_filter_keeps_partial_and_needs_improvement() -> None:

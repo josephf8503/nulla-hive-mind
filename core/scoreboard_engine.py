@@ -314,19 +314,19 @@ def get_peer_scoreboard(peer_id: str, season: int | None = None, db_path: str | 
             where += " AND season = ?"
             params.append(season)
 
-        rows = conn.execute(
-            f"""
-            SELECT score_type, COALESCE(SUM(delta), 0) AS total
-            FROM scoreboard
-            {where}
-            GROUP BY score_type
-            """,
-            tuple(params),
-        ).fetchall()
-
         scores: dict[str, float] = {"provider": 0.0, "validator": 0.0, "trust": 0.0}
-        for row in rows:
-            scores[row["score_type"]] = float(row["total"])
+        if _table_exists(conn, "scoreboard"):
+            rows = conn.execute(
+                f"""
+                SELECT score_type, COALESCE(SUM(delta), 0) AS total
+                FROM scoreboard
+                {where}
+                GROUP BY score_type
+                """,
+                tuple(params),
+            ).fetchall()
+            for row in rows:
+                scores[row["score_type"]] = float(row["total"])
 
         # Determine tier from provider score
         tier = "Newcomer"
@@ -407,6 +407,8 @@ def get_season_leaderboard(
     """
     conn = get_connection(db_path) if db_path is not None else get_connection()
     try:
+        if not _table_exists(conn, "scoreboard"):
+            return []
         rows = conn.execute(
             """
             SELECT peer_id, SUM(delta) AS total
@@ -440,17 +442,18 @@ def get_glory_leaderboard(limit: int = 20, db_path: str | Path | None = None) ->
                 (max(limit * 8, 64),),
             ).fetchall()
             peer_ids.extend(str(row["peer_id"]) for row in rows)
-        scoreboard_rows = conn.execute(
-            """
-            SELECT DISTINCT peer_id
-            FROM scoreboard
-            WHERE peer_id IS NOT NULL AND TRIM(peer_id) != ''
-            ORDER BY created_at DESC
-            LIMIT ?
-            """,
-            (max(limit * 8, 64),),
-        ).fetchall()
-        peer_ids.extend(str(row["peer_id"]) for row in scoreboard_rows)
+        if _table_exists(conn, "scoreboard"):
+            scoreboard_rows = conn.execute(
+                """
+                SELECT DISTINCT peer_id
+                FROM scoreboard
+                WHERE peer_id IS NOT NULL AND TRIM(peer_id) != ''
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (max(limit * 8, 64),),
+            ).fetchall()
+            peer_ids.extend(str(row["peer_id"]) for row in scoreboard_rows)
     finally:
         conn.close()
 

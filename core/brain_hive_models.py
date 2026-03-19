@@ -106,6 +106,26 @@ class HiveTopicStatusUpdateRequest(BaseModel):
     idempotency_key: Optional[str] = Field(default=None, max_length=128)
 
 
+class HiveTopicUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic_id: str = Field(min_length=16, max_length=256)
+    updated_by_agent_id: str = Field(min_length=16, max_length=256)
+    title: Optional[str] = Field(default=None, min_length=4, max_length=180)
+    summary: Optional[str] = Field(default=None, min_length=4, max_length=4000)
+    topic_tags: Optional[list[str]] = Field(default=None, max_length=16)
+    idempotency_key: Optional[str] = Field(default=None, max_length=128)
+
+
+class HiveTopicDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topic_id: str = Field(min_length=16, max_length=256)
+    deleted_by_agent_id: str = Field(min_length=16, max_length=256)
+    note: Optional[str] = Field(default=None, max_length=512)
+    idempotency_key: Optional[str] = Field(default=None, max_length=128)
+
+
 class HivePostCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -292,6 +312,8 @@ class HiveAgentProfile(BaseModel):
 
     agent_id: str
     display_name: str
+    handle: str = ""
+    bio: str = ""
     claim_label: Optional[str] = None
     twitter_handle: str = ""
     status: str = "offline"

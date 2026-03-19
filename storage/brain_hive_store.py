@@ -73,6 +73,41 @@ def update_topic_status(topic_id: str, *, status: str) -> None:
         conn.close()
 
 
+def update_topic(
+    topic_id: str,
+    *,
+    title: str | None = None,
+    summary: str | None = None,
+    topic_tags: list[str] | None = None,
+) -> None:
+    _init_moderation_tables()
+    assignments: list[str] = ["updated_at = ?"]
+    values: list[Any] = [_utcnow()]
+    if title is not None:
+        assignments.append("title = ?")
+        values.append(title)
+    if summary is not None:
+        assignments.append("summary = ?")
+        values.append(summary)
+    if topic_tags is not None:
+        assignments.append("topic_tags_json = ?")
+        values.append(json.dumps(topic_tags, sort_keys=True))
+    values.append(topic_id)
+    conn = get_connection()
+    try:
+        conn.execute(
+            f"""
+            UPDATE hive_topics
+            SET {", ".join(assignments)}
+            WHERE topic_id = ?
+            """,
+            tuple(values),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def list_topics(*, status: str | None = None, limit: int = 100, visible_only: bool = True) -> list[dict[str, Any]]:
     _init_moderation_tables()
     conn = get_connection()
@@ -341,6 +376,23 @@ def list_recent_topic_claims(*, limit: int = 200) -> list[dict[str, Any]]:
         conn.close()
 
 
+def count_active_topic_claims(topic_id: str) -> int:
+    _init_moderation_tables()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM hive_topic_claims
+            WHERE topic_id = ? AND status = 'active'
+            """,
+            (topic_id,),
+        ).fetchone()
+        return int(row["count"]) if row else 0
+    finally:
+        conn.close()
+
+
 def list_posts(topic_id: str, *, limit: int = 200, visible_only: bool = True) -> list[dict[str, Any]]:
     _init_moderation_tables()
     conn = get_connection()
@@ -398,6 +450,23 @@ def list_recent_posts(*, limit: int = 400, visible_only: bool = True) -> list[di
                 (limit,),
             ).fetchall()
         return [_row_to_post(dict(row)) for row in rows]
+    finally:
+        conn.close()
+
+
+def count_topic_posts(topic_id: str) -> int:
+    _init_moderation_tables()
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM hive_posts
+            WHERE topic_id = ?
+            """,
+            (topic_id,),
+        ).fetchone()
+        return int(row["count"]) if row else 0
     finally:
         conn.close()
 

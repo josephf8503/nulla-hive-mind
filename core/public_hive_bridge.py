@@ -21,7 +21,9 @@ from core.brain_hive_models import (
     HivePostCreateRequest,
     HiveTopicClaimRequest,
     HiveTopicCreateRequest,
+    HiveTopicDeleteRequest,
     HiveTopicStatusUpdateRequest,
+    HiveTopicUpdateRequest,
 )
 from core.meet_and_greet_models import PresenceUpsertRequest
 from core.privacy_guard import text_privacy_risks
@@ -148,6 +150,24 @@ class PublicHiveBridge:
                 continue
             out.append(_annotate_public_hive_truth(dict(row or {})))
         return out
+
+    def get_public_topic(
+        self,
+        topic_id: str,
+        *,
+        include_flagged: bool = True,
+    ) -> dict[str, Any] | None:
+        clean_topic_id = str(topic_id or "").strip()
+        if not clean_topic_id or not self.enabled() or not self.config.topic_target_url:
+            return None
+        route = f"/v1/hive/topics/{clean_topic_id}"
+        if include_flagged:
+            route = f"{route}?include_flagged=1"
+        try:
+            result = self._get_json(str(self.config.topic_target_url), route)
+        except Exception:
+            return None
+        return _annotate_public_hive_truth(dict(result or {}))
 
     def list_public_research_queue(self, *, limit: int = 24) -> list[dict[str, Any]]:
         if not self.enabled() or not self.config.topic_target_url:
@@ -426,6 +446,91 @@ class PublicHiveBridge:
             idempotency_key=idempotency_key,
         )
         return {"ok": True, **result}
+
+    def update_public_topic(
+        self,
+        *,
+        topic_id: str,
+        title: str | None = None,
+        summary: str | None = None,
+        topic_tags: list[str] | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.enabled() or not self.config.topic_target_url:
+            return {"ok": False, "status": "disabled"}
+        if not self.write_enabled():
+            return {"ok": False, "status": "missing_auth"}
+        combined = "\n".join(part for part in (str(title or "").strip(), str(summary or "").strip()) if part)
+        if combined and text_privacy_risks(combined):
+            return {"ok": False, "status": "privacy_blocked_topic"}
+        request = HiveTopicUpdateRequest(
+            topic_id=str(topic_id or "").strip(),
+            updated_by_agent_id=get_local_peer_id(),
+            title=" ".join(str(title or "").split()).strip()[:180] or None,
+            summary=" ".join(str(summary or "").split()).strip()[:4000] or None,
+            topic_tags=[str(item).strip()[:64] for item in list(topic_tags or []) if str(item).strip()][:16] or None,
+            idempotency_key=str(idempotency_key or "").strip()[:128] or None,
+        )
+        try:
+            result = self._post_json(
+                str(self.config.topic_target_url),
+                "/v1/hive/topic-update",
+                request.model_dump(mode="json"),
+            )
+        except (RuntimeError, ValueError) as exc:
+            error_text = str(exc or "").strip()
+            if "Unknown POST path" in error_text and "/v1/hive/topic-update" in error_text:
+                return {"ok": False, "status": "route_unavailable", "error": error_text}
+            if "Only the creating agent can edit this Hive topic." in error_text:
+                return {"ok": False, "status": "not_owner", "error": error_text}
+            raise
+        return {
+            "ok": bool(result.get("topic_id")),
+            "status": "updated" if result.get("topic_id") else "topic_update_failed",
+            "topic_id": str(result.get("topic_id") or ""),
+            "topic_result": result,
+        }
+
+    def delete_public_topic(
+        self,
+        *,
+        topic_id: str,
+        note: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        if not self.enabled() or not self.config.topic_target_url:
+            return {"ok": False, "status": "disabled"}
+        if not self.write_enabled():
+            return {"ok": False, "status": "missing_auth"}
+        request = HiveTopicDeleteRequest(
+            topic_id=str(topic_id or "").strip(),
+            deleted_by_agent_id=get_local_peer_id(),
+            note=" ".join(str(note or "").split()).strip()[:512] or None,
+            idempotency_key=str(idempotency_key or "").strip()[:128] or None,
+        )
+        try:
+            result = self._post_json(
+                str(self.config.topic_target_url),
+                "/v1/hive/topic-delete",
+                request.model_dump(mode="json"),
+            )
+        except (RuntimeError, ValueError) as exc:
+            error_text = str(exc or "").strip()
+            if "Unknown POST path" in error_text and "/v1/hive/topic-delete" in error_text:
+                return {"ok": False, "status": "route_unavailable", "error": error_text}
+            if "Only the creating agent can delete this Hive topic." in error_text:
+                return {"ok": False, "status": "not_owner", "error": error_text}
+            if "already claimed" in error_text.lower():
+                return {"ok": False, "status": "already_claimed", "error": error_text}
+            if "Only open, unclaimed Hive topics can be deleted." in error_text:
+                return {"ok": False, "status": "not_deletable", "error": error_text}
+            raise
+        return {
+            "ok": bool(result.get("topic_id")),
+            "status": "deleted" if result.get("topic_id") else "topic_delete_failed",
+            "topic_id": str(result.get("topic_id") or ""),
+            "topic_result": result,
+        }
 
     def create_public_topic(
         self,

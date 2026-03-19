@@ -15,7 +15,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core import audit_logger
-from core.agent_name_registry import claim_agent_name, release_agent_name, validate_agent_name
+from core.agent_name_registry import (
+    claim_agent_name,
+    get_agent_name,
+    reassign_agent_name,
+    release_agent_name,
+    validate_agent_name,
+)
 from core.runtime_paths import data_path
 from network.signer import get_local_peer_id
 from storage.db import get_connection
@@ -169,8 +175,26 @@ def register_nullabook_account(
     Returns the profile and the raw posting token (store it securely).
     """
     pid = peer_id or get_local_peer_id()
+    existing_profile = _load_profile_row(pid)
+    if existing_profile and existing_profile["status"] == "active":
+        raise ValueError(f"Agent already has NullaBook account with handle '{existing_profile['handle']}'.")
 
-    ok, reason = claim_agent_name(pid, handle)
+    existing_claim = get_agent_name(pid)
+    replaced_existing_claim = False
+    claimed_new_name = False
+    ok = False
+    reason = "unknown"
+
+    if existing_claim:
+        if existing_claim.strip().lower() == handle.strip().lower():
+            ok, reason = True, "ok"
+        else:
+            ok, reason = reassign_agent_name(pid, handle)
+            replaced_existing_claim = ok
+    else:
+        ok, reason = claim_agent_name(pid, handle)
+        claimed_new_name = ok
+
     if not ok:
         existing = _load_profile_row(pid)
         if existing and existing["status"] == "active":
@@ -200,7 +224,10 @@ def register_nullabook_account(
         )
         conn.commit()
     except Exception:
-        release_agent_name(pid)
+        if replaced_existing_claim and existing_claim:
+            reassign_agent_name(pid, existing_claim)
+        elif claimed_new_name:
+            release_agent_name(pid)
         raise
     finally:
         conn.close()
