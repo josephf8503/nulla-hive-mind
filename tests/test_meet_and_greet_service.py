@@ -15,6 +15,7 @@ import pytest
 
 import apps.meet_and_greet_server as _server_mod
 import core.api_write_auth as _api_write_auth_mod
+import network.protocol as _protocol_mod
 import network.signer as _signer_mod
 from apps.meet_and_greet_server import (
     MeetAndGreetServerConfig,
@@ -38,8 +39,7 @@ from core.meet_and_greet_models import (
 )
 from core.meet_and_greet_service import MeetAndGreetConfig, MeetAndGreetService
 from network.knowledge_models import KnowledgeAdvert
-from network.signer import get_local_peer_id
-from storage.db import get_connection
+from storage.db import get_connection, reset_default_connection
 from storage.migrations import run_migrations
 
 
@@ -49,6 +49,7 @@ def _now() -> datetime:
 
 class MeetAndGreetServiceTests(unittest.TestCase):
     def setUp(self) -> None:
+        reset_default_connection()
         run_migrations()
         _clear_meet_tables()
         self.service = MeetAndGreetService(MeetAndGreetConfig(local_region="eu"))
@@ -263,8 +264,10 @@ class MeetAndGreetServiceTests(unittest.TestCase):
 class MeetAndGreetServerDispatchTests(unittest.TestCase):
     def setUp(self) -> None:
         importlib.reload(_signer_mod)
+        importlib.reload(_protocol_mod)
         importlib.reload(_api_write_auth_mod)
         importlib.reload(_server_mod)
+        reset_default_connection()
         run_migrations()
         _clear_meet_tables()
         self.service = MeetAndGreetService()
@@ -1043,7 +1046,8 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             thread.join(timeout=2.0)
 
     def test_http_server_failed_status_validation_does_not_mutate_topic(self) -> None:
-        creator_id = get_local_peer_id()
+        creator_id = _signer_mod.get_local_peer_id()
+        missing_claim_id = f"missing-claim-{uuid.uuid4().hex}"
         topic = dispatch_request(
             "POST",
             "/v1/hive/topics",
@@ -1076,7 +1080,7 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
                     "topic_id": topic["topic_id"],
                     "updated_by_agent_id": creator_id,
                     "status": "closed",
-                    "claim_id": "claim-does-not-exist",
+                    "claim_id": missing_claim_id,
                     "note": "This should fail before any state mutation.",
                 },
             )
@@ -1126,7 +1130,7 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         thread.start()
         try:
             _host, port = server.server_address
-            agent_id = get_local_peer_id()
+            agent_id = _signer_mod.get_local_peer_id()
             topic_payload = _api_write_auth_mod.build_signed_write_envelope(
                 target_path="/v1/hive/topics",
                 payload={
@@ -1240,7 +1244,7 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             thread.start()
             try:
                 _host, port = server.server_address
-                agent_id = get_local_peer_id()
+                agent_id = _signer_mod.get_local_peer_id()
 
                 first_topic = _api_write_auth_mod.build_signed_write_envelope(
                     target_path="/v1/hive/topics",
@@ -1324,7 +1328,7 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             thread.start()
             try:
                 _host, port = server.server_address
-                agent_id = get_local_peer_id()
+                agent_id = _signer_mod.get_local_peer_id()
                 review_payload = _api_write_auth_mod.build_signed_write_envelope(
                     target_path="/v1/hive/commons/promotion-reviews",
                     payload={
@@ -1417,6 +1421,7 @@ if __name__ == "__main__":
 
 
 def _clear_meet_tables() -> None:
+    reset_default_connection()
     conn = get_connection()
     try:
         for table in (
@@ -1425,6 +1430,7 @@ def _clear_meet_tables() -> None:
             "hive_write_grants",
             "public_hive_write_quota_events",
             "hive_claim_links",
+            "hive_topic_claims",
             "hive_posts",
             "hive_topics",
             "artifact_manifests",
@@ -1452,11 +1458,13 @@ def _clear_meet_tables() -> None:
         conn.commit()
     finally:
         conn.close()
+        reset_default_connection()
 
 
 def test_clear_meet_tables_clears_peer_trust_rows() -> None:
     run_migrations()
-    peer_id = get_local_peer_id()
+    peer_id = _signer_mod.get_local_peer_id()
+    claimant_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
     now = _now().isoformat()
     conn = get_connection()
     try:
@@ -1473,11 +1481,45 @@ def test_clear_meet_tables_clears_peer_trust_rows() -> None:
     finally:
         conn.close()
 
+    service = MeetAndGreetService()
+    topic_status, topic_payload = dispatch_request(
+        "POST",
+        "/v1/hive/topics",
+        {},
+        {
+            "created_by_agent_id": peer_id,
+            "title": "Cleanup claim regression",
+            "summary": "Helpers must clear Hive topic claims between tests.",
+            "topic_tags": ["cleanup", "claims"],
+            "status": "open",
+            "visibility": "agent_public",
+            "evidence_mode": "candidate_only",
+        },
+        service,
+    )
+    assert topic_status == 200
+    claim_status, claim_payload = dispatch_request(
+        "POST",
+        "/v1/hive/topic-claims",
+        {},
+        {
+            "topic_id": topic_payload["result"]["topic_id"],
+            "agent_id": claimant_id,
+            "note": "Cleanup coverage",
+            "capability_tags": ["qa"],
+        },
+        service,
+    )
+    assert claim_status == 200
+    claim_id = str(claim_payload["result"]["claim_id"])
+
     _clear_meet_tables()
 
     conn = get_connection()
     try:
         row = conn.execute("SELECT 1 FROM peers WHERE peer_id = ? LIMIT 1", (peer_id,)).fetchone()
+        claim_row = conn.execute("SELECT 1 FROM hive_topic_claims WHERE claim_id = ? LIMIT 1", (claim_id,)).fetchone()
     finally:
         conn.close()
     assert row is None
+    assert claim_row is None

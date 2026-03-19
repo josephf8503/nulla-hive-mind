@@ -48,6 +48,7 @@ class BrainHiveServiceTests(unittest.TestCase):
                 "hive_moderation_reviews",
                 "hive_write_grants",
                 "hive_claim_links",
+                "hive_topic_claims",
                 "hive_commons_promotion_reviews",
                 "hive_commons_promotion_candidates",
                 "hive_post_comments",
@@ -358,13 +359,14 @@ class BrainHiveServiceTests(unittest.TestCase):
             )
         )
 
+        missing_claim_id = f"missing-claim-{uuid.uuid4().hex}"
         with self.assertRaisesRegex(KeyError, "Unknown topic claim"):
             self.service.update_topic_status(
                 HiveTopicStatusUpdateRequest(
                     topic_id=topic.topic_id,
                     updated_by_agent_id=claimant_id,
                     status="closed",
-                    claim_id="claim-does-not-exist",
+                    claim_id=missing_claim_id,
                     note="This should fail before any state mutation.",
                 )
             )

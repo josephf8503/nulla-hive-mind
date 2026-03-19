@@ -9,7 +9,7 @@ import core.api_write_auth as api_write_auth
 import network.signer as signer_mod
 from core.hive_write_grants import build_hive_write_grant
 from core.identity_lifecycle import revoke_identity
-from storage.db import get_connection
+from storage.db import get_connection, reset_default_connection
 from storage.migrations import run_migrations
 
 
@@ -17,6 +17,7 @@ class SignedApiWriteAuthTests(unittest.TestCase):
     def setUp(self) -> None:
         importlib.reload(signer_mod)
         importlib.reload(api_write_auth)
+        reset_default_connection()
         run_migrations()
         conn = get_connection()
         try:
@@ -28,11 +29,13 @@ class SignedApiWriteAuthTests(unittest.TestCase):
             conn.commit()
         finally:
             conn.close()
+            reset_default_connection()
 
     def tearDown(self) -> None:
+        reset_default_connection()
         conn = get_connection()
         try:
-            for table in ("identity_revocations", "identity_key_history"):
+            for table in ("nonce_cache", "identity_revocations", "identity_key_history"):
                 try:
                     conn.execute(f"DELETE FROM {table}")
                 except Exception:
@@ -40,6 +43,7 @@ class SignedApiWriteAuthTests(unittest.TestCase):
             conn.commit()
         finally:
             conn.close()
+            reset_default_connection()
 
     def test_signed_hive_topic_roundtrip(self) -> None:
         agent_id = signer_mod.get_local_peer_id()
