@@ -38,6 +38,14 @@ sandbox_workspace/
 install_doctor.json
 .worktrees/
 
+# Explicit guardrail: internal handovers must stay local-only.
+# Never put sensitive/operator handovers under docs/ or any tracked path.
+memory/HANDOVER_*.md
+memory/INTERNAL_TAKEOVER*.md
+memory/*TAKEOVER*.md
+docs/HANDOVER_INTERNAL*.md
+docs/INTERNAL_TAKEOVER*.md
+
 # Personal / operator identity (never publish)
 USER.md
 MEMORY.md
