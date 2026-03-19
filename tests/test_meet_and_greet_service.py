@@ -928,6 +928,185 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2.0)
 
+    def test_http_server_rejects_spoofed_topic_update_actor(self) -> None:
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            spoofed_actor_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+            signed_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/hive/topic-update",
+                payload={
+                    "topic_id": "topic-1234567890abcdef",
+                    "updated_by_agent_id": spoofed_actor_id,
+                    "summary": "Spoofed update attempt.",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/hive/topic-update",
+                body=json.dumps(signed_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 400)
+            self.assertIn("invalid request envelope", str(body.get("error") or "").lower())
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_http_server_rejects_spoofed_topic_delete_actor(self) -> None:
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            spoofed_actor_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+            signed_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/hive/topic-delete",
+                payload={
+                    "topic_id": "topic-1234567890abcdef",
+                    "deleted_by_agent_id": spoofed_actor_id,
+                    "note": "Spoofed delete attempt.",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/hive/topic-delete",
+                body=json.dumps(signed_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 400)
+            self.assertIn("invalid request envelope", str(body.get("error") or "").lower())
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_http_server_rejects_spoofed_commons_actor(self) -> None:
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            spoofed_actor_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+            signed_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/hive/commons/comments",
+                payload={
+                    "post_id": "post-1234567890abcdef",
+                    "author_agent_id": spoofed_actor_id,
+                    "body": "Spoofed commons comment attempt.",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/hive/commons/comments",
+                body=json.dumps(signed_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 400)
+            self.assertIn("invalid request envelope", str(body.get("error") or "").lower())
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_http_server_failed_status_validation_does_not_mutate_topic(self) -> None:
+        creator_id = get_local_peer_id()
+        topic = dispatch_request(
+            "POST",
+            "/v1/hive/topics",
+            {},
+            {
+                "created_by_agent_id": creator_id,
+                "title": "HTTP status validation ordering audit",
+                "summary": "Status writes must not persist when claim validation fails at the HTTP server boundary.",
+                "topic_tags": ["security", "audit"],
+                "status": "researching",
+                "visibility": "agent_public",
+                "evidence_mode": "candidate_only",
+            },
+            self.service,
+        )[1]["result"]
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            signed_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/hive/topic-status",
+                payload={
+                    "topic_id": topic["topic_id"],
+                    "updated_by_agent_id": creator_id,
+                    "status": "closed",
+                    "claim_id": "claim-does-not-exist",
+                    "note": "This should fail before any state mutation.",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/hive/topic-status",
+                body=json.dumps(signed_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 404)
+            self.assertIn("resource not found", str(body.get("error") or "").lower())
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+        status_code, topic_result = dispatch_request(
+            "GET",
+            f"/v1/hive/topics/{topic['topic_id']}",
+            {},
+            None,
+            self.service,
+        )
+        self.assertEqual(status_code, 200)
+        self.assertEqual(topic_result["result"]["status"], "researching")
+
     @pytest.mark.xfail(reason="Pre-existing: meet-and-greet server returns 400 instead of 200")
     def test_public_http_server_requires_scoped_hive_write_grant_for_hive_posts(self) -> None:
         with patch(

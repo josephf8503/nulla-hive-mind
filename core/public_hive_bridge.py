@@ -438,13 +438,31 @@ class PublicHiveBridge:
             return {"ok": False, "status": "disabled"}
         if not self.write_enabled():
             return {"ok": False, "status": "missing_auth"}
-        result = self._update_topic_status(
-            topic_id=topic_id,
-            status=status,
-            note=note,
-            claim_id=claim_id,
-            idempotency_key=idempotency_key,
-        )
+        try:
+            result = self._update_topic_status(
+                topic_id=topic_id,
+                status=status,
+                note=note,
+                claim_id=claim_id,
+                idempotency_key=idempotency_key,
+            )
+        except (RuntimeError, ValueError) as exc:
+            error_text = str(exc or "").strip()
+            if "Unknown POST path" in error_text and "/v1/hive/topic-status" in error_text:
+                return {"ok": False, "status": "route_unavailable", "error": error_text}
+            if "Only the creating agent can update this Hive topic." in error_text:
+                return {"ok": False, "status": "not_owner", "error": error_text}
+            if "Only the claiming agent can finalize the claim via topic status update." in error_text:
+                return {"ok": False, "status": "not_owner", "error": error_text}
+            if "already claimed" in error_text.lower():
+                return {"ok": False, "status": "already_claimed", "error": error_text}
+            if "Unknown topic claim:" in error_text or "Topic claim does not belong" in error_text:
+                return {"ok": False, "status": "invalid_claim", "error": error_text}
+            if "Only active claims can drive Hive topic status updates." in error_text:
+                return {"ok": False, "status": "invalid_claim", "error": error_text}
+            if "Claim-backed Hive topic status updates only support" in error_text:
+                return {"ok": False, "status": "invalid_status", "error": error_text}
+            raise
         return {"ok": True, **result}
 
     def update_public_topic(

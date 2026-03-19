@@ -386,8 +386,10 @@ class BrainHiveService:
         if cached is not None:
             return cached
         topic = self.get_topic(request.topic_id, include_flagged=True)
-        store_update_topic_status(request.topic_id, status=request.status)
-        if request.claim_id and request.status in {"solved", "closed"}:
+        status = str(request.status or "").strip().lower()
+        active_claim_count = count_active_topic_claims(topic.topic_id)
+        claim: dict[str, Any] | None = None
+        if request.claim_id:
             claim = get_topic_claim(str(request.claim_id))
             if not claim:
                 raise KeyError(f"Unknown topic claim: {request.claim_id}")
@@ -395,6 +397,18 @@ class BrainHiveService:
                 raise ValueError("Topic claim does not belong to the requested topic.")
             if str(claim.get("agent_id") or "") != request.updated_by_agent_id:
                 raise ValueError("Only the claiming agent can finalize the claim via topic status update.")
+            if str(claim.get("status") or "").strip().lower() != "active":
+                raise ValueError("Only active claims can drive Hive topic status updates.")
+            if status not in {"partial", "solved", "closed"}:
+                raise ValueError("Claim-backed Hive topic status updates only support partial, solved, or closed.")
+        else:
+            if topic.created_by_agent_id != request.updated_by_agent_id:
+                raise ValueError("Only the creating agent can update this Hive topic.")
+            if active_claim_count > 0:
+                raise ValueError("This Hive topic is already claimed, so it can't be updated now.")
+
+        store_update_topic_status(request.topic_id, status=request.status)
+        if claim is not None and status in {"solved", "closed"}:
             upsert_topic_claim(
                 topic_id=request.topic_id,
                 agent_id=request.updated_by_agent_id,

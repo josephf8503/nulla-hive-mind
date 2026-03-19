@@ -241,6 +241,40 @@ class BrainHiveServiceTests(unittest.TestCase):
         self.assertEqual(updated.status, "solved")
         self.assertEqual(self.service.list_topic_claims(topic.topic_id)[0].status, "completed")
 
+    def test_topic_status_update_allows_matching_claimant_to_finalize_claim(self) -> None:
+        creator_id = _peer()
+        claimant_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Claimant completion flow",
+                summary="Validate that the active claimant can still close out a topic after the ownership gate is tightened.",
+                topic_tags=["claims", "completion"],
+                status="researching",
+            )
+        )
+        claim = self.service.claim_topic(
+            HiveTopicClaimRequest(
+                topic_id=topic.topic_id,
+                agent_id=claimant_id,
+                note="Taking ownership of the topic completion path.",
+                capability_tags=["research"],
+            )
+        )
+
+        updated = self.service.update_topic_status(
+            HiveTopicStatusUpdateRequest(
+                topic_id=topic.topic_id,
+                updated_by_agent_id=claimant_id,
+                status="closed",
+                note="Claim completed after finishing the work.",
+                claim_id=claim.claim_id,
+            )
+        )
+
+        self.assertEqual(updated.status, "closed")
+        self.assertEqual(self.service.list_topic_claims(topic.topic_id)[0].status, "completed")
+
     def test_topic_status_update_accepts_partial_without_completing_claim(self) -> None:
         agent_id = _peer()
         topic = self.service.create_topic(
@@ -273,6 +307,103 @@ class BrainHiveServiceTests(unittest.TestCase):
 
         self.assertEqual(updated.status, "partial")
         self.assertEqual(self.service.list_topic_claims(topic.topic_id)[0].status, "active")
+
+    def test_non_creator_cannot_update_topic_status(self) -> None:
+        creator_id = _peer()
+        intruder_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Status takeover target",
+                summary="A hostile peer should not be able to change another agent's topic state.",
+                topic_tags=["ownership", "status"],
+                status="open",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "creating agent"):
+            self.service.update_topic_status(
+                HiveTopicStatusUpdateRequest(
+                    topic_id=topic.topic_id,
+                    updated_by_agent_id=intruder_id,
+                    status="partial",
+                    note="Intruder tried to rewrite another agent's topic state.",
+                )
+            )
+
+        self.assertEqual(self.service.get_topic(topic.topic_id, include_flagged=True).status, "open")
+
+    def test_invalid_claim_does_not_mutate_topic_status(self) -> None:
+        creator_id = _peer()
+        claimant_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Status ordering regression",
+                summary=(
+                    "This regression checks service ordering for topic status updates. The request intentionally references a missing identifier so "
+                    "the service must resolve it first, reject the lookup, and leave the topic's existing researching state unchanged. "
+                    "The expected behavior is a raised KeyError with no committed topic transition and no completion side effects."
+                ),
+                topic_tags=["status", "ordering", "validation"],
+                status="researching",
+            )
+        )
+        self.service.claim_topic(
+            HiveTopicClaimRequest(
+                topic_id=topic.topic_id,
+                agent_id=claimant_id,
+                note="Working the validation path.",
+                capability_tags=["research"],
+            )
+        )
+
+        with self.assertRaisesRegex(KeyError, "Unknown topic claim"):
+            self.service.update_topic_status(
+                HiveTopicStatusUpdateRequest(
+                    topic_id=topic.topic_id,
+                    updated_by_agent_id=claimant_id,
+                    status="closed",
+                    claim_id="claim-does-not-exist",
+                    note="This should fail before any state mutation.",
+                )
+            )
+
+        self.assertEqual(self.service.get_topic(topic.topic_id, include_flagged=True).status, "researching")
+        self.assertEqual(self.service.list_topic_claims(topic.topic_id)[0].status, "active")
+
+    def test_creator_cannot_change_claimed_topic_status_without_matching_claim(self) -> None:
+        creator_id = _peer()
+        claimant_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=creator_id,
+                title="Claimed status guard",
+                summary="The original creator should not be able to overwrite a claimed topic state.",
+                topic_tags=["claims", "guard"],
+                status="open",
+            )
+        )
+        self.service.claim_topic(
+            HiveTopicClaimRequest(
+                topic_id=topic.topic_id,
+                agent_id=claimant_id,
+                note="Holding the topic now.",
+                capability_tags=["research"],
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "already claimed"):
+            self.service.update_topic_status(
+                HiveTopicStatusUpdateRequest(
+                    topic_id=topic.topic_id,
+                    updated_by_agent_id=creator_id,
+                    status="closed",
+                    note="Creator tried to override the claimed topic.",
+                )
+            )
+
+        self.assertEqual(self.service.get_topic(topic.topic_id, include_flagged=True).status, "researching")
 
     def test_creator_can_update_unclaimed_open_topic(self) -> None:
         agent_id = _peer()

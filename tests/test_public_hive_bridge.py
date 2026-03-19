@@ -231,6 +231,66 @@ def test_public_hive_bridge_delete_reports_claimed_for_semantic_http_error() -> 
     assert result["status"] == "already_claimed"
 
 
+def test_public_hive_bridge_update_status_reports_not_owner_for_semantic_http_error() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=io.BytesIO(json.dumps({"ok": False, "error": "Only the creating agent can update this Hive topic."}).encode("utf-8")),
+        )
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("https://seed-eu.example.test:8766",),
+            topic_target_url="https://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+            tls_insecure_skip_verify=True,
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.update_public_topic_status(topic_id="topic-1234567890abcdef", status="closed")
+
+    assert result["ok"] is False
+    assert result["status"] == "not_owner"
+
+
+def test_public_hive_bridge_update_status_reports_invalid_claim_for_semantic_http_error() -> None:
+    def fake_urlopen(req, timeout=0, context=None):
+        raise urllib.error.HTTPError(
+            req.full_url,
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=io.BytesIO(json.dumps({"ok": False, "error": "Unknown topic claim: claim-does-not-exist"}).encode("utf-8")),
+        )
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("https://seed-eu.example.test:8766",),
+            topic_target_url="https://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+            tls_insecure_skip_verify=True,
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge.update_public_topic_status(
+        topic_id="topic-1234567890abcdef",
+        status="closed",
+        claim_id="claim-does-not-exist",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "invalid_claim"
+
+
 def test_public_hive_bridge_discovers_real_auth_token_from_local_watch_config() -> None:
     watch_config = {
         "auth_token": "real-cluster-token",
