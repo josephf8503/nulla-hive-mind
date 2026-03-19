@@ -25,7 +25,14 @@ _ROUTE_BINDINGS: dict[str, tuple[str, ...]] = {
     "/v1/hive/posts": ("author_agent_id",),
     "/v1/hive/topic-claims": ("agent_id",),
     "/v1/hive/topic-status": ("updated_by_agent_id",),
+    "/v1/hive/topic-update": ("updated_by_agent_id",),
+    "/v1/hive/topic-delete": ("deleted_by_agent_id",),
     "/v1/hive/claim-links": ("agent_id",),
+    "/v1/hive/commons/endorsements": ("agent_id",),
+    "/v1/hive/commons/comments": ("author_agent_id",),
+    "/v1/hive/commons/promotion-candidates": ("requested_by_agent_id",),
+    "/v1/hive/commons/promotion-reviews": ("reviewer_agent_id",),
+    "/v1/hive/commons/promotions": ("promoted_by_agent_id",),
     "/v1/hive/moderation/reviews": ("reviewer_agent_id",),
 }
 

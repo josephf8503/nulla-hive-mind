@@ -113,6 +113,96 @@ class SignedApiWriteAuthTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Signed write signer must match payload field 'agent_id'"):
             api_write_auth.unwrap_signed_write(target_path="/v1/presence/register", raw_payload=envelope)
 
+    def test_hive_topic_mutations_reject_spoofed_actor_ids(self) -> None:
+        spoofed_actor_id = f"peer-{'b' * 32}"
+        cases = [
+            (
+                "/v1/hive/topic-status",
+                "updated_by_agent_id",
+                {
+                    "topic_id": "topic-1234567890abcdef",
+                    "updated_by_agent_id": spoofed_actor_id,
+                    "status": "closed",
+                },
+            ),
+            (
+                "/v1/hive/topic-update",
+                "updated_by_agent_id",
+                {
+                    "topic_id": "topic-1234567890abcdef",
+                    "updated_by_agent_id": spoofed_actor_id,
+                    "summary": "Spoofed update attempt.",
+                },
+            ),
+            (
+                "/v1/hive/topic-delete",
+                "deleted_by_agent_id",
+                {
+                    "topic_id": "topic-1234567890abcdef",
+                    "deleted_by_agent_id": spoofed_actor_id,
+                },
+            ),
+        ]
+        for route, field, payload in cases:
+            with self.subTest(route=route):
+                envelope = api_write_auth.build_signed_write_envelope(target_path=route, payload=payload)
+                with self.assertRaisesRegex(ValueError, f"Signed write signer must match payload field '{field}'"):
+                    api_write_auth.unwrap_signed_write(target_path=route, raw_payload=envelope)
+
+    def test_hive_commons_mutations_reject_spoofed_actor_ids(self) -> None:
+        spoofed_actor_id = f"peer-{'c' * 32}"
+        cases = [
+            (
+                "/v1/hive/commons/endorsements",
+                "agent_id",
+                {
+                    "post_id": "post-1234567890abcdef",
+                    "agent_id": spoofed_actor_id,
+                    "endorsement_kind": "endorse",
+                    "note": "Spoofed endorsement attempt.",
+                },
+            ),
+            (
+                "/v1/hive/commons/comments",
+                "author_agent_id",
+                {
+                    "post_id": "post-1234567890abcdef",
+                    "author_agent_id": spoofed_actor_id,
+                    "body": "Spoofed comment attempt.",
+                },
+            ),
+            (
+                "/v1/hive/commons/promotion-candidates",
+                "requested_by_agent_id",
+                {
+                    "post_id": "post-1234567890abcdef",
+                    "requested_by_agent_id": spoofed_actor_id,
+                },
+            ),
+            (
+                "/v1/hive/commons/promotion-reviews",
+                "reviewer_agent_id",
+                {
+                    "candidate_id": "candidate-1234567890abcdef",
+                    "reviewer_agent_id": spoofed_actor_id,
+                    "decision": "approve",
+                },
+            ),
+            (
+                "/v1/hive/commons/promotions",
+                "promoted_by_agent_id",
+                {
+                    "candidate_id": "candidate-1234567890abcdef",
+                    "promoted_by_agent_id": spoofed_actor_id,
+                },
+            ),
+        ]
+        for route, field, payload in cases:
+            with self.subTest(route=route):
+                envelope = api_write_auth.build_signed_write_envelope(target_path=route, payload=payload)
+                with self.assertRaisesRegex(ValueError, f"Signed write signer must match payload field '{field}'"):
+                    api_write_auth.unwrap_signed_write(target_path=route, raw_payload=envelope)
+
     def test_cluster_registration_injects_owner_peer_id(self) -> None:
         payload = {
             "node_id": "seed-eu-1",
