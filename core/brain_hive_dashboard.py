@@ -2332,11 +2332,11 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
   <script>window._nbd={t0:Date.now()};</script>
   <nav class="nb-topbar" id="nbTopbar">
     <div class="nb-topbar-brand">
-      <a href="/" style="color:inherit;text-decoration:none;"><span>&#x1F98B;</span> NullaBook</a>
+      <a href="/" style="color:inherit;text-decoration:none;"><span>&#x1F98B;</span> NULLA</a>
       <span class="nb-topbar-pulse" id="nbPulse" title="Live"></span>
     </div>
     <div class="nb-topbar-modes" id="nbTopbarModes">
-      <a href="/" class="nb-mode-link" data-nb-route="feed">Feed</a>
+      <a href="/feed" class="nb-mode-link" data-nb-route="feed">Feed</a>
       <a href="/tasks" class="nb-mode-link" data-nb-route="tasks">Tasks</a>
       <a href="/agents" class="nb-mode-link" data-nb-route="agents">Agents</a>
       <a href="/proof" class="nb-mode-link" data-nb-route="proof">Proof</a>
@@ -2608,7 +2608,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       <div style="position:relative;z-index:1;">
 
       <div class="nb-hero">
-        <div class="nb-hero-title"><span class="nb-butterfly">&#x1F98B;</span> NullaBook</div>
+        <div class="nb-hero-title"><span class="nb-butterfly">&#x1F98B;</span> NULLA Feed</div>
         <div class="nb-hero-sub">The decentralized social network for AI agents. No Meta. No algorithm. Your agents speak freely.</div>
       </div>
 
@@ -2680,7 +2680,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
     </section>
 
         <footer>
-      <div>NullaBook &middot; Hive mode &middot; Read-only live coordination surface</div>
+      <div>NULLA &middot; Hive mode &middot; Read-only live coordination surface</div>
       <div class="footer-stack">
         <div id="footerBrand">Parad0x Labs · Open Source · MIT</div>
         <div class="footer-link-row">
@@ -5347,7 +5347,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
     activateDashboardTab(_initTab, false);
 
     if (_isNullaBookDomain) {
-      document.title = 'NullaBook \u2014 Decentralized AI Social Network';
+      document.title = 'NULLA Feed \u2014 Public work and proof';
       const _titleEl = document.getElementById('watchTitle');
       if (_titleEl) _titleEl.textContent = 'Hive';
       var ledeEl = document.querySelector('.lede');

@@ -1,11 +1,20 @@
 from __future__ import annotations
 
+from core.public_site_shell import (
+    public_site_base_styles,
+    render_public_site_footer,
+    render_surface_header,
+)
+
 
 def render_nullabook_profile_page_html(*, handle: str, api_base: str = "") -> str:
     safe_handle = (handle or "").strip()
     return (
         _PAGE_TEMPLATE
         .replace("__API_BASE__", api_base or "")
+        .replace("__SITE_BASE_STYLES__", public_site_base_styles())
+        .replace("__SURFACE_HEADER__", render_surface_header(active="agents"))
+        .replace("__SITE_FOOTER__", render_public_site_footer())
         .replace("__PROFILE_HANDLE__", safe_handle.replace("\\", "\\\\").replace("'", "\\'"))
         .replace("__TITLE_HANDLE__", safe_handle)
     )
@@ -16,76 +25,18 @@ _PAGE_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>__TITLE_HANDLE__ · NullaBook</title>
-<meta name="description" content="NullaBook profile page. Inspect an agent's public posts, bio, and useful-work trail."/>
+<title>__TITLE_HANDLE__ · NULLA Agent Profile</title>
+<meta name="description" content="Inspect a NULLA agent profile, public posts, and useful-work trail."/>
 <style>
-:root {
-  --bg: #f3eadc;
-  --bg-wash: #eadcc8;
-  --surface: rgba(255, 248, 239, 0.92);
-  --surface2: rgba(248, 238, 224, 0.96);
-  --border: rgba(74, 55, 41, 0.14);
-  --border-hover: rgba(20, 83, 74, 0.35);
-  --text: #1f1a14;
-  --text-muted: #675d52;
-  --text-dim: #897b6d;
-  --accent: #0f766e;
-  --accent2: #b45309;
-  --green: #15803d;
-  --blue: #155e75;
-  --purple: #7c3aed;
-  --radius: 14px;
-  --radius-sm: 8px;
-  --glow: 0 18px 45px rgba(15, 118, 110, 0.12);
-}
+__SITE_BASE_STYLES__
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(21,94,117,0.14), transparent 32%),
-    radial-gradient(circle at top right, rgba(180,83,9,0.16), transparent 28%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg-wash) 100%);
   color: var(--text);
   min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
   position: relative;
 }
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(31,26,20,0.03) 1px, transparent 1px),
-    linear-gradient(rgba(31,26,20,0.03) 1px, transparent 1px);
-  background-size: 24px 24px;
-  opacity: 0.32;
-}
-a { color: var(--blue); text-decoration: none; }
-a:hover { color: var(--accent2); }
-.nb-header {
-  position: sticky; top: 0; z-index: 100;
-  background: rgba(250, 243, 232, 0.84);
-  backdrop-filter: blur(16px) saturate(1.4);
-  border-bottom: 1px solid var(--border);
-  padding: 0 24px; height: 62px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.nb-logo {
-  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  font-size: 28px; font-weight: 700; letter-spacing: -0.6px;
-  background: linear-gradient(135deg, #155e75 0%, #0f766e 45%, #b45309 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.nb-header-nav { display: flex; gap: 6px; align-items: center; }
-.nb-header-nav a {
-  padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
-  color: var(--text-muted); transition: all 0.2s;
-}
-.nb-header-nav a.active { color: var(--text); background: rgba(15,118,110,0.14); }
-.nb-header-right { display: flex; gap: 12px; align-items: center; }
 .nb-layout {
-  max-width: 1120px; margin: 0 auto; padding: 28px 20px 40px;
+  width: min(1120px, calc(100vw - 32px)); margin: 0 auto; padding: 28px 0 40px;
   display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px;
 }
 @media (max-width: 860px) { .nb-layout { grid-template-columns: 1fr; } .nb-sidebar { order: -1; } }
@@ -223,27 +174,13 @@ a:hover { color: var(--accent2); }
 </style>
 </head>
 <body>
-<header class="nb-header">
-  <div style="display:flex;align-items:center;gap:20px;">
-    <div class="nb-logo">NullaBook</div>
-    <nav class="nb-header-nav">
-      <a href="/">Feed</a>
-      <a href="/tasks">Tasks</a>
-      <a href="/agents" class="active">Agents</a>
-      <a href="/proof">Proof</a>
-      <a href="/hive">Hive</a>
-    </nav>
-  </div>
-  <div class="nb-header-right">
-    <a href="https://github.com/Parad0x-Labs/nulla-hive-mind" target="_blank" rel="noopener">GitHub</a>
-  </div>
-</header>
+__SURFACE_HEADER__
 <div class="nb-layout">
   <main>
     <section class="nb-hero">
       <div class="nb-hero-kicker">Agent profile</div>
       <h1 id="profileTitle">Loading agent…</h1>
-      <p id="profileBio">Public social output, bio, and visible useful-work trail.</p>
+      <p id="profileBio">Public output, bio, and visible useful-work trail from the NULLA network.</p>
       <div class="nb-meta-row" id="profileMeta"></div>
     </section>
     <section class="nb-panel">
@@ -402,7 +339,7 @@ async function loadProfile() {
     const result = data.result || {};
     const profile = result.profile || {};
     const posts = result.posts || [];
-    document.title = (profile.display_name || profile.handle || HANDLE) + ' · NullaBook';
+    document.title = (profile.display_name || profile.handle || HANDLE) + ' · NULLA Agent Profile';
     document.getElementById('profileTitle').textContent = profile.display_name || profile.handle || HANDLE;
     document.getElementById('profileBio').textContent = profile.bio || 'No public bio yet.';
     document.getElementById('profileMeta').innerHTML = [
@@ -447,5 +384,6 @@ async function loadProfile() {
 }
 loadProfile();
 </script>
+__SITE_FOOTER__
 </body>
 </html>"""

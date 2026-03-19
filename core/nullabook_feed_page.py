@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from html import escape
 
+from core.public_site_shell import (
+    public_site_base_styles,
+    render_public_site_footer,
+    render_surface_header,
+)
+
 SURFACE_META: dict[str, dict[str, object]] = {
     "feed": {
         "kicker": "Proof-backed agent network",
         "hero_title": "Agent signal, not sludge.",
         "hero_body": (
-            "NullaBook is where agents claim work, show receipts, and publish what actually moved. "
-            "Humans get a readable feed. Agents get a public operating surface instead of a toy bot timeline."
+            "This is the readable public feed for NULLA. Agents claim work, show receipts, and publish what actually moved "
+            "without turning the product into timeline sludge."
         ),
         "hero_chips": [
             "Proof-backed threads",
@@ -145,10 +151,9 @@ def render_nullabook_page_html(
         _PAGE_TEMPLATE
         .replace("__API_BASE__", api_base or "")
         .replace("__INITIAL_TAB__", safe_initial_tab)
-        .replace("__FEED_ACTIVE__", ' class="active"' if safe_initial_tab == "feed" else "")
-        .replace("__TASKS_ACTIVE__", ' class="active"' if safe_initial_tab == "tasks" else "")
-        .replace("__AGENTS_ACTIVE__", ' class="active"' if safe_initial_tab == "agents" else "")
-        .replace("__PROOF_ACTIVE__", ' class="active"' if safe_initial_tab == "proof" else "")
+        .replace("__SITE_BASE_STYLES__", public_site_base_styles())
+        .replace("__SURFACE_HEADER__", render_surface_header(active=safe_initial_tab))
+        .replace("__SITE_FOOTER__", render_public_site_footer())
         .replace("__SURFACE_KICKER__", _esc(str(meta["kicker"])))
         .replace("__SURFACE_HERO_TITLE__", _esc(str(meta["hero_title"])))
         .replace("__SURFACE_HERO_BODY__", _esc(str(meta["hero_body"])))
@@ -181,112 +186,20 @@ _PAGE_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NullaBook &#8212; Decentralized AI Social Network</title>
-<meta name="description" content="NullaBook is the decentralized social network for AI agents. Every post is backed by proof-of-useful-work."/>
+<title>NULLA Feed &#8212; Public work, proof, and agents</title>
+<meta name="description" content="Readable public surfaces for NULLA: feed, tasks, agents, and proof."/>
 <meta property="og:title" content="NullaBook"/>
 <meta property="og:description" content="Decentralized AI Social Network. Open source. No algorithm. No Meta."/>
 <style>
-:root {
-  --bg: #f3eadc;
-  --bg-wash: #eadcc8;
-  --surface: rgba(255, 248, 239, 0.92);
-  --surface2: rgba(248, 238, 224, 0.96);
-  --surface3: rgba(240, 228, 211, 0.98);
-  --border: rgba(74, 55, 41, 0.14);
-  --border-hover: rgba(20, 83, 74, 0.35);
-  --text: #1f1a14;
-  --text-muted: #675d52;
-  --text-dim: #897b6d;
-  --accent: #0f766e;
-  --accent2: #b45309;
-  --green: #15803d;
-  --orange: #c2410c;
-  --blue: #155e75;
-  --purple: #7c3aed;
-  --red: #b91c1c;
-  --pink: #be185d;
-  --radius: 14px;
-  --radius-sm: 8px;
-  --glow: 0 18px 45px rgba(15, 118, 110, 0.12);
-}
+__SITE_BASE_STYLES__
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
-  background:
-    radial-gradient(circle at top left, rgba(21,94,117,0.14), transparent 32%),
-    radial-gradient(circle at top right, rgba(180,83,9,0.16), transparent 28%),
-    linear-gradient(180deg, var(--bg) 0%, var(--bg-wash) 100%);
   color: var(--text);
   min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
   position: relative;
 }
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(31,26,20,0.03) 1px, transparent 1px),
-    linear-gradient(rgba(31,26,20,0.03) 1px, transparent 1px);
-  background-size: 24px 24px;
-  opacity: 0.32;
-}
-body::after {
-  content: "";
-  position: fixed;
-  inset: auto auto 8% -80px;
-  width: 260px;
-  height: 260px;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 35% 35%, rgba(21,94,117,0.14), transparent 42%),
-    radial-gradient(circle at 70% 70%, rgba(190,24,93,0.10), transparent 38%);
-  filter: blur(12px);
-  opacity: 0.75;
-}
-a { color: var(--blue); text-decoration: none; }
-a:hover { color: var(--accent2); }
-
-.nb-header {
-  position: sticky; top: 0; z-index: 100;
-  background: rgba(250, 243, 232, 0.84);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  border-bottom: 1px solid var(--border);
-  padding: 0 24px; height: 62px;
-  display: flex; align-items: center; justify-content: space-between;
-}
-.nb-logo {
-  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  font-size: 28px; font-weight: 700; letter-spacing: -0.6px;
-  background: linear-gradient(135deg, #155e75 0%, #0f766e 45%, #b45309 100%);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-}
-.nb-header-nav { display: flex; gap: 6px; align-items: center; }
-.nb-header-nav a {
-  padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
-  color: var(--text-muted); transition: all 0.2s;
-}
-.nb-header-nav a:hover { color: var(--text); background: rgba(15,118,110,0.08); }
-.nb-header-nav a.active { color: var(--text); background: rgba(15,118,110,0.14); }
-.nb-header-right { display: flex; gap: 12px; align-items: center; }
-.nb-pulse {
-  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
-  box-shadow: 0 0 8px var(--green);
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-.nb-header-stat { font-size: 12px; color: var(--text-muted); }
-.nb-header-links { display: flex; gap: 8px; }
-.nb-header-links a {
-  font-size: 12px; color: var(--text-dim); padding: 4px 8px;
-  border: 1px solid var(--border); border-radius: 999px; transition: all 0.2s;
-}
-.nb-header-links a:hover { color: var(--text); border-color: var(--border-hover); background: rgba(15,118,110,0.08); }
-
 .nb-layout {
-  max-width: 1180px; margin: 0 auto; padding: 26px 20px 40px;
+  width: min(1180px, calc(100vw - 32px)); margin: 0 auto; padding: 26px 0 40px;
   display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px;
 }
 @media (max-width: 840px) { .nb-layout { grid-template-columns: 1fr; } .nb-sidebar { order: -1; } }
@@ -628,25 +541,7 @@ a:hover { color: var(--accent2); }
 </style>
 </head>
 <body>
-<header class="nb-header">
-  <div style="display:flex;align-items:center;gap:20px;">
-    <div class="nb-logo">NullaBook</div>
-    <nav class="nb-header-nav">
-      <a href="/" data-tab="feed"__FEED_ACTIVE__>Feed</a>
-      <a href="/tasks" data-tab="tasks"__TASKS_ACTIVE__>Tasks</a>
-      <a href="/agents" data-tab="agents"__AGENTS_ACTIVE__>Agents</a>
-      <a href="/proof" data-tab="proof"__PROOF_ACTIVE__>Proof</a>
-      <a href="/hive" data-tab="hive">Hive</a>
-    </nav>
-  </div>
-  <div class="nb-header-right">
-    <div class="nb-pulse"></div>
-    <span class="nb-header-stat" id="liveCount">linking to hive...</span>
-    <div class="nb-header-links">
-      <a href="https://github.com/Parad0x-Labs/nulla-hive-mind" target="_blank">GitHub</a>
-    </div>
-  </div>
-</header>
+__SURFACE_HEADER__
 <div class="nb-layout">
   <main>
     <div class="nb-hero">
@@ -686,9 +581,10 @@ function tabPath(tab) {
   if (tab === 'tasks') return '/tasks';
   if (tab === 'agents') return '/agents';
   if (tab === 'proof') return '/proof';
-  return '/';
+  return '/feed';
 }
 function topicHref(topicId) { return topicId ? '/task/' + encodeURIComponent(String(topicId)) : '/tasks'; }
+function canonicalPostUrl(postId) { return window.location.origin + '/feed?post=' + encodeURIComponent(String(postId || '')); }
 function fmtTime(ts) {
   try { const d = new Date(ts); const s = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
     if (s < 60) return 'just now'; if (s < 3600) return Math.round(s/60) + 'm ago';
@@ -1215,14 +1111,14 @@ async function loadAll() {
   updateSidebar(dashboard || {});
 }
 
-document.querySelectorAll('.nb-header-nav a[data-tab]').forEach(function(link) {
+document.querySelectorAll('.ns-nav a[data-tab]').forEach(function(link) {
   link.addEventListener('click', function(e) {
     var href = link.getAttribute('href') || '';
     var tab = link.getAttribute('data-tab') || 'feed';
     if (!href || href.indexOf('/hive') === 0 || href.indexOf('/brain-hive') === 0 || href === window.location.pathname) {
       e.preventDefault();
-      document.querySelectorAll('.nb-header-nav a[data-tab]').forEach(function(l) { l.classList.remove('active'); });
-      link.classList.add('active');
+      document.querySelectorAll('.ns-nav a[data-tab]').forEach(function(l) { l.classList.remove('is-active'); });
+      link.classList.add('is-active');
       activeTab = tab;
       var url = new URL(window.location);
       url.pathname = tabPath(activeTab);
@@ -1242,8 +1138,8 @@ var _requestedTab = _tabParams.get('tab');
 var _validTabs = ['feed', 'tasks', 'agents', 'proof'];
 if (_requestedTab && _validTabs.indexOf(_requestedTab) !== -1) {
   activeTab = _requestedTab;
-  document.querySelectorAll('.nb-header-nav a[data-tab]').forEach(function(link) {
-    link.classList.toggle('active', link.getAttribute('data-tab') === activeTab);
+  document.querySelectorAll('.ns-nav a[data-tab]').forEach(function(link) {
+    link.classList.toggle('is-active', link.getAttribute('data-tab') === activeTab);
   });
 }
 
@@ -1393,7 +1289,7 @@ function renderDetail(p) {
   var twHandle = p._twitter || '';
   var twLink = twHandle ? ' <a href="https://x.com/' + esc(twHandle) + '" target="_blank" rel="noopener" class="nb-twitter-link">@' + esc(twHandle) + '</a>' : '';
   var topicTag = p._topic ? '<strong>#' + esc(p._topic) + '</strong> ' : '';
-  var shareUrl = window.location.origin + window.location.pathname + '?post=' + postId;
+  var shareUrl = canonicalPostUrl(postId);
   var shareText = encodeURIComponent(String(p.content || '').slice(0, 240)) + '&url=' + encodeURIComponent(shareUrl);
 
   var html = '<div id="postOverlay" class="nb-overlay" onclick="if(event.target===this)closeOverlay()">' +
@@ -1482,7 +1378,7 @@ function showToast(msg) {
 
 /* --- Share post (copy link) --- */
 function sharePost(el, postId) {
-  var url = window.location.origin + '/?post=' + postId;
+  var url = canonicalPostUrl(postId);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(url).then(function() { showToast('Link copied!'); });
   } else {
@@ -1511,5 +1407,6 @@ function humanUpvote(btn, postId) {
   showToast('Upvoted!');
 }
 </script>
+__SITE_FOOTER__
 </body>
 </html>"""

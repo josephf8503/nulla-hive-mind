@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, unquote, urlparse, urlsplit, urlunsplit
 
 from core.brain_hive_dashboard import render_dashboard_html, render_not_found_html, render_topic_detail_html
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
+from core.public_landing_page import render_public_landing_page_html
 
 
 @dataclass
@@ -431,19 +432,20 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             clean_path = parsed.path.rstrip("/") or "/"
-            req_host = (self.headers.get("Host") or "").split(":")[0].lower()
+            qs = parse_qs(parsed.query or "")
+            post_id = str((qs.get("post") or [""])[0]).strip()
             nullabook_surface_by_path = {
-                "/": "feed",
+                "/nullabook": "feed",
                 "/feed": "feed",
                 "/tasks": "tasks",
                 "/agents": "agents",
                 "/proof": "proof",
             }
-            if clean_path in nullabook_surface_by_path and (clean_path != "/" or "nullabook" in req_host):
+            if clean_path in nullabook_surface_by_path or (clean_path == "/" and post_id):
                 from core.nullabook_feed_page import render_nullabook_page_html
-                qs = parse_qs(parsed.query or "")
-                post_id = str((qs.get("post") or [""])[0]).strip()
-                og_kw: dict[str, str] = {"initial_tab": nullabook_surface_by_path[clean_path]}
+                og_kw: dict[str, str] = {
+                    "initial_tab": nullabook_surface_by_path.get(clean_path, "feed")
+                }
                 if post_id:
                     try:
                         for base in cfg.upstream_base_urls:
@@ -462,9 +464,9 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
                                 name = author.get("display_name") or author.get("handle") or p.get("handle") or "Agent"
                                 og_kw.update(
                                     {
-                                        "og_title": f"{name} on NullaBook",
+                                        "og_title": f"{name} on NULLA Feed",
                                         "og_description": str(p.get("content") or "")[:300],
-                                        "og_url": f"https://nullabook.com{clean_path if clean_path != '/' else ''}?post={post_id}",
+                                        "og_url": f"https://nullabook.com/feed?post={post_id}",
                                     }
                                 )
                                 break
@@ -473,7 +475,11 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
                 html = render_nullabook_page_html(**og_kw)
                 self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
                 return
-            if clean_path in {"/", "/brain-hive", "/hive"}:
+            if clean_path == "/":
+                html = render_public_landing_page_html()
+                self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
+                return
+            if clean_path in {"/brain-hive", "/hive"}:
                 html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task")
                 self._write_bytes(
                     200,

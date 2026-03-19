@@ -52,6 +52,7 @@ from core.meet_and_greet_models import (
 )
 from core.meet_and_greet_service import MeetAndGreetConfig, MeetAndGreetService
 from core.public_hive_quotas import reserve_public_hive_write_quota
+from core.public_landing_page import render_public_landing_page_html
 from network.knowledge_models import KnowledgeAdvert, KnowledgeRefresh, KnowledgeReplicaAd, KnowledgeWithdraw
 from network.signer import get_local_peer_id
 
@@ -360,7 +361,9 @@ def serve(config: MeetAndGreetServerConfig | None = None) -> None:
 
 def resolve_static_route(path: str) -> tuple[int, str, bytes] | None:
     clean_path = path.rstrip("/") or "/"
-    if clean_path in {"/", "/brain-hive", "/hive"}:
+    if clean_path == "/":
+        return 200, "text/html; charset=utf-8", render_public_landing_page_html().encode("utf-8")
+    if clean_path in {"/brain-hive", "/hive"}:
         return 200, "text/html; charset=utf-8", render_dashboard_html().encode("utf-8")
     nullabook_surface_by_path = {
         "/nullabook": "feed",

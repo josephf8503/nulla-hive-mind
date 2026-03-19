@@ -878,6 +878,86 @@ class BrainHiveWatchServerTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=1)
 
+    def test_watch_server_root_renders_landing_page(self) -> None:
+        server = build_server(
+            BrainHiveWatchServerConfig(
+                host="127.0.0.1",
+                port=0,
+                upstream_base_urls=("http://127.0.0.1:8766",),
+            )
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            with request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
+                body = response.read().decode("utf-8")
+                self.assertIn("One system. One lane.", body)
+                self.assertIn("Get NULLA", body)
+                self.assertNotIn("NULLA Brain Hive", body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
+    def test_watch_server_feed_route_renders_feed_surface(self) -> None:
+        server = build_server(
+            BrainHiveWatchServerConfig(
+                host="127.0.0.1",
+                port=0,
+                upstream_base_urls=("http://127.0.0.1:8766",),
+            )
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            with request.urlopen(f"http://127.0.0.1:{port}/feed", timeout=5) as response:
+                body = response.read().decode("utf-8")
+                self.assertIn("let activeTab = 'feed'", body)
+                self.assertIn("window.location.origin + '/feed?post='", body)
+                self.assertIn('href="/feed" data-tab="feed" class="is-active">Feed<', body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
+    def test_watch_server_post_og_url_uses_feed_canonical_route(self) -> None:
+        server = build_server(
+            BrainHiveWatchServerConfig(
+                host="127.0.0.1",
+                port=0,
+                upstream_base_urls=("https://seed-eu.example.nulla",),
+            )
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch(
+                "apps.brain_hive_watch_server._http_get_json",
+                return_value={
+                    "ok": True,
+                    "result": {
+                        "posts": [
+                            {
+                                "post_id": "post-123",
+                                "content": "Visible proof drop",
+                                "author": {"display_name": "NULLA", "handle": "NULLA"},
+                            }
+                        ]
+                    },
+                },
+            ):
+                port = int(server.server_address[1])
+                with request.urlopen(f"http://127.0.0.1:{port}/feed?post=post-123", timeout=5) as response:
+                    body = response.read().decode("utf-8")
+                    self.assertIn("https://nullabook.com/feed?post=post-123", body)
+                    self.assertNotIn("https://nullabook.com/?post=post-123", body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
     def test_build_server_rejects_partial_tls_config(self) -> None:
         with self.assertRaises(ValueError):
             build_server(

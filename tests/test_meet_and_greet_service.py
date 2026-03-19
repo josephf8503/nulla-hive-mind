@@ -805,6 +805,49 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         self.assertIn("NULLA Brain Hive", decoded)
         self.assertIn("/v1/hive/dashboard", decoded)
 
+    def test_static_hive_dashboard_route_renders_html(self) -> None:
+        response = resolve_static_route("/hive")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("NULLA Brain Hive", decoded)
+        self.assertIn("/feed", decoded)
+
+    def test_static_root_route_renders_landing_page(self) -> None:
+        response = resolve_static_route("/")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("One system. One lane.", decoded)
+        self.assertIn("Get NULLA", decoded)
+        self.assertIn('href="/feed"', decoded)
+        self.assertIn('href="/hive"', decoded)
+        self.assertNotIn("NULLA Brain Hive", decoded)
+
+    def test_static_feed_route_renders_feed_surface(self) -> None:
+        response = resolve_static_route("/feed")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("let activeTab = 'feed'", decoded)
+        self.assertIn("window.location.origin + '/feed?post='", decoded)
+
+    def test_static_agents_route_renders_agents_surface(self) -> None:
+        response = resolve_static_route("/agents")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("let activeTab = 'agents'", decoded)
+        self.assertIn('href="/feed"', decoded)
+
     def test_static_brain_hive_topic_detail_route_renders_html(self) -> None:
         response = resolve_static_route("/brain-hive/topic/topic-123")
         self.assertIsNotNone(response)

@@ -1,0 +1,45 @@
+# NULLA Docs
+
+Start here if you want the shortest honest path through the repo.
+
+NULLA is a local-first AI agent runtime. It starts on your machine, uses memory and tools, and can optionally ask trusted helpers for more reach. The docs below are organized around that core lane instead of spreading the story across unrelated side paths.
+
+## First Reads
+
+- [INSTALL.md](INSTALL.md) for quick install, manual launch, and first local URLs
+- [STATUS.md](STATUS.md) for what is real, what is weak, and what is still alpha
+- [TRUST.md](TRUST.md) for trust boundaries and security posture
+
+## Core System
+
+- [BRAIN_HIVE_ARCHITECTURE.md](BRAIN_HIVE_ARCHITECTURE.md)
+- [BRAIN_HIVE_API_CONTRACT.md](BRAIN_HIVE_API_CONTRACT.md)
+- [MEET_AND_GREET_SERVER_ARCHITECTURE.md](MEET_AND_GREET_SERVER_ARCHITECTURE.md)
+- [MEET_AND_GREET_API_CONTRACT.md](MEET_AND_GREET_API_CONTRACT.md)
+- [MEET_AND_GREET_GLOBAL_TOPOLOGY.md](MEET_AND_GREET_GLOBAL_TOPOLOGY.md)
+- [MEET_AND_GREET_PREFLIGHT.md](MEET_AND_GREET_PREFLIGHT.md)
+
+## Models And OpenClaw
+
+- [NULLA_OPENCLAW_TOOL_DOCTRINE.md](NULLA_OPENCLAW_TOOL_DOCTRINE.md)
+- [MODEL_INTEGRATION_POLICY.md](MODEL_INTEGRATION_POLICY.md)
+- [MODEL_PROVIDER_POLICY.md](MODEL_PROVIDER_POLICY.md)
+
+## Operations And Proof
+
+- [PUBLIC_LAUNCH_READINESS.md](PUBLIC_LAUNCH_READINESS.md)
+- [OVERNIGHT_SOAK_RUNBOOK.md](OVERNIGHT_SOAK_RUNBOOK.md)
+- [CUMULATIVE_STABILIZATION.md](CUMULATIVE_STABILIZATION.md)
+- [PROOF_PASS_REPORT.md](PROOF_PASS_REPORT.md)
+- [TDL.md](TDL.md)
+
+## Licensing
+
+- [LICENSING_MATRIX.md](LICENSING_MATRIX.md)
+- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
+
+## Archive
+
+Historical handovers, audits, superseded install/status docs, and side-path planning material now live under [archive/](archive/README.md).
+
+That material is kept for history, not as the main explanation path.
