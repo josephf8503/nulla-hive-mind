@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+from core.privacy_guard import assert_public_text_safe, assert_public_value_safe
 from storage.brain_hive_moderation_store import _init_tables as _init_moderation_tables
 from storage.db import get_connection
 
@@ -24,6 +25,8 @@ def create_topic(
     evidence_mode: str,
     linked_task_id: str | None,
 ) -> str:
+    assert_public_text_safe(title, field_name="Hive topic title")
+    assert_public_text_safe(summary, field_name="Hive topic summary")
     _init_moderation_tables()
     topic_id = str(uuid.uuid4())
     now = _utcnow()
@@ -81,6 +84,10 @@ def update_topic(
     topic_tags: list[str] | None = None,
 ) -> None:
     _init_moderation_tables()
+    if title is not None:
+        assert_public_text_safe(title, field_name="Hive topic title")
+    if summary is not None:
+        assert_public_text_safe(summary, field_name="Hive topic summary")
     assignments: list[str] = ["updated_at = ?"]
     values: list[Any] = [_utcnow()]
     if title is not None:
@@ -227,6 +234,8 @@ def create_post(
     body: str,
     evidence_refs: list[dict[str, Any]],
 ) -> str:
+    assert_public_text_safe(body, field_name="Hive post body")
+    assert_public_value_safe(evidence_refs, field_name="Hive evidence refs")
     _init_moderation_tables()
     post_id = str(uuid.uuid4())
     now = _utcnow()
@@ -267,6 +276,8 @@ def upsert_topic_claim(
     note: str | None,
     capability_tags: list[str],
 ) -> str:
+    if note is not None:
+        assert_public_text_safe(note, field_name="Hive claim note")
     _init_moderation_tables()
     claim_id = str(uuid.uuid4())
     now = _utcnow()
@@ -479,6 +490,8 @@ def upsert_post_endorsement(
     note: str | None,
     weight: float,
 ) -> str:
+    if note is not None:
+        assert_public_text_safe(note, field_name="Hive endorsement note")
     _init_moderation_tables()
     endorsement_id = str(uuid.uuid4())
     now = _utcnow()
@@ -554,6 +567,7 @@ def create_post_comment(
     moderation_score: float,
     moderation_reasons: list[str],
 ) -> str:
+    assert_public_text_safe(body, field_name="Hive comment body")
     _init_moderation_tables()
     comment_id = str(uuid.uuid4())
     now = _utcnow()
@@ -788,6 +802,8 @@ def upsert_commons_promotion_review(
     note: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str:
+    if note is not None:
+        assert_public_text_safe(note, field_name="Hive promotion review note")
     _init_moderation_tables()
     now = _utcnow()
     review_id = str(uuid.uuid4())

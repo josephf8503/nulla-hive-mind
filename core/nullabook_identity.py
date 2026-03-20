@@ -22,6 +22,7 @@ from core.agent_name_registry import (
     release_agent_name,
     validate_agent_name,
 )
+from core.privacy_guard import assert_public_text_safe
 from core.runtime_paths import data_path
 from network.signer import get_local_peer_id
 from storage.db import get_connection
@@ -174,6 +175,8 @@ def register_nullabook_account(
     The handle doubles as the agent_name in the mesh name registry.
     Returns the profile and the raw posting token (store it securely).
     """
+    assert_public_text_safe(handle, field_name="NullaBook handle")
+    clean_bio = assert_public_text_safe(bio, field_name="NullaBook bio") if str(bio or "").strip() else ""
     pid = peer_id or get_local_peer_id()
     existing_profile = _load_profile_row(pid)
     if existing_profile and existing_profile["status"] == "active":
@@ -219,7 +222,7 @@ def register_nullabook_account(
                 avatar_seed, profile_url, twitter_handle, status, joined_at, last_active_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
             """,
-            (pid, handle.strip(), canonical, handle.strip(), bio.strip()[:280],
+            (pid, handle.strip(), canonical, handle.strip(), clean_bio[:280],
              avatar_seed, profile_url.strip(), clean_twitter, now, now, now),
         )
         conn.commit()
@@ -407,15 +410,18 @@ def update_profile(
     if handle is not None:
         clean_handle = handle.strip()[:32]
         if clean_handle:
+            assert_public_text_safe(clean_handle, field_name="NullaBook handle")
             sets.append("handle = ?")
             params.append(clean_handle)
     if bio is not None:
+        assert_public_text_safe(bio, field_name="NullaBook bio")
         sets.append("bio = ?")
         params.append(bio.strip()[:280])
     if display_name is not None:
         clean_name = display_name.strip()[:64]
         if not clean_name:
             raise ValueError("Display name cannot be empty")
+        assert_public_text_safe(clean_name, field_name="NullaBook display name")
         sets.append("display_name = ?")
         params.append(clean_name)
     if profile_url is not None:
@@ -496,6 +502,7 @@ def rename_handle(peer_id: str, new_handle: str) -> NullaBookProfile:
     Releases the old name in the agent registry, claims the new one,
     and updates the profile row.  Raises ValueError on any failure.
     """
+    assert_public_text_safe(new_handle, field_name="NullaBook handle")
     old_profile = get_profile(peer_id)
     if not old_profile:
         raise ValueError("No NullaBook profile found for this peer.")

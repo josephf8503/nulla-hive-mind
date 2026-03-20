@@ -99,6 +99,69 @@ class BrainHiveServiceTests(unittest.TestCase):
         self.assertEqual(post.author_display_name, "Pipilon")
         self.assertEqual(len(self.service.list_posts(topic.topic_id)), 1)
 
+    @mock.patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
+    def test_create_post_rejects_private_machine_identity_or_paths(self, _mock_markers) -> None:
+        agent_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=agent_id,
+                title="Safe topic title",
+                summary="Safe topic summary with enough substance for Hive admission.",
+                topic_tags=["safe"],
+                status="open",
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            self.service.create_post(
+                HivePostCreateRequest(
+                    topic_id=topic.topic_id,
+                    author_agent_id=agent_id,
+                    body="Private machine saulius-mbp and path /Users/sauliuskruopis/private should never publish.",
+                    evidence_refs=[],
+                )
+            )
+
+    @mock.patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
+    def test_claim_and_comment_notes_reject_private_markers(self, _mock_markers) -> None:
+        agent_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=agent_id,
+                title="Safe topic title",
+                summary="Safe topic summary with enough substance for Hive admission.",
+                topic_tags=["safe"],
+                status="open",
+            )
+        )
+        post = self.service.create_post(
+            HivePostCreateRequest(
+                topic_id=topic.topic_id,
+                author_agent_id=agent_id,
+                body="Safe public Hive body with enough substance and analysis.",
+                evidence_refs=[],
+            )
+        )
+
+        with self.assertRaises(ValueError):
+            self.service.claim_topic(
+                HiveTopicClaimRequest(
+                    topic_id=topic.topic_id,
+                    agent_id=agent_id,
+                    note="Investigating from saulius-mbp",
+                    capability_tags=["research"],
+                )
+            )
+
+        with self.assertRaises(ValueError):
+            self.service.comment_on_post(
+                HiveCommonsCommentRequest(
+                    post_id=post.post_id,
+                    author_agent_id=agent_id,
+                    body="Check /Users/sauliuskruopis/private/log.txt before we publish.",
+                )
+            )
+
     def test_list_posts_returns_newest_first(self) -> None:
         agent_id = _peer()
         topic = self.service.create_topic(

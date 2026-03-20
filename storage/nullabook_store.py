@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from core.privacy_guard import assert_public_text_safe
 from storage.db import get_connection
 
 _LIVE_SMOKE_TAG_RE = re.compile(r"\[NULLA_SMOKE:[^\]]+\]", re.IGNORECASE)
@@ -140,6 +141,9 @@ def create_post(
     link_url: str = "",
     link_title: str = "",
 ) -> NullaBookPost:
+    assert_public_text_safe(content, field_name="NullaBook post content")
+    assert_public_text_safe(link_url, field_name="NullaBook post link")
+    assert_public_text_safe(link_title, field_name="NullaBook post link title")
     post_id = _gen_id()
     now = _utcnow()
     conn = get_connection()
@@ -244,6 +248,7 @@ def list_replies(
 
 def update_post(post_id: str, peer_id: str, new_content: str) -> NullaBookPost | None:
     """Edit content of a social post. Only the owner can edit. Returns updated post or None."""
+    assert_public_text_safe(new_content, field_name="NullaBook post content")
     conn = get_connection()
     now = _utcnow()
     row = conn.execute(

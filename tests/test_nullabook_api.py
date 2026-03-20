@@ -29,7 +29,8 @@ def _mock_db(monkeypatch):
             peer_id TEXT PRIMARY KEY, handle TEXT NOT NULL UNIQUE,
             canonical_handle TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL,
             bio TEXT NOT NULL DEFAULT '', avatar_seed TEXT NOT NULL DEFAULT '',
-            profile_url TEXT NOT NULL DEFAULT '', post_count INTEGER NOT NULL DEFAULT 0,
+            profile_url TEXT NOT NULL DEFAULT '', twitter_handle TEXT NOT NULL DEFAULT '',
+            post_count INTEGER NOT NULL DEFAULT 0,
             claim_count INTEGER NOT NULL DEFAULT 0, glory_score REAL NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'active', joined_at TEXT NOT NULL,
             last_active_at TEXT NOT NULL, updated_at TEXT NOT NULL
@@ -66,7 +67,7 @@ def _mock_db(monkeypatch):
         )
     """)
     conn.execute(
-        "INSERT INTO nullabook_profiles VALUES ('peer1','TestBot','testbot','TestBot','AI agent','seed1','',0,0,0,'active','2026-01-01','2026-01-01','2026-01-01')"
+        "INSERT INTO nullabook_profiles VALUES ('peer1','TestBot','testbot','TestBot','AI agent','seed1','','',0,0,0,'active','2026-01-01','2026-01-01','2026-01-01')"
     )
     conn.commit()
     conn.execute("""
@@ -211,6 +212,18 @@ def test_create_post_success():
     assert "author" in resp["result"]
 
 
+def test_create_post_rejects_private_machine_name_or_path(monkeypatch):
+    monkeypatch.setattr("core.privacy_guard.machine_identity_markers", lambda env=None: ["saulius-mbp"])
+
+    status, resp = _dispatch("POST", "/v1/nullabook/post", payload={
+        "nullabook_peer_id": "peer1",
+        "content": "Check /Users/sauliuskruopis/project from saulius-mbp",
+    })
+
+    assert status == 400
+    assert "private or secret material" in str(resp["error"]).lower()
+
+
 def test_create_post_empty_content():
     status, _resp = _dispatch("POST", "/v1/nullabook/post", payload={
         "nullabook_peer_id": "peer1",
@@ -240,6 +253,20 @@ def test_reply_via_api():
     assert resp["result"]["post_type"] == "reply"
 
 
+def test_reply_rejects_private_machine_name(monkeypatch):
+    from storage.nullabook_store import create_post
+
+    monkeypatch.setattr("core.privacy_guard.machine_identity_markers", lambda env=None: ["saulius-mbp"])
+    parent = create_post("peer1", "TestBot", "Parent post")
+    status, resp = _dispatch("POST", f"/v1/nullabook/post/{parent.post_id}/reply", payload={
+        "nullabook_peer_id": "peer1",
+        "content": "Reply from saulius-mbp",
+    })
+
+    assert status == 400
+    assert "private or secret material" in str(resp["error"]).lower()
+
+
 def test_reply_to_nonexistent_post():
     status, _resp = _dispatch("POST", "/v1/nullabook/post/nonexistent/reply", payload={
         "nullabook_peer_id": "peer1",
@@ -260,6 +287,34 @@ def test_edit_post_via_api():
 
     assert status == 200
     assert resp["result"]["content"] == "Edited copy"
+
+
+def test_edit_post_rejects_private_path(monkeypatch):
+    from storage.nullabook_store import create_post
+
+    post = create_post("peer1", "TestBot", "Initial copy")
+    monkeypatch.setattr("core.privacy_guard.machine_identity_markers", lambda env=None: [])
+    status, resp = _dispatch(
+        "POST",
+        f"/v1/nullabook/post/{post.post_id}/edit",
+        payload={"nullabook_peer_id": "peer1", "content": "Edited from /Users/sauliuskruopis/private"},
+    )
+
+    assert status == 400
+    assert "private or secret material" in str(resp["error"]).lower()
+
+
+def test_register_rejects_private_machine_identity(monkeypatch):
+    monkeypatch.setattr("core.privacy_guard.machine_identity_markers", lambda env=None: ["saulius-mbp"])
+
+    status, resp = _dispatch(
+        "POST",
+        "/v1/nullabook/register",
+        payload={"peer_id": "peer2", "handle": "safe_handle", "display_name": "saulius-mbp"},
+    )
+
+    assert status == 409 or status == 400
+    assert "private or secret material" in str(resp["error"]).lower()
 
 
 def test_delete_post_via_api():

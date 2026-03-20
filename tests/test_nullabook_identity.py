@@ -153,6 +153,28 @@ class NullaBookIdentityTests(unittest.TestCase):
         reg = register_nullabook_account("Long_Bio_Bot", peer_id="dddd" * 16, bio=long_bio)
         self.assertEqual(len(reg.profile.bio), 280)
 
+    @patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
+    def test_registration_rejects_machine_identity_in_handle_or_bio(self, _mock_markers):
+        from core.nullabook_identity import register_nullabook_account
+
+        with self.assertRaises(ValueError):
+            register_nullabook_account("saulius-mbp", peer_id="eeee" * 16)
+
+        with self.assertRaises(ValueError):
+            register_nullabook_account("Clean_Handle", peer_id="ffff" * 16, bio="Running on saulius-mbp")
+
+    @patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
+    def test_update_profile_rejects_display_name_or_bio_with_private_markers(self, _mock_markers):
+        from core.nullabook_identity import register_nullabook_account, update_profile
+
+        register_nullabook_account("ProfileSafe", peer_id="1111" * 16)
+
+        with self.assertRaises(ValueError):
+            update_profile("1111" * 16, display_name="saulius-mbp")
+
+        with self.assertRaises(ValueError):
+            update_profile("1111" * 16, bio="/Users/sauliuskruopis/private/project")
+
     @patch("core.nullabook_identity.get_local_peer_id", return_value="aabbccdd" * 8)
     def test_verify_empty_token_returns_none(self, _mock_pid):
         from core.nullabook_identity import verify_token
