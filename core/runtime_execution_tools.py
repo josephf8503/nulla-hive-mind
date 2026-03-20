@@ -182,11 +182,15 @@ def extract_observation_followup_hints(observation: dict[str, Any] | None) -> di
             "primary_snippet": str(primary.get("snippet") or "").strip(),
         }
     if intent == "workspace.read_file":
+        lines = [dict(item) for item in list(payload.get("lines") or []) if isinstance(item, dict)]
         return {
             "intent": intent,
             "path": str(payload.get("path") or "").strip(),
             "start_line": int(payload.get("start_line") or 1),
             "line_count": int(payload.get("line_count") or 0),
+            "lines": lines,
+            "content": "\n".join(str(item.get("text") or "") for item in lines),
+            "verbatim": bool(payload.get("verbatim", False)),
         }
     if intent == "workspace.ensure_directory":
         return {
@@ -576,6 +580,7 @@ def _read_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExe
         )
     start_line = max(1, int(arguments.get("start_line") or 1))
     max_lines = max(1, min(int(arguments.get("max_lines") or 160), 400))
+    verbatim = bool(arguments.get("verbatim", False))
     content = target.read_text(encoding="utf-8", errors="replace").splitlines()
     chunk = content[start_line - 1 : start_line - 1 + max_lines]
     if not chunk:
@@ -606,16 +611,23 @@ def _read_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExe
         {"line_number": start_line + offset, "text": line}
         for offset, line in enumerate(chunk)
     ]
+    rendered_body = "\n".join(chunk) if verbatim else "\n".join(numbered)
+    response_text = (
+        rendered_body
+        if verbatim
+        else f"File `{_relative_path(target, workspace_root=workspace_root)}`:\n" + rendered_body
+    )
     return RuntimeExecutionResult(
         handled=True,
         ok=True,
         status="executed",
-        response_text=f"File `{_relative_path(target, workspace_root=workspace_root)}`:\n" + "\n".join(numbered),
+        response_text=response_text,
         details={
             "path": _relative_path(target, workspace_root=workspace_root),
             "start_line": start_line,
             "line_count": len(chunk),
             "lines": line_rows,
+            "verbatim": verbatim,
             "observation": _tool_observation(
                 intent="workspace.read_file",
                 tool_surface="workspace",
@@ -625,6 +637,7 @@ def _read_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExe
                 start_line=start_line,
                 line_count=len(chunk),
                 lines=line_rows,
+                verbatim=verbatim,
             ),
         },
     )

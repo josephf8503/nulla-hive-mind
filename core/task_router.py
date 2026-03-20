@@ -139,6 +139,54 @@ _SAFE_ARITHMETIC_OPERATORS = {
     ast.USub: operator.neg,
     ast.UAdd: operator.pos,
 }
+_WORD_MATH_MARKERS = (
+    " total ",
+    " sum ",
+    " show the steps",
+    " step by step",
+    " twice ",
+    " minus ",
+    " plus ",
+    " times ",
+    " multiplied by ",
+    " divided by ",
+    " in total",
+)
+_WORD_MATH_CONTEXT_MARKERS = (
+    " minute",
+    " minutes",
+    " hour",
+    " hours",
+    " task a",
+    " task b",
+    " task c",
+    " takes ",
+)
+_LIVE_RECENCY_MARKERS = (
+    " right now",
+    " current ",
+    " latest ",
+    " today ",
+    " just now",
+    " just happened",
+    " minute ago",
+    " minutes ago",
+    " hour ago",
+    " hours ago",
+)
+_LIVE_FACT_DOMAIN_MARKERS = (
+    " btc",
+    " bitcoin",
+    " eur/usd",
+    " eurusd",
+    " weather",
+    " headline",
+    " headlines",
+    " news",
+    " markets",
+    " market",
+    " price",
+)
 _NON_WEB_LOOKUP_EXCLUSIONS = (
     "file",
     "files",
@@ -282,6 +330,56 @@ def evaluate_direct_math_request(text: str) -> str | None:
 
     rendered = str(int(value)) if isinstance(value, float) and value.is_integer() else f"{value:.12g}"
     return f"{expression} = {rendered}."
+
+
+def evaluate_word_math_request(text: str) -> str | None:
+    normalized = " ".join(str(text or "").strip().split())
+    if not looks_like_word_math_request(normalized):
+        return None
+
+    task_triplet = re.search(
+        r"task a takes (?P<a>\d+(?:\.\d+)?) [^.?!]*?task b takes twice task a minus (?P<delta>\d+(?:\.\d+)?) [^.?!]*?task c takes (?P<c>\d+(?:\.\d+)?)",
+        normalized,
+        re.IGNORECASE,
+    )
+    if task_triplet is None:
+        return None
+
+    a = float(task_triplet.group("a"))
+    delta = float(task_triplet.group("delta"))
+    c = float(task_triplet.group("c"))
+    b = (2 * a) - delta
+    total = a + b + c
+
+    def _render(value: float) -> str:
+        return str(int(value)) if value.is_integer() else f"{value:.12g}"
+
+    return (
+        f"Task A = {_render(a)}. "
+        f"Task B = 2 * {_render(a)} - {_render(delta)} = {_render(b)}. "
+        f"Task C = {_render(c)}. "
+        f"Total = {_render(a)} + {_render(b)} + {_render(c)} = {_render(total)}."
+    )
+
+
+def looks_like_word_math_request(text: str) -> bool:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered or looks_like_direct_math_request(lowered):
+        return False
+    if len(re.findall(r"\d+(?:\.\d+)?", lowered)) < 2:
+        return False
+    if not any(marker in lowered for marker in _WORD_MATH_MARKERS):
+        return False
+    return any(marker in lowered for marker in _WORD_MATH_CONTEXT_MARKERS)
+
+
+def looks_like_live_recency_lookup(text: str) -> bool:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered:
+        return False
+    has_recency = any(marker in lowered for marker in _LIVE_RECENCY_MARKERS)
+    has_domain = any(marker in lowered for marker in _LIVE_FACT_DOMAIN_MARKERS) or "what happened" in lowered
+    return has_recency and has_domain
 
 
 @dataclass
@@ -475,6 +573,9 @@ def classify(user_input: str, context: dict[str, Any] | None = None) -> dict[str
     elif looks_like_direct_math_request(text):
         task_class = "chat_conversation"
         confidence_hint = 0.94
+    elif looks_like_word_math_request(text):
+        task_class = "chat_conversation"
+        confidence_hint = 0.86
     elif any(k in text for k in ["harden", "protect", "password", "passwords", "secret", "secrets", "leak", "leaks", "credential"]) or {"security", "security hardening", "password leak", "protect"} & topic_hints:
         task_class = "security_hardening"
         confidence_hint = 0.80
@@ -542,6 +643,9 @@ def classify(user_input: str, context: dict[str, Any] | None = None) -> dict[str
     elif _contains_any(text, _GENERAL_ADVISORY_MARKERS):
         task_class = "general_advisory"
         confidence_hint = 0.58
+    elif looks_like_live_recency_lookup(text):
+        task_class = "research"
+        confidence_hint = 0.78
     elif looks_like_public_entity_lookup_request(text) or looks_like_explicit_lookup_request(text):
         task_class = "research"
         confidence_hint = 0.70

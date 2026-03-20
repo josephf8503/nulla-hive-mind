@@ -31,7 +31,11 @@ from core.runtime_execution_tools import (
     runtime_execution_capability_ledger,
     runtime_execution_tool_specs,
 )
-from core.task_router import looks_like_explicit_lookup_request, looks_like_public_entity_lookup_request
+from core.task_router import (
+    looks_like_explicit_lookup_request,
+    looks_like_live_recency_lookup,
+    looks_like_public_entity_lookup_request,
+)
 from retrieval.web_adapter import WebAdapter
 from tools.registry import call_tool, load_builtin_tools
 
@@ -141,6 +145,32 @@ _INTO_PATH_RE = re.compile(
     r"\b(?:in|under|inside)\s+[`\"']?(?P<path>[A-Za-z0-9_./-]+(?:/[A-Za-z0-9_./-]+)*)[`\"']?",
     re.IGNORECASE,
 )
+_WORKSPACE_FILE_RE = r"[A-Za-z0-9_./-]+\.[A-Za-z0-9_+-]+"
+_CREATE_NAMED_FILE_WITH_CONTENT_RE = re.compile(
+    rf"\bcreate\s+(?:a\s+)?file(?:\s+named)?\s+[`\"']?(?P<path>{_WORKSPACE_FILE_RE})[`\"']?(?:\s+in\s+[^:]+?)?\s+with(?:\s+exactly)?(?:\s+this)?\s+content:?\s*(?P<content>.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_INLINE_CREATE_FILE_RE = re.compile(
+    rf"\bcreate\s+[`\"']?(?P<path>{_WORKSPACE_FILE_RE})[`\"']?\s+(?:with(?:\s+the\s+line|\s+content)?|that\s+says:)\s*(?P<content>.+?)(?=(?:\.\s*(?:Then|Now|Inside it|Do not)\b)|$)",
+    re.IGNORECASE | re.DOTALL,
+)
+_APPEND_FILE_RE = re.compile(
+    rf"\bappend(?:\s+a)?(?:\s+\w+)?\s+line\s+to\s+[`\"']?(?P<path>{_WORKSPACE_FILE_RE})[`\"']?\s*:\s*(?P<content>.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_APPEND_CONTENT_ONLY_RE = re.compile(
+    r"\bappend(?:\s+a)?(?:\s+\w+)?\s+line\s*:?\s*(?P<content>.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_OVERWRITE_FILE_RE = re.compile(
+    rf"\boverwrite(?:\s+only)?\s+[`\"']?(?P<path>{_WORKSPACE_FILE_RE})[`\"']?\s+with\s+(?P<content>.+)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_CREATE_EXACT_FILES_RE = re.compile(
+    rf"\bcreate\s+exactly\s+\w+\s+files:\s*(?P<paths>{_WORKSPACE_FILE_RE}(?:\s*,\s*{_WORKSPACE_FILE_RE})+)\.\s*put\s+(?P<contents>.+?)\s+respectively\b",
+    re.IGNORECASE | re.DOTALL,
+)
+_EXACT_READBACK_RE = re.compile(r"\bread(?:\s+the)?\s+whole\s+file\s+back\s+exactly\b", re.IGNORECASE)
 _PATH_STOP_WORDS = {
     "a",
     "an",
@@ -967,6 +997,8 @@ def should_attempt_tool_intent(
         return True
     if looks_like_explicit_lookup_request(text) or looks_like_public_entity_lookup_request(text):
         return True
+    if looks_like_live_recency_lookup(text):
+        return True
     if any(marker in lowered for marker in _LIVE_LOOKUP_MARKERS):
         return True
     if any(marker in lowered for marker in _LOCAL_TOOL_MARKERS):
@@ -1131,6 +1163,173 @@ def _looks_like_workspace_bootstrap_request(text: str) -> bool:
     )
 
 
+def _clean_workspace_file_path(candidate: str, *, base_dir: str = "") -> str:
+    clean = _clean_workspace_path(candidate)
+    if not clean or "." not in Path(clean).name:
+        return ""
+    if base_dir and "/" not in clean:
+        clean = f"{base_dir.rstrip('/')}/{clean}"
+    return clean
+
+
+def _history_messages(source_context: dict[str, Any] | None) -> list[dict[str, Any]]:
+    return [dict(item) for item in list((source_context or {}).get("conversation_history") or []) if isinstance(item, dict)]
+
+
+def _extract_history_observation_payload(message: dict[str, Any]) -> dict[str, Any] | None:
+    content = str(message.get("content") or "").strip()
+    if not content.startswith("Grounding observations for this turn."):
+        return None
+    start = content.find("{")
+    if start < 0:
+        return None
+    try:
+        payload = json.loads(content[start:])
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _recover_last_workspace_path_from_history(source_context: dict[str, Any] | None) -> str:
+    history = _history_messages(source_context)
+    for message in reversed(history[-12:]):
+        observation = _extract_history_observation_payload(message)
+        if observation is not None:
+            intent = str(observation.get("intent") or "").strip()
+            if intent in {"workspace.write_file", "workspace.read_file", "workspace.replace_in_file"}:
+                path = _clean_workspace_file_path(str(observation.get("path") or "").strip())
+                if path:
+                    return path
+        if str(message.get("role") or "").strip().lower() != "user":
+            continue
+        content = str(message.get("content") or "")
+        for pattern in (_APPEND_FILE_RE, _OVERWRITE_FILE_RE, _CREATE_NAMED_FILE_WITH_CONTENT_RE, _INLINE_CREATE_FILE_RE):
+            match = pattern.search(content)
+            if not match:
+                continue
+            path = _clean_workspace_file_path(str(match.group("path") or "").strip())
+            if path:
+                return path
+    return ""
+
+
+def _extract_workspace_file_plan(
+    text: str,
+    *,
+    source_context: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    raw = " ".join(str(text or "").split()).strip()
+    if not raw:
+        return None
+    raw = re.sub(
+        r"(?P<stem>[A-Za-z0-9_./-]+)\.\s+(?P<ext>py|js|ts|tsx|jsx|txt|md|json|yaml|yml|toml)\b",
+        r"\g<stem>.\g<ext>",
+        raw,
+    )
+    base_dir = ""
+    if any(marker in raw.lower() for marker in _DIRECTORY_CREATE_MARKERS):
+        base_dir = _extract_workspace_bootstrap_path(raw)
+    list_requested = any(
+        marker in raw.lower()
+        for marker in (
+            "list the folder contents",
+            "list the directory contents",
+            "list folder contents",
+            "list directory contents",
+            "list the contents",
+        )
+    )
+
+    exact_multi = _CREATE_EXACT_FILES_RE.search(raw)
+    if exact_multi is not None:
+        paths = [_clean_workspace_file_path(item.strip(), base_dir=base_dir) for item in str(exact_multi.group("paths") or "").split(",")]
+        contents = [item.strip() for item in str(exact_multi.group("contents") or "").split(",")]
+        writes = [
+            {"path": path, "content": content, "mode": "write"}
+            for path, content in zip(paths, contents)
+            if path and content
+        ]
+        if writes:
+            list_path = base_dir
+            if list_requested and not list_path:
+                parent = str(Path(str(writes[0].get("path") or "")).parent)
+                list_path = "" if parent in {"", "."} else parent
+            return {"directory": "", "writes": writes, "read_path": "", "verbatim_read": False, "list_path": list_path}
+
+    overwrite_match = _OVERWRITE_FILE_RE.search(raw)
+    if overwrite_match is not None:
+        path = _clean_workspace_file_path(str(overwrite_match.group("path") or "").strip(), base_dir=base_dir)
+        content = str(overwrite_match.group("content") or "").strip()
+        if path and content:
+            list_path = base_dir
+            if list_requested and not list_path:
+                parent = str(Path(path).parent)
+                list_path = "" if parent in {"", "."} else parent
+            return {"directory": "", "writes": [{"path": path, "content": content, "mode": "write"}], "read_path": "", "verbatim_read": False, "list_path": list_path}
+
+    append_match = _APPEND_FILE_RE.search(raw)
+    if append_match is not None:
+        path = _clean_workspace_file_path(
+            str(append_match.group("path") or "").strip() or _recover_last_workspace_path_from_history(source_context),
+            base_dir=base_dir,
+        )
+        content = str(append_match.group("content") or "").strip()
+        if path and content:
+            list_path = base_dir
+            if list_requested and not list_path:
+                parent = str(Path(path).parent)
+                list_path = "" if parent in {"", "."} else parent
+            return {"directory": "", "writes": [{"path": path, "content": content, "mode": "append"}], "read_path": "", "verbatim_read": False, "list_path": list_path}
+    append_content_only_match = _APPEND_CONTENT_ONLY_RE.search(raw)
+    if append_content_only_match is not None:
+        path = _clean_workspace_file_path(
+            _recover_last_workspace_path_from_history(source_context),
+            base_dir=base_dir,
+        )
+        content = str(append_content_only_match.group("content") or "").strip()
+        if path and content:
+            list_path = base_dir
+            if list_requested and not list_path:
+                parent = str(Path(path).parent)
+                list_path = "" if parent in {"", "."} else parent
+            return {"directory": "", "writes": [{"path": path, "content": content, "mode": "append"}], "read_path": "", "verbatim_read": False, "list_path": list_path}
+
+    writes: list[dict[str, Any]] = []
+    for pattern in (_CREATE_NAMED_FILE_WITH_CONTENT_RE, _INLINE_CREATE_FILE_RE):
+        for match in pattern.finditer(raw):
+            path = _clean_workspace_file_path(str(match.group("path") or "").strip(), base_dir=base_dir)
+            content = str(match.group("content") or "").strip()
+            if path and content:
+                writes.append({"path": path, "content": content, "mode": "write"})
+    if writes:
+        list_path = base_dir
+        if list_requested and not list_path:
+            parent = str(Path(str(writes[0].get("path") or "")).parent)
+            list_path = "" if parent in {"", "."} else parent
+        return {"directory": base_dir, "writes": writes, "read_path": "", "verbatim_read": False, "list_path": list_path}
+
+    if _EXACT_READBACK_RE.search(raw):
+        path = _recover_last_workspace_path_from_history(source_context)
+        if path:
+            return {"directory": "", "writes": [], "read_path": path, "verbatim_read": True, "list_path": ""}
+    return None
+
+
+def _pending_workspace_writes(plan: dict[str, Any], steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    writes = [dict(item) for item in list(plan.get("writes") or []) if isinstance(item, dict)]
+    if not writes:
+        return []
+    completed: list[tuple[str, str]] = []
+    for step in list(steps or []):
+        tool_name = str(step.get("tool_name") or "").strip()
+        if tool_name != "workspace.write_file":
+            continue
+        args = dict(step.get("arguments") or {})
+        completed.append((str(args.get("path") or "").strip(), "write"))
+        completed.append((str(args.get("path") or "").strip(), "append"))
+    return [item for item in writes if (str(item.get("path") or "").strip(), str(item.get("mode") or "write").strip()) not in completed]
+
+
 _HIVE_CREATE_PREFIXES = (
     "create hive mind task",
     "create hive task",
@@ -1287,6 +1486,7 @@ def plan_tool_workflow(
     tool_inventory_request = _looks_like_tool_inventory_request(text)
     workspace_bootstrap_path = _extract_workspace_bootstrap_path(text)
     workspace_bootstrap_request = _looks_like_workspace_bootstrap_request(text)
+    workspace_file_plan = _extract_workspace_file_plan(text, source_context=source_context)
     entity_query, entity_retry_query = _entity_lookup_query_variants(research_text)
     last_step = dict(steps[-1] or {}) if steps else {}
     last_intent = str(last_step.get("tool_name") or "").strip()
@@ -1354,6 +1554,35 @@ def plan_tool_workflow(
                 reason="planned_operator_tool_inventory",
                 next_payload={"intent": "operator.list_tools", "arguments": {}},
             )
+        if workspace_file_plan is not None:
+            pending_writes = _pending_workspace_writes(workspace_file_plan, steps)
+            planned_directory = str(workspace_file_plan.get("directory") or "").strip()
+            if planned_directory:
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_workspace_directory_bootstrap",
+                    next_payload={"intent": "workspace.ensure_directory", "arguments": {"path": planned_directory}},
+                )
+            if pending_writes:
+                first_write = dict(pending_writes[0] or {})
+                if str(first_write.get("mode") or "").strip() == "append":
+                    return WorkflowPlannerDecision(
+                        handled=True,
+                        reason="planned_read_before_append",
+                        next_payload={"intent": "workspace.read_file", "arguments": {"path": first_write["path"], "start_line": 1, "max_lines": 400, "verbatim": True}},
+                    )
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_workspace_write_file",
+                    next_payload={"intent": "workspace.write_file", "arguments": {"path": first_write["path"], "content": first_write["content"]}},
+                )
+            read_path = str(workspace_file_plan.get("read_path") or "").strip()
+            if read_path:
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_workspace_readback",
+                    next_payload={"intent": "workspace.read_file", "arguments": {"path": read_path, "start_line": 1, "max_lines": 400, "verbatim": bool(workspace_file_plan.get("verbatim_read", False))}},
+                )
         if workspace_bootstrap_request and workspace_bootstrap_path:
             wants_desktop = any(m in lowered for m in (" desktop ", " on my desktop", " my desktop", " on desktop", "~/desktop"))
             wants_home = any(m in lowered for m in (" home ", " home/", " my machine", " this machine", "~/", "folder in my machine"))
@@ -1489,6 +1718,20 @@ def plan_tool_workflow(
 
     if last_intent == "workspace.read_file":
         read_path = str(hints.get("path") or "").strip()
+        pending_writes = _pending_workspace_writes(workspace_file_plan or {}, steps)
+        if workspace_file_plan is not None and pending_writes:
+            next_write = dict(pending_writes[0] or {})
+            if str(next_write.get("mode") or "").strip() == "append" and read_path == str(next_write.get("path") or "").strip():
+                existing_content = str(hints.get("content") or "")
+                if existing_content:
+                    content = existing_content + ("\n" if not existing_content.endswith("\n") else "") + str(next_write.get("content") or "")
+                else:
+                    content = str(next_write.get("content") or "")
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_append_after_read",
+                    next_payload={"intent": "workspace.write_file", "arguments": {"path": read_path, "content": content}},
+                )
         if replacement is not None:
             target_path = str(replacement.get("path") or read_path).strip()
             old_text = str(replacement.get("old_text") or "").strip()
@@ -1516,9 +1759,44 @@ def plan_tool_workflow(
         return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_read", stop_after=True)
 
     if last_intent == "workspace.ensure_directory":
+        pending_writes = _pending_workspace_writes(workspace_file_plan or {}, steps)
+        if workspace_file_plan is not None and pending_writes:
+            next_write = dict(pending_writes[0] or {})
+            if str(next_write.get("mode") or "").strip() == "append":
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_read_before_append",
+                    next_payload={"intent": "workspace.read_file", "arguments": {"path": next_write["path"], "start_line": 1, "max_lines": 400, "verbatim": True}},
+                )
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_workspace_write_after_bootstrap",
+                next_payload={"intent": "workspace.write_file", "arguments": {"path": next_write["path"], "content": next_write["content"]}},
+            )
         return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_directory_bootstrap", stop_after=True)
 
     if last_intent == "workspace.write_file":
+        pending_writes = _pending_workspace_writes(workspace_file_plan or {}, steps)
+        if workspace_file_plan is not None and pending_writes:
+            next_write = dict(pending_writes[0] or {})
+            if str(next_write.get("mode") or "").strip() == "append":
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_read_before_append",
+                    next_payload={"intent": "workspace.read_file", "arguments": {"path": next_write["path"], "start_line": 1, "max_lines": 400, "verbatim": True}},
+                )
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_workspace_next_write",
+                next_payload={"intent": "workspace.write_file", "arguments": {"path": next_write["path"], "content": next_write["content"]}},
+            )
+        list_path = str((workspace_file_plan or {}).get("list_path") or "").strip()
+        if list_path and not _workflow_step_exists(steps, "workspace.list_files", key="path", value=list_path):
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_workspace_list_after_write",
+                next_payload={"intent": "workspace.list_files", "arguments": {"path": list_path, "limit": 200}},
+            )
         if explicit_command and not _workflow_step_exists(steps, "sandbox.run_command", key="command", value=explicit_command):
             return WorkflowPlannerDecision(
                 handled=True,
@@ -1526,6 +1804,9 @@ def plan_tool_workflow(
                 next_payload={"intent": "sandbox.run_command", "arguments": {"command": explicit_command}},
             )
         return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_write", stop_after=True)
+
+    if last_intent == "workspace.list_files":
+        return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_list", stop_after=True)
 
     if last_intent == "workspace.replace_in_file":
         retry_command = _last_command_from_steps(steps) or explicit_command

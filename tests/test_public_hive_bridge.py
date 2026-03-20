@@ -567,6 +567,34 @@ def test_ensure_public_hive_auth_marks_ssh_sync_as_ok() -> None:
     assert result["status"] == "synced_from_ssh"
 
 
+def test_ensure_public_hive_auth_returns_missing_remote_config_path_without_crashing() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        project_root = Path(tmp_dir)
+        cluster_dir = project_root / "config" / "meet_clusters" / "do_ip_first_4node"
+        cluster_dir.mkdir(parents=True, exist_ok=True)
+        (cluster_dir / "watch-edge-1.json").write_text(
+            json.dumps(
+                {
+                    "public_base_url": "https://nullabook.example.test",
+                    "auth_required": True,
+                    "upstream_base_urls": ["https://nullabook.example.test"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        key_path = project_root / "cluster_key"
+        key_path.write_text("dummy", encoding="utf-8")
+        target_path = project_root / "runtime" / "agent-bootstrap.json"
+
+        with mock.patch("core.public_hive_bridge.find_public_hive_ssh_key", return_value=key_path):
+            result = ensure_public_hive_auth(project_root=project_root, target_path=target_path)
+
+    assert result["ok"] is False
+    assert result["status"] == "missing_remote_config_path"
+    assert result["requires_auth"] is True
+    assert result["target_path"] == str(target_path.resolve())
+
+
 def test_public_hive_bridge_joins_existing_related_topic_before_creating_duplicate() -> None:
     seen: list[tuple[str, str]] = []
 

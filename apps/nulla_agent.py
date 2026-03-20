@@ -86,8 +86,10 @@ from core.task_router import (
     classify,
     create_task_record,
     evaluate_direct_math_request,
+    evaluate_word_math_request,
     load_task_record,
     looks_like_explicit_lookup_request,
+    looks_like_live_recency_lookup,
     looks_like_public_entity_lookup_request,
     looks_like_semantic_hive_request,
     model_execution_profile,
@@ -752,6 +754,18 @@ class NullaAgent:
             if hive_topic_create is not None:
                 return hive_topic_create
 
+            builder_fast_path = self._maybe_run_builder_controller(
+                task=task,
+                effective_input=effective_input,
+                classification=classification,
+                interpretation=interpreted,
+                web_notes=[],
+                session_id=session_id,
+                source_context=source_context,
+            )
+            if builder_fast_path is not None:
+                return builder_fast_path
+
             # 2) build tiered prompt context and relevant evidence
             surface = str((source_context or {}).get("surface", "cli")).lower()
             is_chat_surface = surface in {"channel", "openclaw", "api"}
@@ -957,18 +971,6 @@ class NullaAgent:
                 "external_media_evidence": media_analysis.evidence_items or media_evidence,
                 "web_notes": web_notes,
             }
-
-            workspace_build = self._maybe_run_builder_controller(
-                task=task,
-                effective_input=effective_input,
-                classification=classification,
-                interpretation=interpreted,
-                web_notes=web_notes,
-                session_id=session_id,
-                source_context=source_context,
-            )
-            if workspace_build is not None:
-                return workspace_build
 
             # 5) build safe local plan
             plan = build_plan(
@@ -2851,7 +2853,7 @@ class NullaAgent:
     def _direct_math_fast_path(self, normalized_input: str, *, source_surface: str) -> str | None:
         if source_surface not in {"channel", "openclaw", "api"}:
             return None
-        return evaluate_direct_math_request(normalized_input)
+        return evaluate_direct_math_request(normalized_input) or evaluate_word_math_request(normalized_input)
 
     def _extract_utility_timezone(self, cleaned_input: str) -> tuple[str, str]:
         lowered = " ".join(str(cleaned_input or "").strip().lower().split())
@@ -3174,26 +3176,10 @@ class NullaAgent:
         if not live_mode:
             return None
         if not policy_engine.allow_web_fallback():
-            disabled_response = "Live web lookup is disabled on this runtime, so I can't answer current weather or latest-news requests honestly."
-            if self._is_chat_truth_surface(source_context):
-                return self._chat_surface_model_wording_result(
-                    session_id=session_id,
-                    user_input=user_input,
-                    source_context=source_context,
-                    persona=load_active_persona(self.persona_id),
-                    interpretation=interpretation,
-                    task_class="research",
-                    response_class=ResponseClass.UTILITY_ANSWER,
-                    reason="live_info_model_wording",
-                    model_input=self._chat_surface_live_info_model_input(
-                        user_input=user_input,
-                        query=str(user_input or "").strip(),
-                        mode=live_mode,
-                        runtime_note=disabled_response,
-                    ),
-                    fallback_response=disabled_response,
-                    tool_backing_sources=[],
-                )
+            disabled_response = (
+                "Live web lookup is disabled on this runtime, so I can't verify current prices, "
+                "weather, or latest-news requests honestly."
+            )
             return self._fast_path_result(
                 session_id=session_id,
                 user_input=user_input,
@@ -3204,6 +3190,16 @@ class NullaAgent:
             )
 
         query = self._normalize_live_info_query(user_input, mode=live_mode)
+        if self._requires_ultra_fresh_insufficient_evidence(user_input):
+            response = self._ultra_fresh_insufficient_evidence_response(query=query)
+            return self._fast_path_result(
+                session_id=session_id,
+                user_input=user_input,
+                response=response,
+                confidence=0.9,
+                source_context=source_context,
+                reason="live_info_insufficient_evidence",
+            )
         try:
             notes = self._live_info_search_notes(
                 query=query,
@@ -3396,6 +3392,8 @@ class NullaAgent:
             return "weather"
         if any(marker in lowered for marker in news_markers):
             return "news"
+        if looks_like_live_recency_lookup(lowered):
+            return "fresh_lookup"
         if looks_like_explicit_lookup_request(lowered) or looks_like_public_entity_lookup_request(lowered):
             return "fresh_lookup"
         if any(
@@ -3466,6 +3464,40 @@ class NullaAgent:
         if "web" in hints and self._wants_fresh_info(lowered, interpretation=interpretation):
             return "fresh_lookup"
         return ""
+
+    def _requires_ultra_fresh_insufficient_evidence(self, text: str) -> bool:
+        lowered = " ".join(str(text or "").strip().lower().split())
+        if not lowered or not looks_like_live_recency_lookup(lowered):
+            return False
+        if not any(
+            marker in lowered
+            for marker in (
+                " minute ago",
+                " minutes ago",
+                " just now",
+                " just happened",
+            )
+        ):
+            return False
+        return any(
+            marker in lowered
+            for marker in (
+                "what happened",
+                "markets",
+                "market",
+                "headline",
+                "headlines",
+                "news",
+                "global",
+            )
+        )
+
+    def _ultra_fresh_insufficient_evidence_response(self, *, query: str) -> str:
+        clean_query = " ".join(str(query or "").split()).strip() or "that"
+        return (
+            f"I can't verify `{clean_query}` with enough confidence at minute-by-minute resolution from this runtime. "
+            "For claims about what happened just now or five minutes ago, I should treat the result as insufficient evidence unless a timestamped live source confirms it directly."
+        )
 
     def _looks_like_builder_request(self, lowered: str) -> bool:
         text = " ".join(str(lowered or "").split()).strip().lower()
@@ -3555,6 +3587,56 @@ class NullaAgent:
         return bool(
             any(marker in text for marker in bootstrap_markers)
             and (any(marker in text for marker in target_markers) or bool(self._extract_requested_builder_root(text)))
+        )
+
+    def _looks_like_explicit_workspace_file_request(self, query_text: str) -> bool:
+        text = f" {' '.join(str(query_text or '').split()).strip().lower()} "
+        if not text.strip():
+            return False
+        text = re.sub(
+            r"(?P<stem>[A-Za-z0-9_./-]+)\.\s+(?P<ext>py|js|ts|tsx|jsx|txt|md|json|yaml|yml|toml)\b",
+            r"\g<stem>.\g<ext>",
+            text,
+        )
+        file_name_markers = (".txt", ".md", ".json", ".yaml", ".yml", ".toml", ".py", ".ts", ".js")
+        file_action_markers = (
+            " create a file",
+            " create file",
+            " file named",
+            " append ",
+            " overwrite ",
+            " read the whole file",
+            " read the file",
+            " readback",
+            " read it back",
+            " exactly three files",
+            " inside it create",
+            " do not create anything else",
+            " overwrite only",
+            " respectively ",
+            " list the folder contents",
+            " list the directory contents",
+            " list folder contents",
+        )
+        return (
+            any(marker in text for marker in file_action_markers)
+            and (" file" in text or " files" in text or any(marker in text for marker in file_name_markers))
+        )
+
+    def _looks_like_exact_workspace_readback_request(self, query_text: str) -> bool:
+        text = f" {' '.join(str(query_text or '').split()).strip().lower()} "
+        text = re.sub(r"[.!?]+", " ", text)
+        if not text.strip():
+            return False
+        return any(
+            marker in text
+            for marker in (
+                " read the whole file back exactly ",
+                " read the file back exactly ",
+                " read back exactly ",
+                " readback exactly ",
+                " read the whole file exactly ",
+            )
         )
 
     def _extract_requested_builder_root(self, query_text: str) -> str:
@@ -5265,9 +5347,33 @@ class NullaAgent:
         workflow_supported_request = self._supports_bounded_builder_workflow_request(
             effective_input=effective_input,
             task_class=str(classification.get("task_class") or "unknown"),
+            source_context=source_context,
         )
+        explicit_file_request = self._looks_like_explicit_workspace_file_request(effective_input)
         generic_bootstrap_request = self._looks_like_generic_workspace_bootstrap_request(str(effective_input or "").lower())
-        if str(target.get("platform") or "").strip() in {"telegram", "discord"} or generic_bootstrap_request:
+        if str(target.get("platform") or "").strip() in {"telegram", "discord"}:
+            return {
+                "should_handle": True,
+                "supported": True,
+                "mode": "scaffold",
+                "target": target,
+            }
+        if workflow_supported_request and workflow_probe.handled and workflow_probe.next_payload and workflow_intent in {
+            "workspace.search_text",
+            "workspace.read_file",
+            "workspace.write_file",
+            "workspace.ensure_directory",
+            "sandbox.run_command",
+            "hive.create_topic",
+        } and (explicit_file_request or not generic_bootstrap_request):
+            return {
+                "should_handle": True,
+                "supported": True,
+                "mode": "workflow",
+                "target": target,
+                "initial_payloads": [dict(workflow_probe.next_payload or {})],
+            }
+        if generic_bootstrap_request:
             return {
                 "should_handle": True,
                 "supported": True,
@@ -5308,8 +5414,27 @@ class NullaAgent:
         *,
         effective_input: str,
         task_class: str,
+        source_context: dict[str, object] | None = None,
     ) -> bool:
+        if self._looks_like_explicit_workspace_file_request(effective_input):
+            return True
         if _looks_like_workspace_bootstrap_request(effective_input):
+            return True
+        workflow_probe = plan_tool_workflow(
+            user_text=effective_input,
+            task_class=task_class,
+            executed_steps=[],
+            source_context=dict(source_context or {}),
+        )
+        workflow_intent = str(dict(workflow_probe.next_payload or {}).get("intent") or "").strip()
+        if workflow_probe.handled and workflow_probe.next_payload and workflow_intent in {
+            "workspace.search_text",
+            "workspace.read_file",
+            "workspace.write_file",
+            "workspace.ensure_directory",
+            "sandbox.run_command",
+            "hive.create_topic",
+        }:
             return True
         if not self._explicit_runtime_workflow_request(
             user_input=effective_input,
@@ -5368,6 +5493,7 @@ class NullaAgent:
             "tool_name": tool_name,
             "status": str(getattr(execution, "status", "") or "executed"),
             "mode": str(getattr(execution, "mode", "") or ""),
+            "response_text": str(getattr(execution, "response_text", "") or ""),
             "arguments": dict(tool_payload.get("arguments") or {}),
             "observation": dict((getattr(execution, "details", {}) or {}).get("observation") or {}),
             "details": dict(getattr(execution, "details", {}) or {}),
@@ -5629,6 +5755,24 @@ class NullaAgent:
             ).strip()
         return f"I could not start a bounded builder loop for `{root_dir}` on this run.".strip()
 
+    def _builder_controller_direct_response(
+        self,
+        *,
+        effective_input: str,
+        executed_steps: list[dict[str, Any]],
+    ) -> str | None:
+        if not executed_steps:
+            return None
+        last_step = dict(executed_steps[-1] or {})
+        if (
+            self._looks_like_exact_workspace_readback_request(effective_input)
+            and str(last_step.get("tool_name") or "").strip() == "workspace.read_file"
+        ):
+            response_text = str(last_step.get("response_text") or "").strip()
+            if response_text:
+                return response_text
+        return None
+
     def _builder_controller_workflow_summary(
         self,
         *,
@@ -5851,6 +5995,57 @@ class NullaAgent:
             stop_reason=stop_reason,
             artifacts=artifacts,
         )
+        builder_details = {
+            "mode": mode,
+            "step_count": len(executed_steps),
+            "stop_reason": stop_reason,
+            "tool_steps": [str(step.get("tool_name") or "").strip() for step in executed_steps],
+            "artifacts": artifacts,
+            "executed_steps": executed_steps,
+            "observations": observations,
+        }
+        direct_response = self._builder_controller_direct_response(
+            effective_input=effective_input,
+            executed_steps=executed_steps,
+        )
+        if direct_response is not None:
+            result = self._fast_path_result(
+                session_id=session_id,
+                user_input=effective_input,
+                response=direct_response,
+                confidence=0.95,
+                source_context=loop_source_context,
+                reason="builder_controller_direct_response",
+            )
+            result["mode"] = "tool_failed" if failed_execution is not None else ("tool_executed" if executed_steps else "advice_only")
+            result["workflow_summary"] = workflow_summary
+            result["details"] = {"builder_controller": builder_details}
+            return result
+        if mode == "workflow" and executed_steps and failed_execution is None:
+            response_text = self._append_builder_artifact_citations(
+                self._render_tool_loop_response(
+                    final_message=degraded,
+                    executed_steps=executed_steps,
+                    include_step_summary=True,
+                ),
+                artifacts=artifacts,
+            )
+            result = self._action_fast_path_result(
+                task_id=task.task_id,
+                session_id=session_id,
+                user_input=effective_input,
+                response=response_text,
+                confidence=0.9,
+                source_context=loop_source_context,
+                reason="builder_controller_workflow_response",
+                success=True,
+                details={"builder_controller": builder_details},
+                mode_override="tool_executed",
+                task_outcome="success",
+                workflow_summary=workflow_summary,
+            )
+            result["details"] = {"builder_controller": builder_details}
+            return result
         if self._is_chat_truth_surface(loop_source_context):
             result = self._chat_surface_model_wording_result(
                 session_id=session_id,
@@ -5871,15 +6066,7 @@ class NullaAgent:
             )
             result["mode"] = "tool_failed" if failed_execution is not None else ("tool_executed" if executed_steps else "advice_only")
             result["workflow_summary"] = workflow_summary
-            result["details"] = {
-                "builder_controller": {
-                    "mode": mode,
-                    "step_count": len(executed_steps),
-                    "stop_reason": stop_reason,
-                    "tool_steps": [str(step.get("tool_name") or "").strip() for step in executed_steps],
-                    "artifacts": artifacts,
-                }
-            }
+            result["details"] = {"builder_controller": builder_details}
             return result
 
         response_text = degraded
@@ -5901,13 +6088,7 @@ class NullaAgent:
             source_context=loop_source_context,
             reason="builder_controller_pipeline",
             success=bool(executed_steps) and failed_execution is None,
-            details={
-                "builder_mode": mode,
-                "step_count": len(executed_steps),
-                "stop_reason": stop_reason,
-                "tool_steps": [str(step.get("tool_name") or "").strip() for step in executed_steps],
-                "artifacts": artifacts,
-            },
+            details={"builder_controller": builder_details},
             mode_override="tool_failed" if failed_execution is not None else ("tool_executed" if executed_steps else "advice_only"),
             task_outcome="failed" if failed_execution is not None else ("success" if executed_steps else "advice_only"),
             workflow_summary=workflow_summary,
@@ -5926,7 +6107,28 @@ class NullaAgent:
             return False
         task_class = str(classification.get("task_class") or "unknown")
         lowered = str(effective_input or "").lower()
+        explicit_file_request = self._looks_like_explicit_workspace_file_request(effective_input)
         generic_bootstrap_request = self._looks_like_generic_workspace_bootstrap_request(lowered)
+        workflow_probe = plan_tool_workflow(
+            user_text=effective_input,
+            task_class=task_class,
+            executed_steps=[],
+            source_context=dict(source_context or {}),
+        )
+        workflow_intent = str(dict(workflow_probe.next_payload or {}).get("intent") or "").strip()
+        workflow_supported_request = bool(
+            workflow_probe.handled
+            and workflow_probe.next_payload
+            and workflow_intent
+            in {
+                "workspace.search_text",
+                "workspace.read_file",
+                "workspace.write_file",
+                "workspace.ensure_directory",
+                "sandbox.run_command",
+                "hive.create_topic",
+            }
+        )
         if task_class not in {
             "system_design",
             "integration_orchestration",
@@ -5936,9 +6138,9 @@ class NullaAgent:
             "file_inspection",
             "shell_guidance",
             "unknown",
-        } and not generic_bootstrap_request:
+        } and not generic_bootstrap_request and not explicit_file_request and not workflow_supported_request:
             return False
-        if not self._looks_like_builder_request(lowered):
+        if not self._looks_like_builder_request(lowered) and not explicit_file_request and not workflow_supported_request:
             return False
         if any(marker in lowered for marker in ("don't write", "do not write", "advice only", "just plan", "no files")):
             return False
@@ -5947,7 +6149,25 @@ class NullaAgent:
             and any(marker in lowered for marker in ("telegram", "discord", "bot", "agent", "service"))
             and any(marker in lowered for marker in ("workspace", "repo", "repository", "write the files", "create the files", "generate the code"))
         )
-        return "write the files" in lowered or "create the files" in lowered or "generate the code" in lowered or "build the code" in lowered or "building the code" in lowered or "start working" in lowered or "start building" in lowered or "start creating" in lowered or "implement it" in lowered or "edit the files" in lowered or "patch the files" in lowered or "launch local" in lowered or scaffold_request or generic_bootstrap_request or self._explicit_runtime_workflow_request(user_input=effective_input, task_class=task_class)
+        return (
+            "write the files" in lowered
+            or "create the files" in lowered
+            or "generate the code" in lowered
+            or "build the code" in lowered
+            or "building the code" in lowered
+            or "start working" in lowered
+            or "start building" in lowered
+            or "start creating" in lowered
+            or "implement it" in lowered
+            or "edit the files" in lowered
+            or "patch the files" in lowered
+            or "launch local" in lowered
+            or scaffold_request
+            or generic_bootstrap_request
+            or explicit_file_request
+            or workflow_supported_request
+            or self._explicit_runtime_workflow_request(user_input=effective_input, task_class=task_class)
+        )
 
     def _workspace_build_target(self, *, query_text: str, interpretation: Any) -> dict[str, str]:
         lowered = str(query_text or "").lower()
@@ -7210,6 +7430,7 @@ class NullaAgent:
             "live_info_fast_path",
             "capability_truth_query",
             "builder_capability_gap",
+            "builder_controller_direct_response",
         }:
             return ResponseClass.UTILITY_ANSWER
         if reason == "help_fast_path":

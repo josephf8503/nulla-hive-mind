@@ -46,6 +46,25 @@ class RuntimeExecutionToolsTests(unittest.TestCase):
             self.assertEqual(read.details["observation"]["lines"][0]["line_number"], 2)
             self.assertEqual(read.details["observation"]["lines"][0]["text"], "beta")
 
+    def test_workspace_read_file_verbatim_returns_exact_content_and_hints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "notes.txt").write_text("alpha\nbeta\n", encoding="utf-8")
+
+            read = execute_runtime_tool(
+                "workspace.read_file",
+                {"path": "notes.txt", "start_line": 1, "max_lines": 10, "verbatim": True},
+                source_context={"workspace": tmpdir},
+            )
+            assert read is not None
+            self.assertTrue(read.ok)
+            self.assertEqual(read.response_text, "alpha\nbeta")
+
+            hints = extract_observation_followup_hints(read.details["observation"])
+            self.assertTrue(hints["verbatim"])
+            self.assertEqual(hints["content"], "alpha\nbeta")
+            self.assertEqual(hints["lines"][1]["text"], "beta")
+
     def test_workspace_write_replace_and_search_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             written = execute_runtime_tool(

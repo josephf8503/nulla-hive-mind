@@ -1873,12 +1873,24 @@ def ensure_public_hive_auth(
             "requires_auth": True,
         }
 
+    resolved_remote_config_path = str(
+        remote_config_path or os.environ.get("NULLA_PUBLIC_HIVE_REMOTE_CONFIG") or ""
+    ).strip()
+    if not resolved_remote_config_path:
+        return {
+            "ok": False,
+            "status": "missing_remote_config_path" if not require_auth else "auth_required",
+            "seed_count": len(seed_urls),
+            "target_path": str(destination),
+            "requires_auth": True,
+        }
+
     sync_result = sync_public_hive_auth_from_ssh(
         ssh_key_path=str(ssh_key),
         project_root=root,
         watch_host=str(watch_host or os.environ.get("NULLA_PUBLIC_HIVE_WATCH_HOST") or "").strip(),
         watch_user=str(watch_user or "root").strip() or "root",
-        remote_config_path=str(remote_config_path or os.environ.get("NULLA_PUBLIC_HIVE_REMOTE_CONFIG") or "").strip(),
+        remote_config_path=resolved_remote_config_path,
         target_path=destination,
     )
     sync_result["ok"] = True

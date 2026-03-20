@@ -23,6 +23,7 @@ def test_wants_fresh_info_detects_live_queries_and_ignores_builder_language(make
     assert agent._live_info_mode("latest qwen release notes", interpretation=mock.Mock(topic_hints=["web"])) == "fresh_lookup"
     assert agent._live_info_mode("check Toly on X", interpretation=mock.Mock(topic_hints=["solana"])) == "fresh_lookup"
     assert agent._live_info_mode("What's the latest on Iran war?", interpretation=mock.Mock(topic_hints=[])) == "news"
+    assert agent._live_info_mode("What happened five minutes ago in global markets?", interpretation=mock.Mock(topic_hints=[])) == "fresh_lookup"
     assert agent._live_info_mode("build a telegram bot from docs and github", interpretation=mock.Mock(topic_hints=["telegram", "github"])) == ""
 
 
@@ -84,6 +85,37 @@ def test_latest_telegram_updates_trigger_planned_web_lookup(make_agent, context_
     assert "live weather results for" not in model_input
 
 
+def test_live_info_without_web_fallback_returns_deterministic_disabled_response(make_agent, context_result_factory):
+    agent = make_agent()
+    agent.context_loader.load = mock.Mock(return_value=context_result_factory())  # type: ignore[assignment]
+    agent.memory_router.resolve = mock.Mock(  # type: ignore[assignment]
+        return_value=ModelExecutionDecision(
+            source="provider",
+            task_hash="fresh-web-disabled",
+            provider_id="ollama:qwen",
+            used_model=True,
+            output_text="should not be used",
+            confidence=0.84,
+            trust_score=0.84,
+        )
+    )
+    agent.curiosity.maybe_roam = mock.Mock(  # type: ignore[assignment]
+        return_value=CuriosityResult(enabled=False, mode="off", reason="test")
+    )
+
+    with mock.patch("apps.nulla_agent.policy_engine.allow_web_fallback", return_value=False):
+        result = agent.run_once(
+            "What is the current BTC price now?",
+            source_context={"surface": "openclaw", "platform": "openclaw"},
+        )
+
+    assert result["response_class"] == "utility_answer"
+    assert "live web lookup is disabled on this runtime" in result["response"].lower()
+    assert "can't verify current prices" in result["response"].lower()
+    assert "would you like me to attempt" not in result["response"].lower()
+    assert agent.memory_router.resolve.call_count == 0
+
+
 def test_live_info_chat_surface_routes_model_wording_through_chat_research(make_agent, context_result_factory):
     agent = make_agent()
     agent.context_loader.load = mock.Mock(return_value=context_result_factory())  # type: ignore[assignment]
@@ -128,6 +160,30 @@ def test_live_info_chat_surface_routes_model_wording_through_chat_research(make_
     classification = agent.memory_router.resolve.call_args.kwargs["classification"]
     assert classification["task_class"] == "chat_research"
     assert classification["planner_style_requested"] is False
+
+
+def test_ultra_fresh_market_question_returns_insufficient_evidence_without_bluffing(make_agent):
+    agent = make_agent()
+
+    with mock.patch.object(
+        agent,
+        "_live_info_search_notes",
+        side_effect=AssertionError("ultra-fresh honesty path should not hit live search"),
+    ), mock.patch(
+        "apps.nulla_agent.WebAdapter.planned_search_query",
+        side_effect=AssertionError("ultra-fresh honesty path should not hit planned search"),
+    ), mock.patch(
+        "apps.nulla_agent.WebAdapter.search_query",
+        side_effect=AssertionError("ultra-fresh honesty path should not hit generic search"),
+    ):
+        result = agent.run_once(
+            "What happened five minutes ago in global markets?",
+            source_context={"surface": "openclaw", "platform": "openclaw"},
+        )
+
+    lowered = result["response"].lower()
+    assert "can't verify" in lowered or "insufficient evidence" in lowered
+    assert "five minutes ago there were no significant events" not in lowered
 
 
 def test_brent_quote_fast_path_returns_grounded_structured_answer(make_agent):

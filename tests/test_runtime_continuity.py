@@ -582,6 +582,241 @@ class RuntimeContinuityTests(unittest.TestCase):
             self.assertTrue((Path(tmpdir) / "tools" / "src" / "main.py").is_file())
             self.assertEqual(agent.memory_router.resolve_tool_intent.call_count, 0)
 
+    def test_builder_controller_prefers_workflow_for_explicit_file_chain_request(self) -> None:
+        agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
+        agent.start()
+        agent.context_loader.load = mock.Mock(side_effect=AssertionError("builder workflow should bypass context loading"))  # type: ignore[assignment]
+        agent.memory_router.resolve_tool_intent = mock.Mock(side_effect=AssertionError("builder controller should drive this loop"))  # type: ignore[assignment]
+        agent.memory_router.resolve = mock.Mock(side_effect=AssertionError("builder workflow should bypass model resolution"))  # type: ignore[assignment]
+        agent.curiosity.maybe_roam = mock.Mock(  # type: ignore[assignment]
+            return_value=CuriosityResult(enabled=False, mode="off", reason="test")
+        )
+        agent.media_pipeline.analyze = mock.Mock(  # type: ignore[assignment]
+            return_value=MediaAnalysisResult(False, reason="no_external_media")
+        )
+        agent._maybe_execute_model_tool_intent = mock.Mock(return_value=None)  # type: ignore[assignment]
+
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch(
+            "apps.nulla_agent.orchestrate_parent_task",
+            return_value=None,
+        ):
+            result = agent.run_once(
+                (
+                    "Create a folder named nulla_chain_test. Inside it create notes.txt with the line first note. "
+                    "Then create summary.txt that says: notes.txt created successfully. Then list the folder contents."
+                ),
+                session_id_override="openclaw:builder-explicit-chain",
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            chain_root = Path(tmpdir) / "nulla_chain_test"
+            self.assertEqual(result["mode"], "tool_executed")
+            self.assertEqual(result["details"]["builder_controller"]["mode"], "workflow")
+            self.assertTrue((chain_root / "notes.txt").is_file())
+            self.assertTrue((chain_root / "summary.txt").is_file())
+            self.assertEqual((chain_root / "notes.txt").read_text(encoding="utf-8"), "first note")
+            self.assertEqual((chain_root / "summary.txt").read_text(encoding="utf-8"), "notes.txt created successfully")
+            self.assertIn("workspace.list_files", result["details"]["builder_controller"]["tool_steps"])
+            self.assertEqual(agent.context_loader.load.call_count, 0)
+            self.assertEqual(agent.memory_router.resolve.call_count, 0)
+            self.assertEqual(agent.memory_router.resolve_tool_intent.call_count, 0)
+
+    def test_builder_controller_returns_verbatim_readback_for_exact_file_request(self) -> None:
+        agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
+        agent.start()
+        stub_context = SimpleNamespace(
+            local_candidates=[],
+            swarm_metadata=[],
+            retrieval_confidence_score=0.0,
+            assembled_context=lambda *args, **kwargs: "",
+            context_snippets=lambda: [],
+            report=SimpleNamespace(
+                retrieval_confidence=0.0,
+                total_tokens_used=lambda: 0,
+                to_dict=lambda: {"external_evidence_attachments": []},
+            ),
+        )
+        agent.context_loader.load = mock.Mock(return_value=stub_context)  # type: ignore[assignment]
+        agent.memory_router.resolve_tool_intent = mock.Mock(side_effect=AssertionError("builder controller should drive this loop"))  # type: ignore[assignment]
+        agent.memory_router.resolve = mock.Mock(  # type: ignore[assignment]
+            return_value=ModelExecutionDecision(
+                source="provider_execution",
+                task_hash="builder-exact-readback",
+                provider_id="ollama-local:test",
+                provider_name="ollama-local",
+                model_name="test",
+                output_text="placeholder",
+                confidence=0.62,
+                trust_score=0.65,
+                used_model=True,
+                validation_state="valid",
+            )
+        )
+        agent.curiosity.maybe_roam = mock.Mock(  # type: ignore[assignment]
+            return_value=CuriosityResult(enabled=False, mode="off", reason="test")
+        )
+        agent.media_pipeline.analyze = mock.Mock(  # type: ignore[assignment]
+            return_value=MediaAnalysisResult(False, reason="no_external_media")
+        )
+        agent._maybe_execute_model_tool_intent = mock.Mock(return_value=None)  # type: ignore[assignment]
+
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch(
+            "apps.nulla_agent.orchestrate_parent_task",
+            return_value=None,
+        ):
+            target = Path(tmpdir) / "nulla_test_01.txt"
+            target.write_text("ALPHA-LOCAL-FILE-01\nBETA-APPEND-02", encoding="utf-8")
+            result = agent.run_once(
+                "Now read the whole file back exactly.",
+                session_id_override="openclaw:builder-exact-readback",
+                source_context={
+                    "surface": "openclaw",
+                    "platform": "openclaw",
+                    "workspace": tmpdir,
+                    "conversation_history": [
+                        {
+                            "role": "user",
+                            "content": "Create a file named nulla_test_01.txt in the current workspace with exactly this content: ALPHA-LOCAL-FILE-01",
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "Created nulla_test_01.txt.",
+                        },
+                    ],
+                },
+            )
+
+            self.assertEqual(result["mode"], "tool_executed")
+            self.assertEqual(result["response"], "ALPHA-LOCAL-FILE-01\nBETA-APPEND-02")
+            self.assertEqual(result["details"]["builder_controller"]["mode"], "workflow")
+            self.assertIn("workspace.read_file", result["details"]["builder_controller"]["tool_steps"])
+
+    def test_builder_controller_handles_pathless_append_followup_from_history(self) -> None:
+        agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
+        agent.start()
+        stub_context = SimpleNamespace(
+            local_candidates=[],
+            swarm_metadata=[],
+            retrieval_confidence_score=0.0,
+            assembled_context=lambda *args, **kwargs: "",
+            context_snippets=lambda: [],
+            report=SimpleNamespace(
+                retrieval_confidence=0.0,
+                total_tokens_used=lambda: 0,
+                to_dict=lambda: {"external_evidence_attachments": []},
+            ),
+        )
+        agent.context_loader.load = mock.Mock(return_value=stub_context)  # type: ignore[assignment]
+        agent.memory_router.resolve_tool_intent = mock.Mock(side_effect=AssertionError("builder controller should drive this loop"))  # type: ignore[assignment]
+        agent.memory_router.resolve = mock.Mock(  # type: ignore[assignment]
+            return_value=ModelExecutionDecision(
+                source="provider_execution",
+                task_hash="builder-append-followup",
+                provider_id="ollama-local:test",
+                provider_name="ollama-local",
+                model_name="test",
+                output_text="I appended the requested line.",
+                confidence=0.78,
+                trust_score=0.8,
+                used_model=True,
+                validation_state="valid",
+            )
+        )
+        agent.curiosity.maybe_roam = mock.Mock(  # type: ignore[assignment]
+            return_value=CuriosityResult(enabled=False, mode="off", reason="test")
+        )
+        agent.media_pipeline.analyze = mock.Mock(  # type: ignore[assignment]
+            return_value=MediaAnalysisResult(False, reason="no_external_media")
+        )
+        agent._maybe_execute_model_tool_intent = mock.Mock(return_value=None)  # type: ignore[assignment]
+
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch(
+            "apps.nulla_agent.orchestrate_parent_task",
+            return_value=None,
+        ):
+            target = Path(tmpdir) / "nulla_test_01.txt"
+            target.write_text("ALPHA-LOCAL-FILE-01", encoding="utf-8")
+            result = agent.run_once(
+                "Append a second line: BETA-APPEND-02",
+                session_id_override="openclaw:builder-append-followup",
+                source_context={
+                    "surface": "openclaw",
+                    "platform": "openclaw",
+                    "workspace": tmpdir,
+                    "conversation_history": [
+                        {
+                            "role": "user",
+                            "content": "Create a file named nulla_test_01.txt in the current workspace with exactly this content: ALPHA-LOCAL-FILE-01",
+                        },
+                        {
+                            "role": "assistant",
+                            "content": "Created nulla_test_01.txt.",
+                        },
+                    ],
+                },
+            )
+
+            self.assertEqual(result["mode"], "tool_executed")
+            self.assertEqual(result["details"]["builder_controller"]["mode"], "workflow")
+            self.assertEqual(target.read_text(encoding="utf-8"), "ALPHA-LOCAL-FILE-01\nBETA-APPEND-02")
+            self.assertIn("workspace.read_file", result["details"]["builder_controller"]["tool_steps"])
+            self.assertIn("workspace.write_file", result["details"]["builder_controller"]["tool_steps"])
+
+    def test_builder_controller_handles_exact_multi_file_request(self) -> None:
+        agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
+        agent.start()
+        stub_context = SimpleNamespace(
+            local_candidates=[],
+            swarm_metadata=[],
+            retrieval_confidence_score=0.0,
+            assembled_context=lambda *args, **kwargs: "",
+            context_snippets=lambda: [],
+            report=SimpleNamespace(
+                retrieval_confidence=0.0,
+                total_tokens_used=lambda: 0,
+                to_dict=lambda: {"external_evidence_attachments": []},
+            ),
+        )
+        agent.context_loader.load = mock.Mock(return_value=stub_context)  # type: ignore[assignment]
+        agent.memory_router.resolve_tool_intent = mock.Mock(side_effect=AssertionError("builder controller should drive this loop"))  # type: ignore[assignment]
+        agent.memory_router.resolve = mock.Mock(  # type: ignore[assignment]
+            return_value=ModelExecutionDecision(
+                source="provider_execution",
+                task_hash="builder-exact-three",
+                provider_id="ollama-local:test",
+                provider_name="ollama-local",
+                model_name="test",
+                output_text="Created the requested files.",
+                confidence=0.86,
+                trust_score=0.87,
+                used_model=True,
+                validation_state="valid",
+            )
+        )
+        agent.curiosity.maybe_roam = mock.Mock(  # type: ignore[assignment]
+            return_value=CuriosityResult(enabled=False, mode="off", reason="test")
+        )
+        agent.media_pipeline.analyze = mock.Mock(  # type: ignore[assignment]
+            return_value=MediaAnalysisResult(False, reason="no_external_media")
+        )
+        agent._maybe_execute_model_tool_intent = mock.Mock(return_value=None)  # type: ignore[assignment]
+
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch(
+            "apps.nulla_agent.orchestrate_parent_task",
+            return_value=None,
+        ):
+            result = agent.run_once(
+                "Create exactly three files: a.txt, b.txt, c.txt. Put ONE, TWO, THREE respectively. Do not create anything else.",
+                session_id_override="openclaw:builder-exact-three",
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertEqual(result["mode"], "tool_executed")
+            self.assertEqual(result["details"]["builder_controller"]["mode"], "workflow")
+            self.assertEqual((Path(tmpdir) / "a.txt").read_text(encoding="utf-8"), "ONE")
+            self.assertEqual((Path(tmpdir) / "b.txt").read_text(encoding="utf-8"), "TWO")
+            self.assertEqual((Path(tmpdir) / "c.txt").read_text(encoding="utf-8"), "THREE")
+
     def test_builder_controller_preserves_failures_and_retry_history(self) -> None:
         agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
         agent.start()
