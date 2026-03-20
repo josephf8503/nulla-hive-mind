@@ -6,6 +6,8 @@ from typing import Any
 
 from core import policy_engine
 from core.backend_manager import BackendManager
+from core.logging_config import setup_logging
+from core.runtime_context import RuntimeContext, apply_runtime_context, build_runtime_context
 from core.runtime_paths import ensure_runtime_dirs
 from storage.db import healthcheck
 from storage.migrations import run_migrations
@@ -19,17 +21,70 @@ class RuntimeBackendSelection:
     hardware: Any
 
 
-def bootstrap_storage_environment(*, db_path: str | Path | None = None) -> None:
+@dataclass(frozen=True)
+class BootstrappedRuntime:
+    context: RuntimeContext
+    backend_selection: RuntimeBackendSelection | None = None
+
+
+def bootstrap_storage_environment(
+    *,
+    context: RuntimeContext | None = None,
+    db_path: str | Path | None = None,
+) -> RuntimeContext:
+    runtime_context = apply_runtime_context(
+        context or build_runtime_context(mode="storage", db_path=db_path)
+    )
     ensure_runtime_dirs()
-    run_migrations(db_path)
-    healthy = healthcheck() if db_path is None else healthcheck(db_path)
+    run_migrations(runtime_context.paths.db_path)
+    healthy = healthcheck(runtime_context.paths.db_path)
     if not healthy:
         raise RuntimeError("Database healthcheck failed.")
+    return runtime_context
 
 
-def bootstrap_runtime_environment(*, force_policy_reload: bool = False) -> None:
-    bootstrap_storage_environment()
+def bootstrap_runtime_environment(
+    *,
+    context: RuntimeContext | None = None,
+    force_policy_reload: bool = False,
+) -> RuntimeContext:
+    runtime_context = bootstrap_storage_environment(context=context)
     policy_engine.load(force_reload=force_policy_reload)
+    return runtime_context
+
+
+def bootstrap_runtime_mode(
+    *,
+    mode: str,
+    workspace_root: str | Path | None = None,
+    db_path: str | Path | None = None,
+    force_policy_reload: bool = False,
+    configure_logging: bool = False,
+    resolve_backend: bool = False,
+    manager: BackendManager | None = None,
+    allow_remote_only: bool | None = None,
+) -> BootstrappedRuntime:
+    context = build_runtime_context(
+        mode=mode,
+        workspace_root=workspace_root,
+        db_path=db_path,
+    )
+    bootstrap_runtime_environment(context=context, force_policy_reload=force_policy_reload)
+    if configure_logging:
+        setup_logging(level=context.log_level, json_output=context.json_logs)
+    backend_selection = (
+        resolve_backend_selection(
+            manager=manager,
+            allow_remote_only=(
+                context.feature_flags.allow_remote_only_without_backend
+                if allow_remote_only is None
+                else allow_remote_only
+            ),
+        )
+        if resolve_backend
+        else None
+    )
+    return BootstrappedRuntime(context=context, backend_selection=backend_selection)
 
 
 def resolve_backend_selection(

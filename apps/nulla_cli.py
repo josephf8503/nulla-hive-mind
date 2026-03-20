@@ -28,10 +28,10 @@ from core.model_registry import ModelRegistry
 from core.nulla_user_summary import build_user_summary, render_user_summary
 from core.release_channel import release_manifest_snapshot
 from core.runtime_bootstrap import (
-    bootstrap_runtime_environment,
+    bootstrap_runtime_mode,
     bootstrap_storage_environment,
-    resolve_backend_selection,
 )
+from core.runtime_context import build_runtime_context
 from core.runtime_paths import data_path
 from core.trainable_base_manager import stage_trainable_base, trainable_base_status
 from network.signer import get_local_peer_id
@@ -47,13 +47,16 @@ from storage.adaptation_store import (
 
 
 def _bootstrap_cli_storage() -> None:
-    bootstrap_storage_environment()
+    bootstrap_storage_environment(context=build_runtime_context(mode="cli_storage"))
 
 
 def cmd_up() -> int:
     # 1. Boot the canonical runtime environment first.
     try:
-        bootstrap_runtime_environment()
+        boot = bootstrap_runtime_mode(
+            mode="cli_up",
+            resolve_backend=True,
+        )
     except RuntimeError as exc:
         print(f"Nulla could not start: {exc}")
         return 1
@@ -73,9 +76,8 @@ def cmd_up() -> int:
     peer_id = get_local_peer_id()
 
     # 5. Auto-detect backend
-    try:
-        selection = resolve_backend_selection()
-    except RuntimeError:
+    selection = boot.backend_selection
+    if selection is None:
         print("Nulla could not start: no supported backend found.")
         print("Install at least one supported runtime: mlx, torch, or onnxruntime.")
         return 1

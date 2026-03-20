@@ -16,6 +16,7 @@ def test_readme_frontloads_product_truth_and_install() -> None:
     assert "docs/INSTALL.md" in readme
     assert "docs/STATUS.md" in readme
     assert "docs/SYSTEM_SPINE.md" in readme
+    assert "docs/CONTROL_PLANE.md" in readme
     assert "docs/PROOF_PATH.md" in readme
 
 
@@ -25,6 +26,7 @@ def test_docs_home_only_points_to_curated_entry_docs() -> None:
     assert "INSTALL.md" in docs_home
     assert "STATUS.md" in docs_home
     assert "SYSTEM_SPINE.md" in docs_home
+    assert "CONTROL_PLANE.md" in docs_home
     assert "PROOF_PATH.md" in docs_home
     assert "TRUST.md" in docs_home
     assert "archive/README.md" in docs_home
@@ -39,6 +41,7 @@ def test_docs_root_is_curated_after_archive_sweep() -> None:
         "BRAIN_HIVE_API_CONTRACT.md",
         "BRAIN_HIVE_ARCHITECTURE.md",
         "CUMULATIVE_STABILIZATION.md",
+        "CONTROL_PLANE.md",
         "INSTALL.md",
         "LICENSING_MATRIX.md",
         "MEET_AND_GREET_API_CONTRACT.md",
@@ -74,6 +77,37 @@ def test_root_handover_and_starter_kit_redirect_to_current_truth() -> None:
     assert "docs/INSTALL.md" in starter_kit
     assert "docs/STATUS.md" in starter_kit
     assert "docs/PROOF_PATH.md" in starter_kit
+
+
+def test_repo_map_points_to_canonical_roots_and_archive_policy() -> None:
+    repo_map = (REPO_ROOT / "REPO_MAP.md").read_text(encoding="utf-8")
+
+    assert "README.md" in repo_map
+    assert "CONTRIBUTING.md" in repo_map
+    assert "docs/SYSTEM_SPINE.md" in repo_map
+    assert "docs/CONTROL_PLANE.md" in repo_map
+    assert "docs/PROOF_PATH.md" in repo_map
+    assert "apps/README.md" in repo_map
+    assert "core/README.md" in repo_map
+    assert "storage/README.md" in repo_map
+    assert "tools/README.md" in repo_map
+    assert "network/README.md" in repo_map
+    assert "tests/legacy/" in repo_map
+    assert "docs/archive/audits/" in repo_map
+
+
+def test_package_maps_exist_and_define_boundaries() -> None:
+    package_docs = {
+        "apps/README.md": "entrypoints should stay thin",
+        "core/README.md": "highest-risk modules",
+        "storage/README.md": "feature stores should depend on persistence primitives",
+        "tools/README.md": "tool contract requirements",
+        "network/README.md": "business logic should not hide in transport code",
+    }
+
+    for relative_path, marker in package_docs.items():
+        body = (REPO_ROOT / relative_path).read_text(encoding="utf-8").lower()
+        assert marker in body
 
 
 def test_status_page_stays_honest_about_ci_and_proof_posture() -> None:

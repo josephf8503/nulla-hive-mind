@@ -14,5 +14,6 @@ Archive categories:
 - `internal/` internal context and operator-only notes
 - `proof/` older prep/checklist material that was superseded by canonical proof/runbook docs
 - `pitch/` sales-oriented material that should not sit in the main docs path
+- `openclaw/` integration-era handovers and setup notes that no longer belong at the repo root
 
 Use the main [docs index](../README.md) for the current public-facing documentation path.

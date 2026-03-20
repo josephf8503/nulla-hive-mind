@@ -100,15 +100,17 @@ If you want the blunt maturity report, read [docs/STATUS.md](docs/STATUS.md).
 - `tests/` regression coverage
 - `docs/` install, status, architecture, trust, and runbooks
 - `installer/` one-click setup scripts
+- [`REPO_MAP.md`](REPO_MAP.md) root-level repo shape and first-inspection path
 
 ## Proof Path
 
 If you are skeptical, use the shortest proof path instead of free-scanning the whole repo:
 
 1. [`docs/SYSTEM_SPINE.md`](docs/SYSTEM_SPINE.md)
-2. [`docs/PROOF_PATH.md`](docs/PROOF_PATH.md)
-3. [`docs/STATUS.md`](docs/STATUS.md)
-4. [`CONTRIBUTING.md`](CONTRIBUTING.md)
+2. [`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)
+3. [`docs/PROOF_PATH.md`](docs/PROOF_PATH.md)
+4. [`docs/STATUS.md`](docs/STATUS.md)
+5. [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## For Developers
 
@@ -141,6 +143,7 @@ python -m apps.brain_hive_watch_server
 
 - [docs/README.md](docs/README.md) for the docs map
 - [docs/SYSTEM_SPINE.md](docs/SYSTEM_SPINE.md) for the one-system architecture view
+- [docs/CONTROL_PLANE.md](docs/CONTROL_PLANE.md) for the runtime/bootstrap map
 - [docs/PROOF_PATH.md](docs/PROOF_PATH.md) for the shortest skeptic proof path
 - [docs/INSTALL.md](docs/INSTALL.md) for install and quickstart
 - [docs/STATUS.md](docs/STATUS.md) for the honest current state

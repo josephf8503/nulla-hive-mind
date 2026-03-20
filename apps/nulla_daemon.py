@@ -1539,9 +1539,9 @@ def main() -> int:
     parser.add_argument("--health-token", default="")
     args = parser.parse_args()
 
-    from core.runtime_bootstrap import bootstrap_runtime_environment
+    from core.runtime_bootstrap import bootstrap_runtime_mode
 
-    bootstrap_runtime_environment(force_policy_reload=True)
+    bootstrap_runtime_mode(mode="daemon", force_policy_reload=True)
 
     pool_hard_cap = max(1, int(policy_engine.get("orchestration.local_worker_pool_max", 10)))
     requested_capacity: int | None = None

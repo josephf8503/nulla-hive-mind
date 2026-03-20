@@ -17,7 +17,8 @@ def test_cli_summary_bootstraps_storage_before_rendering() -> None:
     ), mock.patch("builtins.print"):
         assert cmd_summary() == 0
 
-    bootstrap_storage.assert_called_once_with()
+    bootstrap_storage.assert_called_once()
+    assert "context" in bootstrap_storage.call_args.kwargs
 
 
 def test_cli_wallet_status_bootstraps_storage_before_loading_wallet() -> None:
@@ -36,7 +37,8 @@ def test_cli_wallet_status_bootstraps_storage_before_loading_wallet() -> None:
     ), mock.patch("builtins.print"):
         assert cmd_wallet_status() == 0
 
-    bootstrap_storage.assert_called_once_with()
+    bootstrap_storage.assert_called_once()
+    assert "context" in bootstrap_storage.call_args.kwargs
 
 
 def test_cli_adaptation_status_bootstraps_storage_before_status_lookup() -> None:
@@ -53,7 +55,8 @@ def test_cli_adaptation_status_bootstraps_storage_before_status_lookup() -> None
     ), mock.patch("builtins.print"):
         assert cmd_adaptation_status() == 0
 
-    bootstrap_storage.assert_called_once_with()
+    bootstrap_storage.assert_called_once()
+    assert "context" in bootstrap_storage.call_args.kwargs
 
 
 def test_agent_main_bootstraps_runtime_before_constructing_agent() -> None:
@@ -70,7 +73,8 @@ def test_agent_main_bootstraps_runtime_before_constructing_agent() -> None:
         "apps.nulla_agent.argparse.ArgumentParser.parse_args",
         return_value=args,
     ), mock.patch(
-        "core.runtime_bootstrap.bootstrap_runtime_environment"
+        "core.runtime_bootstrap.bootstrap_runtime_mode",
+        return_value=SimpleNamespace(backend_selection=None),
     ) as bootstrap_runtime, mock.patch(
         "apps.nulla_agent.NullaAgent",
         return_value=fake_agent,
@@ -83,7 +87,7 @@ def test_agent_main_bootstraps_runtime_before_constructing_agent() -> None:
 
         assert main() == 0
 
-    bootstrap_runtime.assert_called_once_with(force_policy_reload=True)
+    bootstrap_runtime.assert_called_once_with(mode="agent", force_policy_reload=True, resolve_backend=False)
 
 
 def test_daemon_main_bootstraps_runtime_before_starting_node() -> None:
@@ -104,7 +108,7 @@ def test_daemon_main_bootstraps_runtime_before_starting_node() -> None:
         "apps.nulla_daemon.argparse.ArgumentParser.parse_args",
         return_value=args,
     ), mock.patch(
-        "core.runtime_bootstrap.bootstrap_runtime_environment"
+        "core.runtime_bootstrap.bootstrap_runtime_mode"
     ) as bootstrap_runtime, mock.patch(
         "apps.nulla_daemon.resolve_local_worker_capacity",
         return_value=(2, 2),
@@ -121,7 +125,7 @@ def test_daemon_main_bootstraps_runtime_before_starting_node() -> None:
 
         assert main() == 0
 
-    bootstrap_runtime.assert_called_once_with(force_policy_reload=True)
+    bootstrap_runtime.assert_called_once_with(mode="daemon", force_policy_reload=True)
     fake_daemon.start.assert_called_once_with()
     fake_daemon.stop.assert_called_once_with()
 

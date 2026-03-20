@@ -11398,14 +11398,20 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Print full response payload as JSON.")
     args = parser.parse_args()
 
-    from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
-
-    bootstrap_runtime_environment(force_policy_reload=True)
+    from core.runtime_bootstrap import bootstrap_runtime_mode
 
     backend_name = str(args.backend)
     device = str(args.device)
+    boot = bootstrap_runtime_mode(
+        mode="agent",
+        force_policy_reload=True,
+        resolve_backend=backend_name == "auto" or device == "auto",
+    )
+
     if backend_name == "auto" or device == "auto":
-        selection = resolve_backend_selection()
+        selection = boot.backend_selection
+        if selection is None:
+            raise RuntimeError("Runtime bootstrap did not resolve a backend selection.")
         backend_name = backend_name if backend_name != "auto" else selection.backend_name
         device = device if device != "auto" else selection.device
 

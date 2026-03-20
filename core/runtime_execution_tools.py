@@ -10,6 +10,7 @@ from typing import Any
 from core import policy_engine
 from core.execution_gate import ExecutionGate
 from core.runtime_paths import resolve_workspace_root
+from core.runtime_tool_contracts import runtime_tool_contract_map, runtime_tool_contracts
 from sandbox.sandbox_runner import SandboxRunner
 
 _EXECUTION_REQUEST_MARKERS = (
@@ -50,15 +51,6 @@ _EXECUTION_REQUEST_MARKERS = (
     "deliver it",
     "submit it",
 )
-_TOOL_INTENTS = {
-    "workspace.list_files",
-    "workspace.search_text",
-    "workspace.read_file",
-    "workspace.ensure_directory",
-    "workspace.write_file",
-    "workspace.replace_in_file",
-    "sandbox.run_command",
-}
 _FILE_LINE_RE = re.compile(r"(?P<path>[A-Za-z0-9_./-]+\.[A-Za-z0-9_+-]+):(?P<line>\d+)")
 
 
@@ -131,129 +123,43 @@ def _extract_failure_summary(*, command: str, stdout: str, stderr: str, returnco
 
 
 def runtime_execution_capability_ledger() -> list[dict[str, Any]]:
-    read_enabled = bool(policy_engine.get("filesystem.allow_read_workspace", True))
-    write_enabled = bool(policy_engine.get("filesystem.allow_write_workspace", False))
-    sandbox_enabled = bool(policy_engine.get("execution.allow_sandbox_execution", False))
-    return [
-        {
-            "capability_id": "workspace.read",
-            "surface": "workspace",
-            "claim": "list files, search text, and read files in the active workspace",
-            "supported": read_enabled,
-            "unsupported_reason": "Workspace read actions are disabled on this runtime.",
-            "intents": [
-                "workspace.list_files",
-                "workspace.search_text",
-                "workspace.read_file",
-            ],
-            "public_tag": "workspace.read",
-        },
-        {
-            "capability_id": "workspace.write",
-            "surface": "workspace",
-            "claim": "create directories, write files, and replace text in the active workspace",
-            "supported": write_enabled,
-            "unsupported_reason": "Workspace write actions are disabled on this runtime.",
-            "intents": [
-                "workspace.ensure_directory",
-                "workspace.write_file",
-                "workspace.replace_in_file",
-            ],
-            "public_tag": "workspace.write",
-        },
-        {
-            "capability_id": "sandbox.command",
-            "surface": "sandbox",
-            "claim": "run bounded local commands in the active workspace with network blocked",
-            "supported": sandbox_enabled,
-            "unsupported_reason": "Sandbox command execution is disabled on this runtime.",
-            "intents": ["sandbox.run_command"],
-            "public_tag": "sandbox.command",
-        },
-    ]
+    ledger: dict[str, dict[str, Any]] = {}
+    for contract in runtime_tool_contracts():
+        entry = ledger.setdefault(
+            contract.capability_id,
+            {
+                "capability_id": contract.capability_id,
+                "surface": contract.tool_surface,
+                "claim": contract.capability_claim,
+                "supported": bool(contract.supported),
+                "unsupported_reason": contract.unsupported_reason,
+                "intents": [],
+                "public_tag": contract.capability_id,
+            },
+        )
+        entry["supported"] = bool(entry["supported"]) or bool(contract.supported)
+        entry["intents"].append(contract.intent)
+    return list(ledger.values())
 
 
 def runtime_execution_tool_specs() -> list[dict[str, Any]]:
     specs: list[dict[str, Any]] = []
-    if policy_engine.get("filesystem.allow_read_workspace", True):
-        specs.extend(
-            [
-                {
-                    "intent": "workspace.list_files",
-                    "description": "List files or directories inside the active workspace.",
-                    "read_only": True,
-                    "arguments": {
-                        "path": "string optional",
-                        "glob": "string optional",
-                        "limit": "integer optional",
-                    },
-                },
-                {
-                    "intent": "workspace.search_text",
-                    "description": "Search text inside workspace files and return file/line matches.",
-                    "read_only": True,
-                    "arguments": {
-                        "query": "string",
-                        "path": "string optional",
-                        "glob": "string optional",
-                        "limit": "integer optional",
-                    },
-                },
-                {
-                    "intent": "workspace.read_file",
-                    "description": "Read a workspace file with line numbers.",
-                    "read_only": True,
-                    "arguments": {
-                        "path": "string",
-                        "start_line": "integer optional",
-                        "max_lines": "integer optional",
-                    },
-                },
-            ]
-        )
-    if policy_engine.get("filesystem.allow_write_workspace", False):
-        specs.extend(
-            [
-                {
-                    "intent": "workspace.ensure_directory",
-                    "description": "Create a directory inside the active workspace.",
-                    "read_only": False,
-                    "arguments": {
-                        "path": "string",
-                    },
-                },
-                {
-                    "intent": "workspace.write_file",
-                    "description": "Write full text content to a workspace file.",
-                    "read_only": False,
-                    "arguments": {
-                        "path": "string",
-                        "content": "string",
-                    },
-                },
-                {
-                    "intent": "workspace.replace_in_file",
-                    "description": "Replace text inside a workspace file.",
-                    "read_only": False,
-                    "arguments": {
-                        "path": "string",
-                        "old_text": "string",
-                        "new_text": "string",
-                        "replace_all": "boolean optional",
-                    },
-                },
-            ]
-        )
-    if policy_engine.get("execution.allow_sandbox_execution", False):
+    for contract in runtime_tool_contracts():
+        if not contract.supported:
+            continue
         specs.append(
             {
-                "intent": "sandbox.run_command",
-                "description": "Run one bounded shell command inside the active workspace with network blocked.",
-                "read_only": False,
-                "arguments": {
-                    "command": "string",
-                    "cwd": "string optional",
-                },
+                "intent": contract.intent,
+                "description": contract.description,
+                "read_only": contract.read_only,
+                "arguments": dict(contract.input_schema),
+                "output_schema": dict(contract.output_schema),
+                "side_effect_class": contract.side_effect_class,
+                "approval_requirement": contract.approval_requirement,
+                "timeout_policy": contract.timeout_policy,
+                "retry_policy": contract.retry_policy,
+                "artifact_emission": contract.artifact_emission,
+                "error_contract": contract.error_contract,
             }
         )
     return specs
@@ -366,8 +272,25 @@ def execute_runtime_tool(
     *,
     source_context: dict[str, Any] | None = None,
 ) -> RuntimeExecutionResult | None:
-    if intent not in _TOOL_INTENTS:
+    contract = runtime_tool_contract_map().get(intent)
+    if contract is None:
         return None
+    if not contract.supported:
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="disabled",
+            response_text=contract.unsupported_reason,
+            details={
+                "observation": _tool_observation(
+                    intent=intent,
+                    tool_surface=contract.tool_surface,
+                    ok=False,
+                    status="disabled",
+                    reason=contract.unsupported_reason,
+                ),
+            },
+        )
     workspace_root = _workspace_root(source_context)
     try:
         if intent == "workspace.list_files":

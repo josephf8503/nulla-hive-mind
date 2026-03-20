@@ -208,6 +208,9 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
             with mock.patch("apps.nulla_api_server._runtime_version_stamp", stamp), mock.patch(
                 "apps.nulla_api_server._display_name",
                 "NULLA",
+            ), mock.patch(
+                "apps.nulla_api_server.runtime_capability_snapshot",
+                return_value={"feature_flags": {"public_hive_enabled": True}, "capabilities": [{"name": "local_runtime"}]},
             ), request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(response.headers.get("X-Nulla-Runtime-Version"), "0.4.0-closed-test")
@@ -216,6 +219,8 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
                 self.assertEqual(response.headers.get("X-Nulla-Runtime-Dirty"), "1")
                 self.assertEqual(payload["runtime"]["branch"], "codex/local-bootstrap")
                 self.assertEqual(payload["runtime"]["build_id"], "0.4.0-closed-test+abc123def456.dirty")
+                self.assertEqual(payload["capabilities"]["feature_flags"]["public_hive_enabled"], True)
+                self.assertEqual(payload["capabilities"]["capabilities"][0]["name"], "local_runtime")
         finally:
             server.shutdown()
             server.server_close()
@@ -244,6 +249,30 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
                 self.assertEqual(payload["build_id"], "0.4.0-closed-test+abc123def456")
                 self.assertEqual(payload["branch"], "codex/local-bootstrap")
                 self.assertEqual(response.headers.get("X-Nulla-Runtime-Dirty"), "0")
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
+    def test_runtime_capabilities_route_returns_current_runtime_capability_snapshot(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), NullaAPIHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            snapshot = {
+                "mode": "api_server",
+                "feature_flags": {"helper_mesh_enabled": True},
+                "capabilities": [{"name": "helper_mesh", "state": "partial"}],
+            }
+            with mock.patch("apps.nulla_api_server.runtime_capability_snapshot", return_value=snapshot), request.urlopen(
+                f"http://127.0.0.1:{port}/api/runtime/capabilities",
+                timeout=5,
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(payload["mode"], "api_server")
+                self.assertEqual(payload["feature_flags"]["helper_mesh_enabled"], True)
+                self.assertEqual(payload["capabilities"][0]["name"], "helper_mesh")
         finally:
             server.shutdown()
             server.server_close()

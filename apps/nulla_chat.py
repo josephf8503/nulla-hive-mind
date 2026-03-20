@@ -7,11 +7,15 @@ from core.compute_mode import ComputeModeDaemon
 from core.hardware_tier import probe_machine, select_qwen_tier, tier_summary
 from core.model_registry import ModelRegistry
 from core.onboarding import get_agent_display_name, is_first_boot, run_onboarding_interactive
-from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
+from core.runtime_bootstrap import bootstrap_runtime_mode
 
 
 def _bootstrap_agent(*, persona_id: str, device: str) -> NullaAgent:
-    bootstrap_runtime_environment(force_policy_reload=True)
+    boot = bootstrap_runtime_mode(
+        mode="chat",
+        force_policy_reload=True,
+        resolve_backend=True,
+    )
 
     if is_first_boot():
         run_onboarding_interactive()
@@ -41,7 +45,9 @@ def _bootstrap_agent(*, persona_id: str, device: str) -> NullaAgent:
         for warning in provider_warnings:
             print(f" - {warning}")
 
-    selection = resolve_backend_selection()
+    selection = boot.backend_selection
+    if selection is None:
+        raise RuntimeError("Chat bootstrap did not resolve a backend selection.")
     if selection.backend_name == "remote_only":
         print("No local model backend found. Starting in remote-first mode.")
 

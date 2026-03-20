@@ -9,6 +9,7 @@ Also starts the mesh daemon in-process so presence/knowledge/task exchange is li
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import logging
@@ -28,8 +29,6 @@ from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger("nulla.api")
 
-import contextlib
-
 from apps.nulla_agent import NullaAgent
 from apps.nulla_daemon import DaemonConfig, NullaDaemon
 from core import policy_engine
@@ -40,7 +39,6 @@ from core.credit_ledger import ensure_starter_credits
 from core.hardware_tier import probe_machine, select_qwen_tier
 from core.identity_manager import load_active_persona
 from core.local_worker_pool import resolve_local_worker_capacity
-from core.logging_config import setup_logging
 from core.model_registry import ModelRegistry
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
 from core.onboarding import (
@@ -51,7 +49,8 @@ from core.onboarding import (
 )
 from core.public_hive_bridge import ensure_public_hive_auth
 from core.release_channel import release_manifest_snapshot
-from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
+from core.runtime_bootstrap import bootstrap_runtime_mode
+from core.runtime_capabilities import runtime_capability_snapshot
 from core.runtime_paths import resolve_workspace_root
 from core.runtime_task_events import (
     list_runtime_session_events,
@@ -216,10 +215,12 @@ def _ensure_default_provider(registry: ModelRegistry, model_tag: str) -> None:
 def _bootstrap() -> None:
     global _agent, _daemon, _display_name, _runtime_model_tag, _runtime_parameter_size, _runtime_started_at, _runtime_version_stamp
 
-    bootstrap_runtime_environment(force_policy_reload=True)
-    setup_logging(
-        level=str(policy_engine.get("observability.log_level", "INFO")),
-        json_output=bool(policy_engine.get("observability.json_logs", True)),
+    boot = bootstrap_runtime_mode(
+        mode="api_server",
+        workspace_root=resolve_workspace_root(),
+        force_policy_reload=True,
+        configure_logging=True,
+        resolve_backend=True,
     )
 
     if is_first_boot():
@@ -259,7 +260,9 @@ def _bootstrap() -> None:
     for w in model_registry.startup_warnings():
         logger.warning("Model warning: %s", w)
 
-    selection = resolve_backend_selection()
+    selection = boot.backend_selection
+    if selection is None:
+        raise RuntimeError("API bootstrap did not resolve a backend selection.")
     if selection.backend_name == "remote_only":
         logger.warning("No local backend found. Continuing in remote-only mode.")
 
@@ -640,12 +643,17 @@ class NullaAPIHandler(BaseHTTPRequestHandler):
                     "agent": _display_name,
                     "daemon": _daemon is not None,
                     "runtime": dict(_runtime_version_stamp or {}),
+                    "capabilities": runtime_capability_snapshot(),
                 },
             )
             return
 
         if path in {"/api/runtime/version", "/v1/runtime/version"}:
             self._json_response(200, dict(_runtime_version_stamp or {}))
+            return
+
+        if path in {"/api/runtime/capabilities", "/v1/runtime/capabilities"}:
+            self._json_response(200, runtime_capability_snapshot())
             return
 
         if path == "/api/runtime/sessions":

@@ -9,12 +9,15 @@ NULLA is a local-first AI agent runtime. It starts on your machine, uses memory 
 - [INSTALL.md](INSTALL.md) for quick install, manual launch, and first local URLs
 - [STATUS.md](STATUS.md) for what is real, what is weak, and what is still alpha
 - [SYSTEM_SPINE.md](SYSTEM_SPINE.md) for the one-system architecture view
+- [CONTROL_PLANE.md](CONTROL_PLANE.md) for the canonical startup and runtime map
 - [PROOF_PATH.md](PROOF_PATH.md) for the shortest skeptic proof path
 - [TRUST.md](TRUST.md) for trust boundaries and security posture
 
 ## Contributor Path
 
 - [../CONTRIBUTING.md](../CONTRIBUTING.md) for the shortest path into a real change
+- [../REPO_MAP.md](../REPO_MAP.md) for the root layout and first-inspection path
+- package boundaries live in `apps/README.md`, `core/README.md`, `storage/README.md`, `tools/README.md`, and `network/README.md`
 - Start with the spine and proof docs before opening deep architecture files
 
 ## Core System
