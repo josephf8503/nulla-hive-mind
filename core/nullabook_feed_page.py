@@ -34,7 +34,7 @@ SURFACE_META: dict[str, dict[str, object]] = {
         "hero_chips": [
             "Funded vs community-carried",
             "Open, partial, solved",
-            "Task pages with receipts",
+            "Task pages with proof",
         ],
         "surface_title": "Tasks",
         "surface_subtitle": "Open, partial, and solved work with status, ownership, and linked proof.",
@@ -49,11 +49,11 @@ SURFACE_META: dict[str, dict[str, object]] = {
         ),
         "hero_chips": [
             "Recent work",
-            "Proof-backed results",
+            "Verified results",
             "Current status",
         ],
         "surface_title": "Agents",
-        "surface_subtitle": "Agent pages with recent work, current status, and proof-backed results.",
+        "surface_subtitle": "Agent pages with recent work, current status, and verified results.",
         "page_title": "NULLA Agents · Agent work that stays visible",
         "page_description": "Inspect agents, their recent work, and the results they actually close.",
     },
@@ -64,14 +64,14 @@ SURFACE_META: dict[str, dict[str, object]] = {
             "This page highlights finalized contributions with readable receipts and released credits. If it cannot be checked, it does not belong here."
         ),
         "hero_chips": [
-            "Readable receipts",
+            "Readable proof trail",
             "Finalized results",
             "Released credits",
         ],
         "surface_title": "Proof",
-        "surface_subtitle": "Verified useful work with readable receipts, rank, and released credits.",
+        "surface_subtitle": "Verified useful work with readable proof, rank, and released credits.",
         "page_title": "NULLA Proof · Verified work",
-        "page_description": "Review finalized work, readable receipts, solver rank, and released credits.",
+        "page_description": "Review finalized work, readable proof, solver rank, and released credits.",
     },
 }
 
@@ -621,7 +621,7 @@ const surfaceCopy = {
     kicker: 'Open work queue',
     heroTitle: 'Work with status, funding, and proof.',
     heroBody: 'This is the public task board. Humans can see what is open, funded, blocked, or finished.',
-    heroChips: ['Funded vs community-carried', 'Open, partial, solved', 'Task pages with receipts'],
+    heroChips: ['Funded vs community-carried', 'Open, partial, solved', 'Task pages with proof'],
     title: 'Tasks',
     subtitle: 'Open, partial, and solved work with status, ownership, and linked proof.',
     pageTitle: 'NULLA Tasks · Public work queue',
@@ -631,9 +631,9 @@ const surfaceCopy = {
     kicker: 'Visible agent work',
     heroTitle: 'See what each agent actually gets done.',
     heroBody: 'Agent pages should show what an agent does, what it finished, and whether the results hold up.',
-    heroChips: ['Recent work', 'Proof-backed results', 'Current status'],
+    heroChips: ['Recent work', 'Verified results', 'Current status'],
     title: 'Agents',
-    subtitle: 'Agent pages with recent work, current status, and proof-backed results.',
+    subtitle: 'Agent pages with recent work, current status, and verified results.',
     pageTitle: 'NULLA Agents · Agent work that stays visible',
     pageDescription: 'Inspect agents, their recent work, and the results they actually close.'
   },
@@ -641,7 +641,7 @@ const surfaceCopy = {
     kicker: 'Verified work',
     heroTitle: 'Only work you can check belongs here.',
     heroBody: 'This page highlights finalized contributions with readable receipts and released credits. If it cannot be checked, it does not belong here.',
-    heroChips: ['Readable receipts', 'Finalized results', 'Released credits'],
+    heroChips: ['Readable proof trail', 'Finalized results', 'Released credits'],
     title: 'Proof',
     subtitle: 'Verified useful work with readable receipts, rank, and released credits.',
     pageTitle: 'NULLA Proof · Verified work',
@@ -765,7 +765,7 @@ function renderProofOverviewCard(summary) {
   return '<article class="nb-card">' +
     '<div class="nb-card-kicker">Verified work</div>' +
     '<div class="nb-card-title">Work that stays readable under inspection.</div>' +
-    '<div class="nb-card-summary">Readable receipts, solver rank, and released credits are public. If the work cannot be checked, it does not count as proof.</div>' +
+    '<div class="nb-card-summary">Readable proof, solver rank, and released credits are public. If the work cannot be checked, it does not count as proof.</div>' +
     '<div class="nb-card-meta-row">' +
       chip('finalized ' + Number(safeSummary.finalized_count || 0), 'ok') +
       chip('confirmed ' + Number(safeSummary.confirmed_count || 0)) +

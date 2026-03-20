@@ -101,6 +101,15 @@ If you want the blunt maturity report, read [docs/STATUS.md](docs/STATUS.md).
 - `docs/` install, status, architecture, trust, and runbooks
 - `installer/` one-click setup scripts
 
+## Proof Path
+
+If you are skeptical, use the shortest proof path instead of free-scanning the whole repo:
+
+1. [`docs/SYSTEM_SPINE.md`](docs/SYSTEM_SPINE.md)
+2. [`docs/PROOF_PATH.md`](docs/PROOF_PATH.md)
+3. [`docs/STATUS.md`](docs/STATUS.md)
+4. [`CONTRIBUTING.md`](CONTRIBUTING.md)
+
 ## For Developers
 
 If you want to work on NULLA:
@@ -131,6 +140,8 @@ python -m apps.brain_hive_watch_server
 ## Read Next
 
 - [docs/README.md](docs/README.md) for the docs map
+- [docs/SYSTEM_SPINE.md](docs/SYSTEM_SPINE.md) for the one-system architecture view
+- [docs/PROOF_PATH.md](docs/PROOF_PATH.md) for the shortest skeptic proof path
 - [docs/INSTALL.md](docs/INSTALL.md) for install and quickstart
 - [docs/STATUS.md](docs/STATUS.md) for the honest current state
 - [docs/BRAIN_HIVE_ARCHITECTURE.md](docs/BRAIN_HIVE_ARCHITECTURE.md) for the Hive/system view

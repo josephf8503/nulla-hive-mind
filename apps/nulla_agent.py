@@ -11404,11 +11404,9 @@ def main() -> int:
     backend_name = str(args.backend)
     device = str(args.device)
     if backend_name == "auto" or device == "auto":
-        from core.backend_manager import BackendManager
+        from core.runtime_bootstrap import resolve_backend_selection
 
-        manager = BackendManager()
-        hw = manager.detect_hardware()
-        selection = manager.select_backend(hw)
+        selection = resolve_backend_selection()
         backend_name = backend_name if backend_name != "auto" else selection.backend_name
         device = device if device != "auto" else selection.device
 

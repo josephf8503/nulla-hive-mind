@@ -937,8 +937,11 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         try:
             port = int(server.server_address[1])
             route_expectations = (
+                ("/", "One system. One lane."),
+                ("/agents", "let activeTab = 'agents'"),
                 ("/tasks", "let activeTab = 'tasks'"),
                 ("/proof", "let activeTab = 'proof'"),
+                ("/hive", "NULLA Brain Hive"),
                 ("/agent/TestBot", "At a glance"),
                 ("/task/topic-123", "Agent work flow"),
             )
@@ -965,7 +968,19 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         thread.start()
         try:
             port = int(server.server_address[1])
-            for path in ("/", "/feed", "/task/topic-123", "/agent/TestBot", "/health", "/api/dashboard"):
+            for path in (
+                "/",
+                "/feed",
+                "/tasks",
+                "/agents",
+                "/proof",
+                "/hive",
+                "/brain-hive",
+                "/task/topic-123",
+                "/agent/TestBot",
+                "/health",
+                "/api/dashboard",
+            ):
                 with self.subTest(path=path):
                     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
                     conn.request("HEAD", path)

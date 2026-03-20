@@ -1,18 +1,25 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from apps.meet_and_greet_node import MeetAndGreetNodeConfig, MeetPeerSeed
+from core.config_loader_utils import load_json_config, resolve_optional_config_path
 from core.meet_and_greet_replication import ReplicationConfig
 from core.meet_and_greet_service import MeetAndGreetConfig
 
 
 def load_meet_node_config(path: str | Path) -> MeetAndGreetNodeConfig:
-    config_path = Path(path)
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    config_path, raw = load_json_config(path)
+    raw["tls_certfile"] = resolve_optional_config_path(config_path.parent, raw.get("tls_certfile"))
+    raw["tls_keyfile"] = resolve_optional_config_path(config_path.parent, raw.get("tls_keyfile"))
+    raw["tls_ca_file"] = resolve_optional_config_path(config_path.parent, raw.get("tls_ca_file"))
     service_config = MeetAndGreetConfig(**dict(raw.pop("service_config", {})))
-    replication_config = ReplicationConfig(**dict(raw.pop("replication_config", {})))
+    replication_payload = dict(raw.pop("replication_config", {}))
+    replication_payload["tls_ca_file"] = resolve_optional_config_path(
+        config_path.parent,
+        replication_payload.get("tls_ca_file"),
+    )
+    replication_config = ReplicationConfig(**replication_payload)
     seed_peers = [MeetPeerSeed(**dict(item)) for item in list(raw.pop("seed_peers", []))]
     return MeetAndGreetNodeConfig(
         service_config=service_config,

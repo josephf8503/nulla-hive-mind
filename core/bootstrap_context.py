@@ -414,7 +414,7 @@ def build_bootstrap_context(
         if nb_profile and nb_profile.status == "active":
             nb_content = (
                 f"I have a NullaBook account with handle '{nb_profile.handle}'. "
-                f"NullaBook is the decentralized social network for AI agents in the NULLA hive. "
+                f"NullaBook is the public web surface for agent work in the NULLA hive. "
                 f"I can post research findings, claim topics, and interact in communities. "
                 f"My posts are authenticated with a dedicated posting token (X-NullaBook-Token). "
                 f"NullaBook etiquette: evidence-backed posts, no spam, proof-of-useful-work matters. "

@@ -16,7 +16,6 @@ from core.adaptation_autopilot import (
     score_adaptation_corpus,
 )
 from core.adaptation_dataset import build_adaptation_corpus
-from core.backend_manager import BackendManager
 from core.control_plane_workspace import sync_control_plane_workspace
 from core.credit_ledger import credit_purchases_enabled, reconcile_ledger
 from core.dna_payment_bridge import dna_bridge
@@ -28,6 +27,7 @@ from core.lora_training_pipeline import promote_adaptation_job, run_adaptation_j
 from core.model_registry import ModelRegistry
 from core.nulla_user_summary import build_user_summary, render_user_summary
 from core.release_channel import release_manifest_snapshot
+from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
 from core.runtime_paths import data_path
 from core.trainable_base_manager import stage_trainable_base, trainable_base_status
 from network.signer import get_local_peer_id
@@ -40,21 +40,18 @@ from storage.adaptation_store import (
     list_adaptation_jobs,
     update_corpus_build,
 )
-from storage.db import healthcheck
 from storage.migrations import run_migrations
 
 
 def cmd_up() -> int:
-    # 1. Boot local storage first
-    run_migrations()
-
-    if not healthcheck():
-        print("Nulla could not start: database healthcheck failed.")
+    # 1. Boot the canonical runtime environment first.
+    try:
+        bootstrap_runtime_environment()
+    except RuntimeError as exc:
+        print(f"Nulla could not start: {exc}")
         return 1
 
-    # 2. Load safety policy
-    policy_engine.load()
-
+    # 2. Surface provider warnings after policy/bootstrap is loaded.
     model_registry = ModelRegistry()
     provider_warnings = model_registry.startup_warnings()
     if provider_warnings:
@@ -69,18 +66,15 @@ def cmd_up() -> int:
     peer_id = get_local_peer_id()
 
     # 5. Auto-detect backend
-    manager = BackendManager()
-    hw = manager.detect_hardware()
-    selection = manager.select_backend(hw)
-
-    if not manager.healthcheck(selection):
-        allow_remote_only = policy_engine.allow_remote_only_without_backend()
-        if not allow_remote_only:
-            print("Nulla could not start: no supported backend found.")
-            print("Install at least one supported runtime: mlx, torch, or onnxruntime.")
-            return 1
+    try:
+        selection = resolve_backend_selection()
+    except RuntimeError:
+        print("Nulla could not start: no supported backend found.")
+        print("Install at least one supported runtime: mlx, torch, or onnxruntime.")
+        return 1
+    hw = selection.hardware
+    if selection.backend_name == "remote_only":
         print("No local model backend found. Running in remote-only mode.")
-        selection = type("Selection", (), {"backend_name": "remote_only", "device": "cpu"})()
 
     # 6. Start local agent + local node
     agent = NullaAgent(

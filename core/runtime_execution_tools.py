@@ -9,6 +9,7 @@ from typing import Any
 
 from core import policy_engine
 from core.execution_gate import ExecutionGate
+from core.runtime_paths import resolve_workspace_root
 from sandbox.sandbox_runner import SandboxRunner
 
 _EXECUTION_REQUEST_MARKERS = (
@@ -418,9 +419,7 @@ def execute_runtime_tool(
 
 def _workspace_root(source_context: dict[str, Any] | None) -> Path:
     raw = str((source_context or {}).get("workspace") or (source_context or {}).get("workspace_root") or "").strip()
-    if raw:
-        return Path(raw).expanduser().resolve()
-    return Path.cwd().resolve()
+    return resolve_workspace_root(raw or None)
 
 
 def _resolve_workspace_path(raw_path: str | None, *, workspace_root: Path) -> Path:

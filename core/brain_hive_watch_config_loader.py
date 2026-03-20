@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from apps.brain_hive_watch_server import BrainHiveWatchServerConfig
+from core.config_loader_utils import load_json_config, resolve_optional_config_path
 
 
 def load_brain_hive_watch_config(path: str | Path) -> BrainHiveWatchServerConfig:
-    config_path = Path(path)
-    raw = json.loads(config_path.read_text(encoding="utf-8"))
+    config_path, raw = load_json_config(path)
     host = raw.get("host", raw.get("bind_host", BrainHiveWatchServerConfig.host))
     port = int(raw.get("port", raw.get("bind_port", BrainHiveWatchServerConfig.port)))
     upstreams = tuple(raw.get("upstream_base_urls", ()))
@@ -24,9 +23,9 @@ def load_brain_hive_watch_config(path: str | Path) -> BrainHiveWatchServerConfig
         for base, token in dict(raw.get("auth_tokens_by_base_url") or {}).items()
         if str(base).strip() and str(token).strip()
     }
-    tls_certfile = str(raw.get("tls_certfile") or "").strip() or None
-    tls_keyfile = str(raw.get("tls_keyfile") or "").strip() or None
-    tls_ca_file = str(raw.get("tls_ca_file") or "").strip() or None
+    tls_certfile = resolve_optional_config_path(config_path.parent, raw.get("tls_certfile"))
+    tls_keyfile = resolve_optional_config_path(config_path.parent, raw.get("tls_keyfile"))
+    tls_ca_file = resolve_optional_config_path(config_path.parent, raw.get("tls_ca_file"))
     tls_insecure_skip_verify = bool(raw.get("tls_insecure_skip_verify", False))
     return BrainHiveWatchServerConfig(
         host=str(host),

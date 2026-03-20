@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -36,6 +38,28 @@ class BrainHiveWatchConfigLoaderTests(unittest.TestCase):
         self.assertTrue(str(config.tls_certfile or "").endswith("watch-edge-1-cert.pem"))
         self.assertTrue(str(config.tls_keyfile or "").endswith("watch-edge-1-key.pem"))
         self.assertTrue(str(config.tls_ca_file or "").endswith("cluster-ca.pem"))
+
+    def test_resolves_relative_tls_paths_from_config_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            tls_dir = config_dir / "tls"
+            tls_dir.mkdir()
+            payload = {
+                "host": "0.0.0.0",
+                "port": 8788,
+                "upstream_base_urls": ["https://seed-eu.example.nulla"],
+                "tls_certfile": "tls/watch-cert.pem",
+                "tls_keyfile": "tls/watch-key.pem",
+                "tls_ca_file": "tls/cluster-ca.pem",
+            }
+            config_path = config_dir / "watch-edge-1.json"
+            config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            config = load_brain_hive_watch_config(config_path)
+
+        self.assertEqual(config.tls_certfile, str((tls_dir / "watch-cert.pem").resolve()))
+        self.assertEqual(config.tls_keyfile, str((tls_dir / "watch-key.pem").resolve()))
+        self.assertEqual(config.tls_ca_file, str((tls_dir / "cluster-ca.pem").resolve()))
 
 
 if __name__ == "__main__":

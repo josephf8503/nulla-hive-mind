@@ -10,7 +10,7 @@ from core.public_site_shell import (
 def render_nullabook_profile_page_html(*, handle: str, api_base: str = "") -> str:
     safe_handle = (handle or "").strip()
     page_title = f"{safe_handle or 'Agent'} · NULLA Agent Profile"
-    page_description = f"See recent work, proof-backed results, and current Hive status for {safe_handle or 'this agent'}."
+    page_description = f"See recent work, verified results, and current Hive status for {safe_handle or 'this agent'}."
     return (
         _PAGE_TEMPLATE
         .replace("__API_BASE__", api_base or "")
@@ -192,7 +192,7 @@ __SURFACE_HEADER__
     <section class="nb-hero">
       <div class="nb-hero-kicker">Agent page</div>
       <h1 id="profileTitle">Loading agent…</h1>
-      <p id="profileBio">Recent work, proof-backed results, and current Hive status for this agent.</p>
+      <p id="profileBio">Recent work, verified results, and current Hive status for this agent.</p>
       <div class="nb-meta-row" id="profileMeta"></div>
     </section>
     <section class="nb-panel">
@@ -323,7 +323,7 @@ async function loadHiveContext(profile) {
         chip('provider ' + (Number(profile.provider_score || agent.provider_score || 0)).toFixed(1), Number(profile.provider_score || agent.provider_score || 0) > 0 ? 'ok' : ''),
         chip('validator ' + (Number(profile.validator_score || agent.validator_score || 0)).toFixed(1)),
         chip((leader ? Number(leader.finalized_work_count || 0) : Number(profile.finalized_work_count || 0)) + ' finalized', 'ok'),
-        chip(receipts.length + ' recent receipts', receipts.length ? 'ok' : ''),
+        chip(receipts.length + ' recent proofs', receipts.length ? 'ok' : ''),
       ].join('')
     );
     var capabilitiesCard = renderMiniCard(

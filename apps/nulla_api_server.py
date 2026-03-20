@@ -34,7 +34,6 @@ from apps.nulla_agent import NullaAgent
 from apps.nulla_daemon import DaemonConfig, NullaDaemon
 from core import policy_engine
 from core.adaptation_autopilot import get_adaptation_autopilot_status, schedule_adaptation_autopilot_tick
-from core.backend_manager import BackendManager
 from core.compute_mode import ComputeModeDaemon
 from core.control_plane_workspace import collect_control_plane_status
 from core.credit_ledger import ensure_starter_credits
@@ -52,6 +51,8 @@ from core.onboarding import (
 )
 from core.public_hive_bridge import ensure_public_hive_auth
 from core.release_channel import release_manifest_snapshot
+from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
+from core.runtime_paths import resolve_workspace_root
 from core.runtime_task_events import (
     list_runtime_session_events,
     list_runtime_sessions,
@@ -66,8 +67,6 @@ from storage.adaptation_store import (
     list_adaptation_job_events,
     list_adaptation_jobs,
 )
-from storage.db import healthcheck
-from storage.migrations import run_migrations
 
 NULLA_API_PORT = 11435
 MODEL_NAME = "nulla"
@@ -217,15 +216,11 @@ def _ensure_default_provider(registry: ModelRegistry, model_tag: str) -> None:
 def _bootstrap() -> None:
     global _agent, _daemon, _display_name, _runtime_model_tag, _runtime_parameter_size, _runtime_started_at, _runtime_version_stamp
 
-    run_migrations()
-    if not healthcheck():
-        raise RuntimeError("Database healthcheck failed.")
-
+    bootstrap_runtime_environment(force_policy_reload=True)
     setup_logging(
         level=str(policy_engine.get("observability.log_level", "INFO")),
         json_output=bool(policy_engine.get("observability.json_logs", True)),
     )
-    policy_engine.load(force_reload=True)
 
     if is_first_boot():
         ensure_bootstrap_identity(
@@ -264,15 +259,9 @@ def _bootstrap() -> None:
     for w in model_registry.startup_warnings():
         logger.warning("Model warning: %s", w)
 
-    manager = BackendManager()
-    hw = manager.detect_hardware()
-    selection = manager.select_backend(hw)
-    if not manager.healthcheck(selection):
-        allow_remote_only = policy_engine.allow_remote_only_without_backend()
-        if not allow_remote_only:
-            raise RuntimeError("No supported backend found.")
+    selection = resolve_backend_selection()
+    if selection.backend_name == "remote_only":
         logger.warning("No local backend found. Continuing in remote-only mode.")
-        selection = type("Selection", (), {"backend_name": "remote_only", "device": "cpu"})()
 
     persona = load_active_persona("default")
     _display_name = get_agent_display_name()
@@ -390,17 +379,7 @@ def _stable_openclaw_session_id(
 
 
 def _default_workspace_root() -> str:
-    override = str(
-        os.environ.get("NULLA_WORKSPACE_ROOT")
-        or os.environ.get("NULLA_PROJECT_ROOT")
-        or ""
-    ).strip()
-    if override:
-        return str(Path(override).expanduser().resolve())
-    try:
-        return str(Path.cwd().resolve())
-    except FileNotFoundError:
-        return str(PROJECT_ROOT)
+    return str(resolve_workspace_root())
 
 
 def _run_agent(

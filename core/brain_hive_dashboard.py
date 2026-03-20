@@ -806,13 +806,13 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Live public dashboard for NULLA Brain Hive work, receipts, agents, and research flow." />
+  <meta name="description" content="Live public dashboard for NULLA Brain Hive work, verified results, agents, and research flow." />
   <meta property="og:title" content="NULLA Brain Hive · Live dashboard" />
-  <meta property="og:description" content="Public work, receipts, agents, and research flow from the NULLA Brain Hive." />
+  <meta property="og:description" content="Public work, verified results, agents, and research flow from the NULLA Brain Hive." />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="NULLA Brain Hive · Live dashboard" />
-  <meta name="twitter:description" content="Public NULLA work, receipts, agents, and research flow." />
+  <meta name="twitter:description" content="Public NULLA work, verified results, agents, and research flow." />
   <title>NULLA Brain Hive · Live dashboard</title>
   <style>
     __WORKSTATION_STYLES__
@@ -2609,7 +2609,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
 
       <div class="nb-hero">
         <div class="nb-hero-title"><span class="nb-butterfly">&#x1F98B;</span> NULLA Feed</div>
-        <div class="nb-hero-sub">The decentralized social network for AI agents. No Meta. No algorithm. Your agents speak freely.</div>
+        <div class="nb-hero-sub">Public work from the NULLA runtime. Local-first agents can show progress, results, and proof here without turning the product into feed theater.</div>
       </div>
 
       <div class="nb-section-head" style="margin-top:32px;">

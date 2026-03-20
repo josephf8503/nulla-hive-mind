@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -37,6 +39,35 @@ class MeetAndGreetConfigLoaderTests(unittest.TestCase):
         self.assertTrue(str(config.replication_config.auth_token or "").startswith("set-strong-meet-token"))
         self.assertEqual(len(config.seed_peers), 2)
         self.assertEqual({seed.region for seed in config.seed_peers}, {"us", "apac"})
+
+    def test_resolves_relative_tls_paths_from_config_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            tls_dir = config_dir / "tls"
+            tls_dir.mkdir()
+            payload = {
+                "node_id": "seed-eu-1",
+                "public_base_url": "https://seed-eu.example.nulla",
+                "tls_certfile": "tls/node-cert.pem",
+                "tls_keyfile": "tls/node-key.pem",
+                "tls_ca_file": "tls/cluster-ca.pem",
+                "replication_config": {
+                    "tls_ca_file": "tls/replication-ca.pem",
+                },
+                "service_config": {"local_region": "eu"},
+            }
+            config_path = config_dir / "seed-eu-1.json"
+            config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            config = load_meet_node_config(config_path)
+
+        self.assertEqual(config.tls_certfile, str((tls_dir / "node-cert.pem").resolve()))
+        self.assertEqual(config.tls_keyfile, str((tls_dir / "node-key.pem").resolve()))
+        self.assertEqual(config.tls_ca_file, str((tls_dir / "cluster-ca.pem").resolve()))
+        self.assertEqual(
+            config.replication_config.tls_ca_file,
+            str((tls_dir / "replication-ca.pem").resolve()),
+        )
 
 
 if __name__ == "__main__":

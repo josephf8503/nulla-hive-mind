@@ -7,13 +7,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def test_readme_frontloads_product_truth_and_install() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-    early_block = "\n".join(readme.splitlines()[:80])
+    early_block = "\n".join(readme.splitlines()[:120])
 
     assert "NULLA is a local-first AI agent" in early_block
     assert "Alpha truth:" in early_block
     assert "## Try It" in readme
     assert "docs/INSTALL.md" in readme
     assert "docs/STATUS.md" in readme
+    assert "docs/SYSTEM_SPINE.md" in readme
+    assert "docs/PROOF_PATH.md" in readme
 
 
 def test_docs_home_only_points_to_curated_entry_docs() -> None:
@@ -21,6 +23,8 @@ def test_docs_home_only_points_to_curated_entry_docs() -> None:
 
     assert "INSTALL.md" in docs_home
     assert "STATUS.md" in docs_home
+    assert "SYSTEM_SPINE.md" in docs_home
+    assert "PROOF_PATH.md" in docs_home
     assert "TRUST.md" in docs_home
     assert "archive/README.md" in docs_home
     assert "HANDOVER_" not in docs_home
@@ -44,13 +48,28 @@ def test_docs_root_is_curated_after_archive_sweep() -> None:
         "MODEL_PROVIDER_POLICY.md",
         "NULLA_OPENCLAW_TOOL_DOCTRINE.md",
         "OVERNIGHT_SOAK_RUNBOOK.md",
+        "PROOF_PATH.md",
         "PROOF_PASS_REPORT.md",
         "PUBLIC_LAUNCH_READINESS.md",
         "README.md",
         "STATUS.md",
+        "SYSTEM_SPINE.md",
         "TDL.md",
         "THIRD_PARTY_LICENSES.md",
         "TRUST.md",
     }
 
     assert actual_files == expected_files
+
+
+def test_root_handover_and_starter_kit_redirect_to_current_truth() -> None:
+    handover = (REPO_ROOT / "AGENT_HANDOVER.md").read_text(encoding="utf-8")
+    starter_kit = (REPO_ROOT / "NULLA_STARTER_KIT.md").read_text(encoding="utf-8")
+
+    assert "docs/SYSTEM_SPINE.md" in handover
+    assert "docs/PROOF_PATH.md" in handover
+    assert "docs/archive/README.md" in handover
+
+    assert "docs/INSTALL.md" in starter_kit
+    assert "docs/STATUS.md" in starter_kit
+    assert "docs/PROOF_PATH.md" in starter_kit

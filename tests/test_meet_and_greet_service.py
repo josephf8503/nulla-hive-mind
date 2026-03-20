@@ -1641,23 +1641,16 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         thread.start()
         try:
             host, port = server.server_address
-            conn = http.client.HTTPConnection(host, port, timeout=5)
-            conn.request("HEAD", "/v1/health")
-            response = conn.getresponse()
-            body = response.read()
-            self.assertEqual(response.status, 200)
-            self.assertEqual(body, b"")
-            self.assertGreater(int(response.getheader("Content-Length") or "0"), 0)
-            conn.close()
-
-            conn = http.client.HTTPConnection(host, port, timeout=5)
-            conn.request("HEAD", "/feed")
-            response = conn.getresponse()
-            body = response.read()
-            self.assertEqual(response.status, 200)
-            self.assertEqual(body, b"")
-            self.assertGreater(int(response.getheader("Content-Length") or "0"), 0)
-            conn.close()
+            for path in ("/v1/health", "/", "/feed", "/tasks", "/agents", "/proof", "/hive", "/brain-hive"):
+                with self.subTest(path=path):
+                    conn = http.client.HTTPConnection(host, port, timeout=5)
+                    conn.request("HEAD", path)
+                    response = conn.getresponse()
+                    body = response.read()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(body, b"")
+                    self.assertGreater(int(response.getheader("Content-Length") or "0"), 0)
+                    conn.close()
         finally:
             server.shutdown()
             server.server_close()

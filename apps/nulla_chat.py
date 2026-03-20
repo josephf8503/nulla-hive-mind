@@ -3,22 +3,15 @@ from __future__ import annotations
 import argparse
 
 from apps.nulla_agent import NullaAgent
-from core import policy_engine
-from core.backend_manager import BackendManager
 from core.compute_mode import ComputeModeDaemon
 from core.hardware_tier import probe_machine, select_qwen_tier, tier_summary
 from core.model_registry import ModelRegistry
 from core.onboarding import get_agent_display_name, is_first_boot, run_onboarding_interactive
-from storage.db import healthcheck
-from storage.migrations import run_migrations
+from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
 
 
 def _bootstrap_agent(*, persona_id: str, device: str) -> NullaAgent:
-    run_migrations()
-    if not healthcheck():
-        raise RuntimeError("Database healthcheck failed.")
-
-    policy_engine.load(force_reload=True)
+    bootstrap_runtime_environment(force_policy_reload=True)
 
     if is_first_boot():
         run_onboarding_interactive()
@@ -48,16 +41,9 @@ def _bootstrap_agent(*, persona_id: str, device: str) -> NullaAgent:
         for warning in provider_warnings:
             print(f" - {warning}")
 
-    manager = BackendManager()
-    hw = manager.detect_hardware()
-    selection = manager.select_backend(hw)
-    if not manager.healthcheck(selection):
-        # Remote-only mode keeps chat usable on low-power/potato hosts.
-        allow_remote_only = policy_engine.allow_remote_only_without_backend()
-        if not allow_remote_only:
-            raise RuntimeError("No supported backend found. Install mlx, torch, or onnxruntime.")
+    selection = resolve_backend_selection()
+    if selection.backend_name == "remote_only":
         print("No local model backend found. Starting in remote-first mode.")
-        selection = type("Selection", (), {"backend_name": "remote_only", "device": "cpu"})()
 
     agent = NullaAgent(
         backend_name=selection.backend_name,

@@ -34,6 +34,23 @@ def active_workspace_dir() -> Path:
     return WORKSPACE_DIR.resolve()
 
 
+def resolve_workspace_root(explicit: str | Path | None = None) -> Path:
+    candidate = str(explicit or "").strip()
+    if candidate:
+        return Path(candidate).expanduser().resolve()
+    override = str(
+        os.environ.get("NULLA_WORKSPACE_ROOT")
+        or os.environ.get("NULLA_PROJECT_ROOT")
+        or ""
+    ).strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    try:
+        return Path.cwd().resolve()
+    except FileNotFoundError:
+        return PROJECT_ROOT.resolve()
+
+
 def ensure_runtime_dirs() -> None:
     for path in (active_nulla_home(), active_data_dir(), active_config_home_dir(), DOCS_DIR, active_workspace_dir()):
         path.mkdir(parents=True, exist_ok=True)
