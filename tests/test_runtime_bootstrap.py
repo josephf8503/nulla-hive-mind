@@ -24,7 +24,20 @@ def test_bootstrap_storage_environment_runs_storage_bootstrap_sequence() -> None
 
     ensure_dirs.assert_called_once_with()
     run_migrations.assert_called_once_with(None)
-    healthcheck.assert_called_once_with(None)
+    healthcheck.assert_called_once_with()
+
+
+def test_bootstrap_storage_environment_checks_explicit_db_path_when_provided() -> None:
+    with mock.patch("core.runtime_bootstrap.ensure_runtime_dirs"), mock.patch(
+        "core.runtime_bootstrap.run_migrations"
+    ) as run_migrations, mock.patch(
+        "core.runtime_bootstrap.healthcheck",
+        return_value=True,
+    ) as healthcheck:
+        bootstrap_storage_environment(db_path="/tmp/nulla-test.db")
+
+    run_migrations.assert_called_once_with("/tmp/nulla-test.db")
+    healthcheck.assert_called_once_with("/tmp/nulla-test.db")
 
 
 def test_bootstrap_storage_environment_raises_when_database_healthcheck_fails() -> None:

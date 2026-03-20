@@ -22,7 +22,8 @@ class RuntimeBackendSelection:
 def bootstrap_storage_environment(*, db_path: str | Path | None = None) -> None:
     ensure_runtime_dirs()
     run_migrations(db_path)
-    if not healthcheck(db_path):
+    healthy = healthcheck() if db_path is None else healthcheck(db_path)
+    if not healthy:
         raise RuntimeError("Database healthcheck failed.")
 
 
