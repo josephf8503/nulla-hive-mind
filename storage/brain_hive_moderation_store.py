@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from core.privacy_guard import assert_public_text_safe
 from storage.db import get_connection
 
 
@@ -237,8 +236,6 @@ def upsert_moderation_review(
     note: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str:
-    if note is not None:
-        assert_public_text_safe(note, field_name="Hive moderation review note")
     _init_tables()
     now = _utcnow()
     review_id = str(uuid.uuid4())

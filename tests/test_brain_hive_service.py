@@ -100,7 +100,7 @@ class BrainHiveServiceTests(unittest.TestCase):
         self.assertEqual(len(self.service.list_posts(topic.topic_id)), 1)
 
     @mock.patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
-    def test_create_post_rejects_private_machine_identity_or_paths(self, _mock_markers) -> None:
+    def test_public_topic_rejects_private_machine_identity_or_paths_in_post_body(self, _mock_markers) -> None:
         agent_id = _peer()
         topic = self.service.create_topic(
             HiveTopicCreateRequest(
@@ -123,14 +123,28 @@ class BrainHiveServiceTests(unittest.TestCase):
             )
 
     @mock.patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
-    def test_claim_and_comment_notes_reject_private_markers(self, _mock_markers) -> None:
+    def test_public_topic_rejects_private_machine_identity_or_paths_in_task_copy(self, _mock_markers) -> None:
+        agent_id = _peer()
+        with self.assertRaises(ValueError):
+            self.service.create_topic(
+                HiveTopicCreateRequest(
+                    created_by_agent_id=agent_id,
+                    title="Research saulius-mbp build state",
+                    summary="Use /Users/sauliuskruopis/private/log.txt as the main investigation brief.",
+                    topic_tags=["safe"],
+                    status="open",
+                )
+            )
+
+    @mock.patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
+    def test_public_claim_and_comment_notes_reject_private_markers(self, _mock_markers) -> None:
         agent_id = _peer()
         topic = self.service.create_topic(
             HiveTopicCreateRequest(
                 created_by_agent_id=agent_id,
-                title="Safe topic title",
-                summary="Safe topic summary with enough substance for Hive admission.",
-                topic_tags=["safe"],
+                title="Agent Commons handoff discipline",
+                summary="Safe topic summary with enough substance for Hive admission and public review.",
+                topic_tags=["safe", "agent_commons"],
                 status="open",
             )
         )
@@ -161,6 +175,63 @@ class BrainHiveServiceTests(unittest.TestCase):
                     body="Check /Users/sauliuskruopis/private/log.txt before we publish.",
                 )
             )
+
+    @mock.patch("core.privacy_guard.machine_identity_markers", return_value=["saulius-mbp"])
+    def test_private_topic_allows_internal_handover_paths_and_machine_names(self, _mock_markers) -> None:
+        agent_id = _peer()
+        reviewer_id = _peer()
+        topic = self.service.create_topic(
+            HiveTopicCreateRequest(
+                created_by_agent_id=agent_id,
+                title="Private handover for saulius-mbp",
+                summary="Review /Users/sauliuskruopis/Desktop/Decentralized_NULLA/tmp/notes.md before the next pass.",
+                topic_tags=["agent_commons", "handover"],
+                status="open",
+                visibility="agent_private",
+            )
+        )
+        self.assertEqual(topic.visibility, "agent_private")
+        self.assertIn("saulius-mbp", topic.title)
+
+        post = self.service.create_post(
+            HivePostCreateRequest(
+                topic_id=topic.topic_id,
+                author_agent_id=agent_id,
+                body="Internal handover from saulius-mbp: inspect /Users/sauliuskruopis/private/log.txt and continue the fix.",
+                evidence_refs=[{"type": "path", "value": "/Users/sauliuskruopis/private/log.txt"}],
+            )
+        )
+        self.assertIn("/Users/sauliuskruopis/private/log.txt", post.body)
+
+        claim = self.service.claim_topic(
+            HiveTopicClaimRequest(
+                topic_id=topic.topic_id,
+                agent_id=agent_id,
+                note="Working locally from saulius-mbp with /Users/sauliuskruopis/private/log.txt.",
+                capability_tags=["research"],
+            )
+        )
+        self.assertIn("saulius-mbp", claim.note or "")
+
+        comment = self.service.comment_on_post(
+            HiveCommonsCommentRequest(
+                post_id=post.post_id,
+                author_agent_id=agent_id,
+                body="Follow the local repro in /Users/sauliuskruopis/private/log.txt before any public summary.",
+            )
+        )
+        self.assertIn("/Users/sauliuskruopis/private/log.txt", comment.body)
+
+        summary = self.service.review_object(
+            HiveModerationReviewRequest(
+                object_type="post",
+                object_id=post.post_id,
+                reviewer_agent_id=reviewer_id,
+                decision="approve",
+                note="Private handover from saulius-mbp is acceptable on an agent_private topic.",
+            )
+        )
+        self.assertEqual(summary.object_id, post.post_id)
 
     def test_list_posts_returns_newest_first(self) -> None:
         agent_id = _peer()

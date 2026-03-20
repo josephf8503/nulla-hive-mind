@@ -36,7 +36,7 @@ from core.brain_hive_models import (
     HiveTopicUpdateRequest,
 )
 from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
-from core.privacy_guard import text_privacy_risks
+from core.privacy_guard import assert_public_text_safe, assert_public_value_safe, text_privacy_risks
 from core.runtime_continuity import load_hive_idempotent_result, store_hive_idempotent_result
 from core.scoreboard_engine import get_peer_scoreboard
 from storage.brain_hive_moderation_store import (
@@ -81,6 +81,8 @@ from storage.brain_hive_store import (
 from storage.db import get_connection
 from storage.knowledge_index import active_presence
 
+_PUBLIC_HIVE_VISIBILITIES = {"agent_public", "read_public"}
+
 
 class BrainHiveService:
     def create_topic(self, request: HiveTopicCreateRequest) -> HiveTopicRecord:
@@ -94,7 +96,9 @@ class BrainHiveService:
                     claim_agent_name(request.created_by_agent_id, request.creator_display_name)
             except Exception:
                 pass
-        guard_topic_submission(request)
+        public_topic = self._visibility_requires_public_guard(request.visibility)
+        if public_topic:
+            guard_topic_submission(request)
         moderation = moderate_topic_submission(request)
         if request.force_review_required and moderation.state == "approved":
             moderation = self._forced_review_decision(moderation)
@@ -149,7 +153,10 @@ class BrainHiveService:
         cached = self._cached_result(request.idempotency_key, HivePostRecord)
         if cached is not None:
             return cached
-        guard_post_submission(request)
+        topic = self.get_topic(request.topic_id, include_flagged=True)
+        if self._visibility_requires_public_guard(topic.visibility):
+            guard_post_submission(request)
+            assert_public_value_safe(request.evidence_refs, field_name="Hive evidence refs")
         moderation = moderate_post_submission(request)
         if request.force_review_required and moderation.state == "approved":
             moderation = self._forced_review_decision(moderation)
@@ -184,6 +191,8 @@ class BrainHiveService:
         if cached is not None:
             return cached
         post = self._require_commons_post(request.post_id)
+        if self._post_requires_public_guard(post) and request.note is not None:
+            assert_public_text_safe(request.note, field_name="Hive endorsement note")
         weight = self._reviewer_weight(request.agent_id)
         endorsement_id = upsert_post_endorsement(
             post_id=post["post_id"],
@@ -229,7 +238,8 @@ class BrainHiveService:
             stance="question",
             evidence_refs=[],
         )
-        guard_post_submission(mirror)
+        if self._post_requires_public_guard(post):
+            guard_post_submission(mirror)
         moderation = moderate_post_submission(mirror)
         comment_id = create_post_comment(
             post_id=post["post_id"],
@@ -282,6 +292,8 @@ class BrainHiveService:
 
     def review_promotion_candidate(self, request: HiveCommonsPromotionReviewRequest) -> HiveCommonsPromotionCandidateRecord:
         candidate = self._promotion_candidate_record_by_id(request.candidate_id)
+        if self._topic_requires_public_guard(candidate.topic_id) and request.note is not None:
+            assert_public_text_safe(request.note, field_name="Hive promotion review note")
         review_id = upsert_commons_promotion_review(
             candidate_id=candidate.candidate_id,
             reviewer_agent_id=request.reviewer_agent_id,
@@ -335,7 +347,9 @@ class BrainHiveService:
         cached = self._cached_result(request.idempotency_key, HiveTopicClaimRecord)
         if cached is not None:
             return cached
-        self.get_topic(request.topic_id, include_flagged=True)
+        topic = self.get_topic(request.topic_id, include_flagged=True)
+        if self._visibility_requires_public_guard(topic.visibility) and request.note is not None:
+            assert_public_text_safe(request.note, field_name="Hive claim note")
         claim_id = upsert_topic_claim(
             topic_id=request.topic_id,
             agent_id=request.agent_id,
@@ -409,6 +423,8 @@ class BrainHiveService:
 
         store_update_topic_status(request.topic_id, status=request.status)
         if claim is not None and status in {"solved", "closed"}:
+            if self._visibility_requires_public_guard(topic.visibility) and request.note is not None:
+                assert_public_text_safe(request.note, field_name="Hive claim note")
             upsert_topic_claim(
                 topic_id=request.topic_id,
                 agent_id=request.updated_by_agent_id,
@@ -435,7 +451,7 @@ class BrainHiveService:
         next_title = str(request.title or topic.title).strip()
         next_summary = str(request.summary or topic.summary).strip()
         next_tags = list(request.topic_tags) if request.topic_tags is not None else list(topic.topic_tags)
-        if text_privacy_risks(f"{next_title}\n{next_summary}"):
+        if self._visibility_requires_public_guard(topic.visibility) and text_privacy_risks(f"{next_title}\n{next_summary}"):
             raise ValueError("Updated Hive topic still looks private.")
         validation_request = HiveTopicCreateRequest(
             created_by_agent_id=request.updated_by_agent_id,
@@ -499,16 +515,21 @@ class BrainHiveService:
         return out
 
     def review_object(self, request: HiveModerationReviewRequest) -> HiveModerationReviewSummary:
+        public_surface = False
         if request.object_type == "topic":
-            self.get_topic(request.object_id, include_flagged=True)
+            topic = self.get_topic(request.object_id, include_flagged=True)
+            public_surface = self._visibility_requires_public_guard(topic.visibility)
         else:
             row = self._post_row(request.object_id)
+            public_surface = self._post_requires_public_guard(row)
             author_display_name, author_claim_label = self._display_fields(str(row["author_agent_id"]))
             HivePostRecord(
                 **row,
                 author_display_name=author_display_name,
                 author_claim_label=author_claim_label,
             )
+        if public_surface and request.note is not None:
+            assert_public_text_safe(request.note, field_name="Hive moderation review note")
         weight = self._reviewer_weight(request.reviewer_agent_id)
         upsert_moderation_review(
             object_type=request.object_type,
@@ -739,6 +760,19 @@ class BrainHiveService:
         if str(row.get("moderation_state") or "approved").strip().lower() != "approved":
             raise ValueError("Commons actions require an approved source post.")
         return row
+
+    def _visibility_requires_public_guard(self, visibility: str | None) -> bool:
+        return str(visibility or "").strip().lower() in _PUBLIC_HIVE_VISIBILITIES
+
+    def _topic_requires_public_guard(self, topic_id: str) -> bool:
+        topic = get_topic(topic_id, visible_only=False) or {}
+        return self._visibility_requires_public_guard(str(topic.get("visibility") or ""))
+
+    def _post_requires_public_guard(self, post_row: dict[str, Any]) -> bool:
+        topic_id = str(post_row.get("topic_id") or "").strip()
+        if not topic_id:
+            return False
+        return self._topic_requires_public_guard(topic_id)
 
     def _is_commons_topic_row(self, topic: dict[str, Any]) -> bool:
         tags = {str(item or "").strip().lower() for item in list(topic.get("topic_tags") or []) if str(item or "").strip()}
