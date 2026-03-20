@@ -27,7 +27,11 @@ from core.lora_training_pipeline import promote_adaptation_job, run_adaptation_j
 from core.model_registry import ModelRegistry
 from core.nulla_user_summary import build_user_summary, render_user_summary
 from core.release_channel import release_manifest_snapshot
-from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
+from core.runtime_bootstrap import (
+    bootstrap_runtime_environment,
+    bootstrap_storage_environment,
+    resolve_backend_selection,
+)
 from core.runtime_paths import data_path
 from core.trainable_base_manager import stage_trainable_base, trainable_base_status
 from network.signer import get_local_peer_id
@@ -40,7 +44,10 @@ from storage.adaptation_store import (
     list_adaptation_jobs,
     update_corpus_build,
 )
-from storage.migrations import run_migrations
+
+
+def _bootstrap_cli_storage() -> None:
+    bootstrap_storage_environment()
 
 
 def cmd_up() -> int:
@@ -138,7 +145,7 @@ def cmd_up() -> int:
 
 
 def cmd_summary(json_mode: bool = False, limit: int = 5) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     report = build_user_summary(limit_recent=max(1, min(int(limit), 20)))
     if json_mode:
         import json
@@ -150,7 +157,7 @@ def cmd_summary(json_mode: bool = False, limit: int = 5) -> int:
 
 
 def cmd_providers(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     registry = ModelRegistry()
     rows = registry.provider_audit_rows()
     if json_mode:
@@ -198,7 +205,7 @@ def cmd_providers(json_mode: bool = False) -> int:
 
 
 def cmd_identity_report(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     report = identity_lifecycle_snapshot()
     import json
 
@@ -215,7 +222,7 @@ def cmd_identity_report(json_mode: bool = False) -> int:
 
 
 def cmd_release_status(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     report = release_manifest_snapshot()
     import json
 
@@ -249,7 +256,7 @@ def _emit_json(payload: object) -> None:
 
 
 def cmd_credits(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     peer_id = get_local_peer_id()
     recon = reconcile_ledger(peer_id)
     if json_mode:
@@ -271,7 +278,7 @@ def cmd_credits(json_mode: bool = False) -> int:
 
 
 def cmd_adaptation_status(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     payload = get_adaptation_autopilot_status()
     if json_mode:
         _emit_json(payload)
@@ -301,7 +308,7 @@ def cmd_adaptation_corpus(
     limit_per_source: int,
     json_mode: bool = False,
 ) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     if str(corpus_id or "").strip():
         result = build_adaptation_corpus(str(corpus_id).strip())
         payload = {
@@ -340,7 +347,7 @@ def cmd_adaptation_corpus(
 
 
 def cmd_adaptation_corpus_import(*, input_path: str, label: str, json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     source = Path(str(input_path or "").strip()).expanduser().resolve()
     if not source.exists():
         raise FileNotFoundError(f"Corpus input does not exist: {source}")
@@ -374,7 +381,7 @@ def cmd_adaptation_corpus_import(*, input_path: str, label: str, json_mode: bool
 
 
 def cmd_adaptation_corpus_export(*, corpus_id: str, output_path: str, json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     corpus = get_adaptation_corpus(str(corpus_id or "").strip())
     if not corpus:
         raise ValueError(f"Unknown corpus: {corpus_id}")
@@ -426,7 +433,7 @@ def cmd_adaptation_job_create(
     promote: bool = False,
     json_mode: bool = False,
 ) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     payload = create_adaptation_job(
         corpus_id=str(corpus_id or "").strip(),
         base_model_ref=str(base_model_ref or "").strip(),
@@ -465,7 +472,7 @@ def cmd_adaptation_job_create(
 
 
 def cmd_adaptation_jobs(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     rows = list_adaptation_jobs(limit=100)
     if json_mode:
         _emit_json(rows)
@@ -489,7 +496,7 @@ def cmd_adaptation_jobs(json_mode: bool = False) -> int:
 
 
 def cmd_adaptation_eval_runs(*, job_id: str = "", json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     rows = list_adaptation_eval_runs(job_id=str(job_id or "").strip() or None, limit=100)
     if json_mode:
         _emit_json(rows)
@@ -510,7 +517,7 @@ def cmd_adaptation_eval_runs(*, job_id: str = "", json_mode: bool = False) -> in
 
 
 def cmd_adaptation_job_events(job_id: str, *, json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     rows = list_adaptation_job_events(str(job_id or "").strip(), limit=500)
     if json_mode:
         _emit_json(rows)
@@ -526,7 +533,7 @@ def cmd_adaptation_job_events(job_id: str, *, json_mode: bool = False) -> int:
 
 
 def cmd_adaptation_job_run(job_id: str, *, promote: bool = False, json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     payload = run_adaptation_job(str(job_id or "").strip(), promote=bool(promote))
     if json_mode:
         _emit_json(payload)
@@ -545,7 +552,7 @@ def cmd_adaptation_job_run(job_id: str, *, promote: bool = False, json_mode: boo
 
 
 def cmd_adaptation_job_promote(job_id: str, *, json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     payload = promote_adaptation_job(str(job_id or "").strip())
     if json_mode:
         _emit_json(payload)
@@ -560,7 +567,7 @@ def cmd_adaptation_job_promote(job_id: str, *, json_mode: bool = False) -> int:
 
 
 def cmd_adaptation_loop_status(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     payload = get_adaptation_autopilot_status()
     if json_mode:
         _emit_json(payload)
@@ -579,7 +586,7 @@ def cmd_adaptation_loop_status(json_mode: bool = False) -> int:
 
 
 def cmd_adaptation_loop_tick(*, force: bool = False, json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     payload = schedule_adaptation_autopilot_tick(force=bool(force), wait=True)
     if json_mode:
         _emit_json(payload)
@@ -685,7 +692,7 @@ def cmd_adaptation_autopilot(
     promote: bool = False,
     json_mode: bool = False,
 ) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     corpus = create_adaptation_corpus(
         label=str(label or "").strip() or "autopilot-corpus",
         source_config={
@@ -751,7 +758,7 @@ def cmd_wallet_init(
     hot_usdc: float,
     cold_usdc: float,
 ) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     manager = DNAWalletManager()
     secret = _resolve_secret(cold_secret, prompt="Set cold-wallet approval secret: ")
     status = manager.configure_wallets(
@@ -768,7 +775,7 @@ def cmd_wallet_init(
 
 
 def cmd_wallet_status(json_mode: bool = False) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     manager = DNAWalletManager()
     status = manager.get_status()
     if status is None:
@@ -790,7 +797,7 @@ def cmd_wallet_status(json_mode: bool = False) -> int:
 
 
 def cmd_wallet_topup_hot(*, usdc: float, cold_secret: str | None) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     manager = DNAWalletManager()
     secret = _resolve_secret(cold_secret, prompt="Cold-wallet approval secret: ")
     status = manager.top_up_hot_from_cold(float(usdc), cold_secret=secret, initiated_by="user")
@@ -799,7 +806,7 @@ def cmd_wallet_topup_hot(*, usdc: float, cold_secret: str | None) -> int:
 
 
 def cmd_wallet_move_to_cold(*, usdc: float, cold_secret: str | None) -> int:
-    run_migrations()
+    _bootstrap_cli_storage()
     manager = DNAWalletManager()
     secret = _resolve_secret(cold_secret, prompt="Cold-wallet approval secret: ")
     status = manager.move_hot_to_cold(float(usdc), cold_secret=secret, initiated_by="user")
@@ -812,7 +819,7 @@ def cmd_wallet_buy_credits(*, usdc: float) -> int:
         print("Credit purchases are disabled in this build.")
         print("Credits are earned by contributing work to the Hive; inactive peers just get lower priority.")
         return 2
-    run_migrations()
+    _bootstrap_cli_storage()
     result = dna_bridge.purchase_credits(float(usdc), local_peer_id=get_local_peer_id())
     print("Credit purchase complete.")
     print(f"Tx: {result.get('tx_id')}")

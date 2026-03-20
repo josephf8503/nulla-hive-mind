@@ -271,6 +271,8 @@ class UDPTransportServer:
             else:
                 raise
 
+        bound_port = int(sock.getsockname()[1])
+
         # Phase 23: STUN Public Endpoint Discovery
         from network.stun_client import discover_public_endpoint
         public_endpoint = discover_public_endpoint(sock)
@@ -285,9 +287,10 @@ class UDPTransportServer:
             )
         else:
             self.public_host = self.host
-            self.public_port = self.port
+            self.public_port = bound_port
             audit_logger.log("stun_discovery_failed", target_id=self.host, target_type="transport", details={})
 
+        self.port = bound_port
         sock.settimeout(1.0)
         self._sock = sock
         self._stop.clear()

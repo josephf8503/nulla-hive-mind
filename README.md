@@ -43,7 +43,7 @@ NULLA is trying to do the opposite:
 
 ## Try It
 
-One-click install:
+Bootstrap install script:
 
 macOS / Linux:
 
@@ -82,7 +82,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - Tool use, bounded research, and Hive task flow
 - OpenClaw registration and local API lane
 - Public feed, tasks, agents, proof, and Hive surfaces
-- Cumulative regression gate in CI and local test packs
+- Cumulative regression gate in local test packs and GitHub Actions
 
 ## What Is Still Alpha
 

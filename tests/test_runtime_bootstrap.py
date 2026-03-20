@@ -8,29 +8,48 @@ import pytest
 from core.runtime_bootstrap import (
     RuntimeBackendSelection,
     bootstrap_runtime_environment,
+    bootstrap_storage_environment,
     resolve_backend_selection,
 )
 
 
-def test_bootstrap_runtime_environment_runs_canonical_startup_sequence() -> None:
+def test_bootstrap_storage_environment_runs_storage_bootstrap_sequence() -> None:
     with mock.patch("core.runtime_bootstrap.ensure_runtime_dirs") as ensure_dirs, mock.patch(
         "core.runtime_bootstrap.run_migrations"
     ) as run_migrations, mock.patch(
         "core.runtime_bootstrap.healthcheck",
         return_value=True,
-    ) as healthcheck, mock.patch("core.runtime_bootstrap.policy_engine.load") as load_policy:
-        bootstrap_runtime_environment(force_policy_reload=True)
+    ) as healthcheck:
+        bootstrap_storage_environment()
 
     ensure_dirs.assert_called_once_with()
-    run_migrations.assert_called_once_with()
-    healthcheck.assert_called_once_with()
+    run_migrations.assert_called_once_with(None)
+    healthcheck.assert_called_once_with(None)
+
+
+def test_bootstrap_storage_environment_raises_when_database_healthcheck_fails() -> None:
+    with mock.patch("core.runtime_bootstrap.ensure_runtime_dirs"), mock.patch(
+        "core.runtime_bootstrap.run_migrations"
+    ), mock.patch("core.runtime_bootstrap.healthcheck", return_value=False):
+        with pytest.raises(RuntimeError, match=r"Database healthcheck failed\."):
+            bootstrap_storage_environment()
+
+
+def test_bootstrap_runtime_environment_runs_canonical_startup_sequence() -> None:
+    with mock.patch("core.runtime_bootstrap.bootstrap_storage_environment") as bootstrap_storage, mock.patch(
+        "core.runtime_bootstrap.policy_engine.load"
+    ) as load_policy:
+        bootstrap_runtime_environment(force_policy_reload=True)
+
+    bootstrap_storage.assert_called_once_with()
     load_policy.assert_called_once_with(force_reload=True)
 
 
 def test_bootstrap_runtime_environment_raises_when_database_healthcheck_fails() -> None:
-    with mock.patch("core.runtime_bootstrap.ensure_runtime_dirs"), mock.patch(
-        "core.runtime_bootstrap.run_migrations"
-    ), mock.patch("core.runtime_bootstrap.healthcheck", return_value=False), mock.patch(
+    with mock.patch(
+        "core.runtime_bootstrap.bootstrap_storage_environment",
+        side_effect=RuntimeError("Database healthcheck failed."),
+    ), mock.patch(
         "core.runtime_bootstrap.policy_engine.load"
     ) as load_policy:
         with pytest.raises(RuntimeError, match=r"Database healthcheck failed\."):

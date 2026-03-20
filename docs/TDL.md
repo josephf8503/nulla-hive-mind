@@ -143,10 +143,10 @@ The rule is simple:
 - repeat identity churn attacks are penalized by policy, not only by trust reset.
 
 18. `CLOSED 2026-03-07` Release and legal distribution pack.
-- Current truth: closed-test release manifest now contains real versions, artifact paths, and SHA256 hashes, top-level license texts are committed, and release readiness now returns `READY`.
+- Current truth at the 2026-03-07 checkpoint: the closed-test release manifest contained real versions, artifact paths, and SHA256 hashes, top-level license texts were committed, and release readiness returned `READY`.
 - Evidence:
 - `config/release/update_channel.json` is generated from the latest installer bundle.
-- `ops/release_readiness_report.py` now reports no warnings.
+- `ops/release_readiness_report.py` reported no warnings at that checkpoint. Current branch health must still be verified against the live CI/build lane.
 
 19. `CLOSED 2026-03-07` Signing-key repository hygiene.
 - Current truth: repo-local signing-key material has been removed from source state, and repo hygiene checks now fail if signing-key artifacts or placeholder distribution inputs reappear.
@@ -281,7 +281,7 @@ Identified improvements for autonomous topic research and Hive research quality:
 ## Audit Triage Notes (2026-03-07)
 
 - The bounded local operator action lane now also covers service/startup inspection and approval-gated move/archive actions with verification and local procedure-shard promotion.
-- Release readiness is now `READY`, with a real closed-test update manifest, committed license texts, and repo hygiene checks wired into CI and installer-bundle generation.
+- At the 2026-03-07 checkpoint, release readiness reached `READY`, with a real closed-test update manifest, committed license texts, and repo hygiene checks wired into CI and installer-bundle generation.
 - Repo hygiene is now clean: no repo-local signing-key artifact remains in source state, and `ops/repo_hygiene_check.py` returns `CLEAN`.
 - The bounded local operator action lane now covers disk inspection, approval-gated temp cleanup, process inspection, service/startup inspection, tool inventory reporting, approval-gated move/archive actions, and approval-gated calendar-event creation, with before/after verification where applicable and local procedure-shard promotion on verified side effects.
 - A single `system.local_only_mode` switch now disables web fallback, remote-only backend mode, remote model-provider selection, and API remote-fetch allowance.
@@ -294,7 +294,7 @@ Identified improvements for autonomous topic research and Hive research quality:
 - Local runtime summary currently reports `total_learning_shards: 0`, `local_generated_shards: 0`, and `peer_received_shards: 0`, so real learn-retain-reuse behavior is still unproven in live evidence.
 - Execution-path review found a real wiring defect, not just conservative policy: `sandbox_runner` calls `ExecutionGate.evaluate_command(...)`, but the gate currently exposes `evaluate(...)`.
 - Local provider summary currently exposes only `qwen-local` plus `cloud-fallback-http`, so heterogeneous inference in live runtime remains shallower than the architecture documents imply.
-- Release readiness still returns warnings because release artifacts and license texts remain placeholders and repo-local signing-key material still exists.
+- On 2026-03-06, release readiness still returned warnings because release artifacts and license texts were placeholders and repo-local signing-key material still existed.
 
 ## Audit Triage Notes (2026-03-05)
 

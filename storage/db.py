@@ -5,9 +5,11 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from core.runtime_paths import data_path
+from core.runtime_paths import DATA_DIR
 
-DEFAULT_DB_PATH = data_path("nulla_web0_v2.db")
+# Keep the default path import-safe; directory creation happens when the path is
+# first resolved for a real connection rather than as a side effect of import.
+DEFAULT_DB_PATH = str((DATA_DIR / "nulla_web0_v2.db").resolve())
 _DEFAULT_DB_PATH_OVERRIDE: str | None = None
 
 _thread_local = threading.local()

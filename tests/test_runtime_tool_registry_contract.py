@@ -15,3 +15,14 @@ def test_runtime_tool_specs_are_covered_by_capability_ledger() -> None:
     assert spec_intents
     assert len(spec_intents) == len(set(spec_intents))
     assert set(spec_intents).issubset(capability_intents)
+
+
+def test_runtime_tool_specs_expose_explicit_contract_shape() -> None:
+    specs = runtime_execution_tool_specs()
+
+    assert specs
+    for spec in specs:
+        assert isinstance(spec.get("intent"), str) and str(spec["intent"]).strip()
+        assert isinstance(spec.get("description"), str) and str(spec["description"]).strip()
+        assert isinstance(spec.get("read_only"), bool)
+        assert isinstance(spec.get("arguments"), dict)

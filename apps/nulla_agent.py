@@ -109,7 +109,6 @@ from network import signer as signer_mod
 from retrieval.swarm_query import dispatch_query_shard
 from retrieval.web_adapter import WebAdapter
 from storage.db import get_connection
-from storage.migrations import run_migrations
 
 _log = logging.getLogger(__name__)
 
@@ -225,9 +224,7 @@ class NullaAgent:
             level=str(policy_engine.get("observability.log_level", "INFO")),
             json_output=bool(policy_engine.get("observability.json_logs", True)),
         )
-        run_migrations()
         mark_stale_runtime_checkpoints_interrupted()
-        policy_engine.load(force_reload=True)
         ensure_memory_files()
         _ = load_active_persona(self.persona_id)
         self._sync_public_presence(status=self._idle_public_presence_status())
@@ -11401,11 +11398,13 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="Print full response payload as JSON.")
     args = parser.parse_args()
 
+    from core.runtime_bootstrap import bootstrap_runtime_environment, resolve_backend_selection
+
+    bootstrap_runtime_environment(force_policy_reload=True)
+
     backend_name = str(args.backend)
     device = str(args.device)
     if backend_name == "auto" or device == "auto":
-        from core.runtime_bootstrap import resolve_backend_selection
-
         selection = resolve_backend_selection()
         backend_name = backend_name if backend_name != "auto" else selection.backend_name
         device = device if device != "auto" else selection.device

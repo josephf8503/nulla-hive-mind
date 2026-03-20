@@ -11,6 +11,7 @@ def test_readme_frontloads_product_truth_and_install() -> None:
 
     assert "NULLA is a local-first AI agent" in early_block
     assert "Alpha truth:" in early_block
+    assert "Bootstrap install script:" in early_block
     assert "## Try It" in readme
     assert "docs/INSTALL.md" in readme
     assert "docs/STATUS.md" in readme
@@ -73,3 +74,15 @@ def test_root_handover_and_starter_kit_redirect_to_current_truth() -> None:
     assert "docs/INSTALL.md" in starter_kit
     assert "docs/STATUS.md" in starter_kit
     assert "docs/PROOF_PATH.md" in starter_kit
+
+
+def test_status_page_stays_honest_about_ci_and_proof_posture() -> None:
+    status_doc = (REPO_ROOT / "docs" / "STATUS.md").read_text(encoding="utf-8")
+    proof_doc = (REPO_ROOT / "docs" / "PROOF_PASS_REPORT.md").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "| **CI pipeline** | **Enforced** |" in status_doc
+    assert "check Actions for the latest branch conclusion" in status_doc
+    assert "INSTRUMENTED" in proof_doc
+    assert "READY TO RUN" not in proof_doc
+    assert 'description = "Nulla Hive Mind — local-first AI agent runtime with memory, tools, optional helpers, and visible proof"' in pyproject

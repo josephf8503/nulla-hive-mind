@@ -64,7 +64,6 @@ from network.transport import TransportRuntime, UDPTransportServer, send_message
 from retrieval.swarm_query import request_specific_shard
 from sandbox.helper_worker import run_task_capsule
 from storage.db import get_connection
-from storage.migrations import run_migrations
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -133,8 +132,6 @@ class NullaDaemon:
             level=str(policy_engine.get("observability.log_level", "INFO")),
             json_output=bool(policy_engine.get("observability.json_logs", True)),
         )
-        run_migrations()
-        policy_engine.load(force_reload=True)
         configured_worker_limit = int(
             self.config.local_worker_threads
             if self.config.local_worker_threads is not None
@@ -1541,6 +1538,10 @@ def main() -> int:
     parser.add_argument("--health-port", type=int, default=0)
     parser.add_argument("--health-token", default="")
     args = parser.parse_args()
+
+    from core.runtime_bootstrap import bootstrap_runtime_environment
+
+    bootstrap_runtime_environment(force_policy_reload=True)
 
     pool_hard_cap = max(1, int(policy_engine.get("orchestration.local_worker_pool_max", 10)))
     requested_capacity: int | None = None

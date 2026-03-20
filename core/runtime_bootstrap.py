@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from core import policy_engine
@@ -18,11 +19,15 @@ class RuntimeBackendSelection:
     hardware: Any
 
 
-def bootstrap_runtime_environment(*, force_policy_reload: bool = False) -> None:
+def bootstrap_storage_environment(*, db_path: str | Path | None = None) -> None:
     ensure_runtime_dirs()
-    run_migrations()
-    if not healthcheck():
+    run_migrations(db_path)
+    if not healthcheck(db_path):
         raise RuntimeError("Database healthcheck failed.")
+
+
+def bootstrap_runtime_environment(*, force_policy_reload: bool = False) -> None:
+    bootstrap_storage_environment()
     policy_engine.load(force_reload=force_policy_reload)
 
 

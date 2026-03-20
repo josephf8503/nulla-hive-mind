@@ -23,25 +23,25 @@ This report separates:
 
 | Proof Item | Status | Meaning |
 |---|---|---|
-| Cross-machine LAN full-cycle | READY TO RUN | The architecture supports it, but this report does not yet contain a completed evidence record. |
-| Kill-helper-mid-task recovery | READY TO RUN | Timeout and state transitions exist, but there is not yet a full live failure evidence record here. |
+| Cross-machine LAN full-cycle | INSTRUMENTED | The architecture supports it, but this report does not yet contain a completed evidence record. |
+| Kill-helper-mid-task recovery | INSTRUMENTED | Timeout and state transitions exist, but there is not yet a full live failure evidence record here. |
 | Conflicting helper outputs | PASS | Local verdict/conflict handling is covered by automated test evidence. |
 | Replay rejection | PASS | Local ledger receipt replay is covered and protocol/signed-write nonce replay is now covered by concurrent acceptance/rejection regression tests. |
 | Packet corruption / chunk integrity | PARTIAL | Chunk integrity and loss detection are covered locally; live retry behavior in the full running mesh is not yet recorded here. |
 | Sandbox boundary enforcement | PASS | Local execution boundary and network/workspace restrictions are covered by automated tests. |
 | Fraud trigger behavior | PASS | Local fraud/self-farm detection is covered by automated tests. |
-| Event chain integrity / tamper detection | READY TO RUN | Event chaining exists, but this report does not yet include a deliberate tamper proof record. |
-| Cross-machine knowledge advertisement | READY TO RUN | Presence and knowledge metadata are integrated, but live holder propagation is not yet evidenced here. |
-| Replica acquisition and re-advertisement | READY TO RUN | The holder and fetch model exists, but a live two-node replication proof is not yet recorded here. |
-| Presence lease expiry / offline prune | READY TO RUN | Lease expiry logic exists, but this report does not yet show an offline node being removed from the live map. |
-| Knowledge version update propagation | READY TO RUN | Versioned holder metadata exists, but live supersession behavior is not yet evidenced here. |
-| Knowledge resync after reconnect | READY TO RUN | The index is designed to recover, but a reconnect and resync trace is not yet recorded here. |
+| Event chain integrity / tamper detection | INSTRUMENTED | Event chaining exists, but this report does not yet include a deliberate tamper proof record. |
+| Cross-machine knowledge advertisement | INSTRUMENTED | Presence and knowledge metadata are integrated, but live holder propagation is not yet evidenced here. |
+| Replica acquisition and re-advertisement | INSTRUMENTED | The holder and fetch model exists, but a live two-node replication proof is not yet recorded here. |
+| Presence lease expiry / offline prune | INSTRUMENTED | Lease expiry logic exists, but this report does not yet show an offline node being removed from the live map. |
+| Knowledge version update propagation | INSTRUMENTED | Versioned holder metadata exists, but live supersession behavior is not yet evidenced here. |
+| Knowledge resync after reconnect | INSTRUMENTED | The index is designed to recover, but a reconnect and resync trace is not yet recorded here. |
 
 ## Environment
 
 The system under evaluation is the current local-first Decentralized NULLA codebase with:
 
-- current local/full-suite baseline (2026-03-20): `965 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning`,
+- current local/full-suite baseline (2026-03-20): `976 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning`,
 - standalone local mode preserved,
 - LAN mesh path preserved,
 - optional sidecars still optional,
@@ -74,7 +74,7 @@ Not yet recorded in this report.
 
 ### Verdict
 
-READY TO RUN
+INSTRUMENTED
 
 ### Follow-Up Action
 
@@ -108,7 +108,7 @@ Timeout-oriented state behavior is present at component level, but a live helper
 
 ### Verdict
 
-READY TO RUN
+INSTRUMENTED
 
 ### Follow-Up Action
 
@@ -289,7 +289,7 @@ The event log and event hash chain exist, but this report does not yet contain a
 
 ### Verdict
 
-READY TO RUN
+INSTRUMENTED
 
 ### Follow-Up Action
 

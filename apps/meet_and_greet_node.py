@@ -11,8 +11,8 @@ from core.logging_config import setup_logging
 from core.meet_and_greet_models import MeetNodeRegisterRequest
 from core.meet_and_greet_replication import MeetAndGreetReplicator, ReplicationConfig
 from core.meet_and_greet_service import MeetAndGreetConfig, MeetAndGreetService
+from core.runtime_bootstrap import bootstrap_storage_environment
 from core.runtime_guard import enforce_meet_public_deployment
-from storage.migrations import run_migrations
 
 
 @dataclass
@@ -69,7 +69,7 @@ class MeetAndGreetNode:
             level=str(policy_engine.get("observability.log_level", "INFO")),
             json_output=bool(policy_engine.get("observability.json_logs", True)),
         )
-        run_migrations()
+        bootstrap_storage_environment()
         enforce_meet_public_deployment(
             bind_host=self.config.bind_host,
             public_base_url=self.config.public_base_url,

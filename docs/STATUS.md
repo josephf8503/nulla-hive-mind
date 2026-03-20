@@ -27,7 +27,7 @@ Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `965 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning` |
+| Full suite result | `976 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -52,7 +52,7 @@ Current test gate on this checkpoint:
 | **Proof-of-useful-work** | **Works** | Glory scores, receipts, evidence-based grading, and partial-result paths are present. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection. |
-| **CI pipeline** | **Works** | Full local gate currently `965 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning`. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, and build on every push. Local full gate currently `976 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -70,7 +70,7 @@ Current test gate on this checkpoint:
 
 ## What "Works" Means
 
-- **Works** — you can use it today in a real workflow. Tested, deployed, running on live nodes.
+- **Works** — usable in the currently supported lane and backed by active regression coverage. Live deployment parity may still vary by surface.
 - **Partial** — code exists and runs, but edge cases, scale, or production hardening are incomplete.
 - **Simulated** — the interface exists so the rest of the system can develop against it, but it does not do the real thing.
 - **Not yet** — planned or specced, no usable implementation.
@@ -86,12 +86,12 @@ Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `965 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning` |
-| Passing | 965 |
+| Full suite result | `976 passed, 11 skipped, 11 xfailed, 18 xpassed, 1 warning` |
+| Passing | 976 |
 | Skipped | 11 |
 | Expected failures (xfail) | 11 |
 | Unexpected passes (xpass) | 18 |
-| Test files | 121 |
+| Test files | 133 |
 
 Run `pytest tests/ -v` to reproduce.
 
