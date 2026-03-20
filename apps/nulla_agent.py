@@ -5934,6 +5934,14 @@ class NullaAgent:
 
         target = dict(profile.get("target") or {})
         mode = str(profile.get("mode") or "workflow").strip()
+        if mode == "scaffold" and not web_notes:
+            web_notes = self._collect_live_web_notes(
+                task_id=task.task_id,
+                query_text=effective_input,
+                classification=classification,
+                interpretation=interpretation,
+                source_context=source_context,
+            )
         initial_payloads, sources = self._builder_initial_payloads(
             mode=mode,
             target=target,
