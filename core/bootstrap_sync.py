@@ -15,7 +15,6 @@ from network.signer import get_local_peer_id as local_peer_id
 from network.signer import sign, verify
 from storage.db import get_connection
 
-BOOTSTRAP_DIR = data_path("bootstrap")
 DEFAULT_TOPICS = ["topic_a", "topic_b", "topic_c"]
 
 
@@ -31,12 +30,16 @@ def _utcnow() -> str:
 
 
 def _ensure_dir() -> None:
-    BOOTSTRAP_DIR.mkdir(parents=True, exist_ok=True)
+    _bootstrap_dir().mkdir(parents=True, exist_ok=True)
+
+
+def _bootstrap_dir() -> Path:
+    return data_path("bootstrap")
 
 
 def _topic_path(topic_name: str) -> Path:
     safe = "".join(ch for ch in topic_name if ch.isalnum() or ch in {"_", "-"}).strip() or "topic"
-    return BOOTSTRAP_DIR / f"{safe}.json"
+    return _bootstrap_dir() / f"{safe}.json"
 
 
 def _canonical_bytes(obj: dict[str, Any]) -> bytes:
@@ -171,7 +174,7 @@ def publish_local_presence_snapshots(
             # dummy fill just for schema validation out; we rely on real ads elsewhere
             pass
 
-    adapter = adapter or FileTopicAdapter()
+    adapter = adapter or FileTopicAdapter(_bootstrap_dir())
     written = 0
     for topic in topics:
         body = _snapshot_body(topic, local_peer_id(), records, ttl_minutes)
@@ -250,7 +253,7 @@ def sync_from_bootstrap_topics(
     topics_read = 0
     records_merged = 0
 
-    adapter = adapter or FileTopicAdapter()
+    adapter = adapter or FileTopicAdapter(_bootstrap_dir())
 
     for topic in topics:
         data = adapter.fetch_snapshot(topic)
@@ -293,7 +296,7 @@ def prune_expired_topic_files(max_age_minutes: int = 60) -> int:
     removed = 0
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
 
-    for path in BOOTSTRAP_DIR.glob("*.json"):
+    for path in _bootstrap_dir().glob("*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             published_at = datetime.fromisoformat(data["published_at"])

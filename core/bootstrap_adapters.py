@@ -8,6 +8,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import data_path
+
 
 class BootstrapMirrorAdapter(ABC):
     @abstractmethod
@@ -20,8 +22,9 @@ class BootstrapMirrorAdapter(ABC):
 
 
 class FileTopicAdapter(BootstrapMirrorAdapter):
-    def __init__(self, base_dir: str = "./bootstrap") -> None:
-        self.base_dir = Path(base_dir).resolve()
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        target_dir = data_path("bootstrap") if base_dir is None else Path(base_dir)
+        self.base_dir = Path(target_dir).expanduser().resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def _topic_path(self, topic_name: str) -> Path:

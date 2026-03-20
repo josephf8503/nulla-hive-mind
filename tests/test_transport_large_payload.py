@@ -28,6 +28,7 @@ class TransportLargePayloadTests(unittest.TestCase):
             "system.udp_socket_buffer_bytes": 524288,
             "system.fragment_burst_packets": 1,
             "system.fragment_pause_seconds": 0.002,
+            "system.fragment_send_passes": 2,
             "system.require_mesh_encryption": False,
             "system.stream_tls_enabled": False,
             "system.stream_tls_certfile": "",
@@ -190,6 +191,38 @@ class TransportLargePayloadTests(unittest.TestCase):
             _configure_udp_socket_buffers(sock)
 
         self.assertEqual(sock.setsockopt.call_count, 2)
+
+    def test_fragment_retransmit_passes_do_not_duplicate_delivery(self) -> None:
+        received: list[bytes] = []
+        signal = threading.Event()
+
+        def _on_message(data: bytes, _addr: tuple[str, int]) -> None:
+            received.append(data)
+            signal.set()
+
+        server = UDPTransportServer(host="127.0.0.1", port=0, on_message=_on_message)
+        try:
+            with patch("network.stun_client.discover_public_endpoint", return_value=None), patch(
+                "network.transport.policy_engine.get",
+                side_effect=self._transport_policy,
+            ):
+                runtime = server.start()
+        except PermissionError:
+            self.skipTest("Local UDP socket binds are not permitted in this sandbox.")
+
+        try:
+            payload = b"Z" * 70000
+            with patch("network.transport._stream_enabled", return_value=False), patch(
+                "network.transport.policy_engine.get",
+                side_effect=self._transport_policy,
+            ):
+                ok = send_message("127.0.0.1", runtime.port, payload)
+            self.assertTrue(ok)
+            self.assertTrue(signal.wait(timeout=6.0))
+            time.sleep(0.2)
+            self.assertEqual(received, [payload])
+        finally:
+            server.stop()
 
 
 if __name__ == "__main__":

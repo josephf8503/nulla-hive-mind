@@ -86,6 +86,10 @@ def _fragment_pause_seconds() -> float:
     return max(0.0, float(policy_engine.get("system.fragment_pause_seconds", 0.002) or 0.0))
 
 
+def _fragment_send_passes() -> int:
+    return max(1, int(policy_engine.get("system.fragment_send_passes", 2) or 1))
+
+
 def _mesh_psk_bytes() -> bytes | None:
     raw = os.environ.get("NULLA_MESH_PSK_B64") or str(policy_engine.get("system.mesh_psk_b64", "") or "")
     raw = raw.strip()
@@ -261,6 +265,7 @@ class UDPTransportServer:
         self._transfer = TransferManager()
         self._frag_lock = threading.Lock()
         self._frag_buckets: dict[str, dict[str, object]] = {}
+        self._frag_completed: dict[str, float] = {}
         self._stop = threading.Event()
 
     def start(self) -> TransportRuntime:
@@ -435,6 +440,11 @@ class UDPTransportServer:
         timeout_seconds = max(1.0, _frag_timeout_seconds())
         bucket_limit = max(32, _frag_bucket_limit())
         with self._frag_lock:
+            stale_completed = [
+                tid for tid, completed_at in self._frag_completed.items() if now - completed_at > timeout_seconds
+            ]
+            for tid in stale_completed:
+                self._frag_completed.pop(tid, None)
             stale = [
                 tid
                 for tid, bucket in self._frag_buckets.items()
@@ -442,6 +452,8 @@ class UDPTransportServer:
             ]
             for tid in stale:
                 self._frag_buckets.pop(tid, None)
+            if transfer_id in self._frag_completed:
+                return None
             bucket = self._frag_buckets.get(transfer_id)
             if bucket is None:
                 if len(self._frag_buckets) >= bucket_limit:
@@ -457,6 +469,7 @@ class UDPTransportServer:
                 if len(chunks) == total:
                     out = b"".join(chunks[i] for i in range(total))
                     self._frag_buckets.pop(transfer_id, None)
+                    self._frag_completed[transfer_id] = now
                     if len(out) > _message_limit():
                         return None
                     return out
@@ -531,18 +544,22 @@ def _send_fragmented(host: str, port: int, payload: bytes, *, timeout_seconds: f
     transfer_id = uuid4().hex
     burst_packets = _fragment_burst_packets()
     pause_seconds = _fragment_pause_seconds()
+    send_passes = _fragment_send_passes()
     try:
         with _get_send_socket(timeout_seconds) as sock:
-            for index in range(total):
-                start = index * chunk_space
-                end = min(len(payload), start + chunk_space)
-                chunk = payload[start:end]
-                packet = _frag_header(transfer_id, index, total) + chunk
-                sent = sock.sendto(packet, (host, port))
-                if sent != len(packet):
-                    return False
-                if pause_seconds > 0 and index + 1 < total and (index + 1) % burst_packets == 0:
-                    time.sleep(pause_seconds)
+            for pass_index in range(send_passes):
+                for index in range(total):
+                    start = index * chunk_space
+                    end = min(len(payload), start + chunk_space)
+                    chunk = payload[start:end]
+                    packet = _frag_header(transfer_id, index, total) + chunk
+                    sent = sock.sendto(packet, (host, port))
+                    if sent != len(packet):
+                        return False
+                    if pause_seconds > 0 and index + 1 < total and (index + 1) % burst_packets == 0:
+                        time.sleep(pause_seconds)
+                if pass_index + 1 < send_passes and pause_seconds > 0:
+                    time.sleep(max(pause_seconds, 0.001))
         return True
     except Exception:
         return False
