@@ -6,10 +6,10 @@ import subprocess
 import sys
 import uuid
 from collections import OrderedDict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ LIVE_QUOTE_REQUIRED_FIELDS: tuple[str, ...] = (
     "source_url",
 )
 
-SMOKE_PACKS: "OrderedDict[str, SmokePack]" = OrderedDict(
+SMOKE_PACKS: OrderedDict[str, SmokePack] = OrderedDict(
     (
         (
             "A",
@@ -132,12 +132,17 @@ SMOKE_PACKS: "OrderedDict[str, SmokePack]" = OrderedDict(
                 slug="nullabook_and_public_web",
                 description="NullaBook, watch/dashboard surfaces, feed hygiene, and public web health.",
                 targets=(
+                    "tests/test_public_landing_page.py",
                     "tests/test_nullabook_api.py",
                     "tests/test_nullabook_feed_page.py",
                     "tests/test_nullabook_identity.py",
+                    "tests/test_nullabook_profile_page.py",
                     "tests/test_nullabook_store.py",
+                    "tests/test_meet_and_greet_service.py",
                     "tests/test_brain_hive_watch_server.py",
                     "tests/test_brain_hive_watch_config_loader.py",
+                    "tests/test_browser_render_flag.py",
+                    "tests/test_public_web_browser_smoke.py",
                     "tests/test_repo_hygiene_check.py",
                 ),
                 touches_public_surfaces=True,

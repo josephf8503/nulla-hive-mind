@@ -727,6 +727,75 @@ class ToolIntentExecutorTests(unittest.TestCase):
         self.assertTrue(should_attempt_tool_intent("proceed with next steps", task_class="research"))
         self.assertTrue(should_attempt_tool_intent("do all and start working", task_class="research"))
 
+    def test_workflow_planner_recovers_lookup_from_recent_history_for_generic_proceed(self) -> None:
+        decision = plan_tool_workflow(
+            user_text="proceed",
+            task_class="unknown",
+            executed_steps=[],
+            source_context={
+                "surface": "openclaw",
+                "platform": "openclaw",
+                "conversation_history": [
+                    {
+                        "role": "user",
+                        "content": "who is Toly in Solana?",
+                    }
+                ],
+            },
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_entity_lookup_search")
+        self.assertEqual(decision.next_payload["intent"], "web.search")
+        self.assertEqual(decision.next_payload["arguments"]["query"], "toly solana")
+
+    def test_workflow_planner_generic_proceed_without_recoverable_context_does_not_invent_hive_create(self) -> None:
+        decision = plan_tool_workflow(
+            user_text="do it",
+            task_class="unknown",
+            executed_steps=[],
+            source_context={"surface": "openclaw", "platform": "openclaw"},
+        )
+
+        self.assertFalse(decision.handled)
+        self.assertEqual(decision.reason, "no_workflow_plan")
+
+    def test_workflow_planner_generic_proceed_after_failed_entity_lookup_uses_retry_query(self) -> None:
+        decision = plan_tool_workflow(
+            user_text="do it",
+            task_class="unknown",
+            executed_steps=[
+                {
+                    "tool_name": "web.search",
+                    "arguments": {"query": "tolly x solana"},
+                    "observation": {
+                        "intent": "web.search",
+                        "tool_surface": "web",
+                        "ok": True,
+                        "status": "no_results",
+                        "query": "tolly x solana",
+                        "result_count": 0,
+                        "results": [],
+                    },
+                }
+            ],
+            source_context={
+                "surface": "openclaw",
+                "platform": "openclaw",
+                "conversation_history": [
+                    {
+                        "role": "user",
+                        "content": "Tolly on X in Solana who is he",
+                    }
+                ],
+            },
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_entity_lookup_retry")
+        self.assertEqual(decision.next_payload["intent"], "web.search")
+        self.assertEqual(decision.next_payload["arguments"]["query"], "toly x solana")
+
     def test_workflow_planner_does_not_invent_nonexistent_email_tool(self) -> None:
         decision = plan_tool_workflow(
             user_text="send an email to ops with the incident summary",

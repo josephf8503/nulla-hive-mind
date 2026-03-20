@@ -848,6 +848,46 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         self.assertIn("let activeTab = 'agents'", decoded)
         self.assertIn('href="/feed"', decoded)
 
+    def test_static_tasks_route_renders_tasks_surface(self) -> None:
+        response = resolve_static_route("/tasks")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("let activeTab = 'tasks'", decoded)
+        self.assertIn("No active tasks", decoded)
+
+    def test_static_proof_route_renders_proof_surface(self) -> None:
+        response = resolve_static_route("/proof")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("let activeTab = 'proof'", decoded)
+        self.assertIn("Verified work", decoded)
+
+    def test_static_agent_route_renders_profile_surface(self) -> None:
+        response = resolve_static_route("/agent/TestBot")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("/v1/nullabook/profile/", decoded)
+        self.assertIn("At a glance", decoded)
+
+    def test_static_task_route_renders_topic_surface(self) -> None:
+        response = resolve_static_route("/task/topic-123")
+        self.assertIsNotNone(response)
+        status_code, content_type, body = response or (500, "", b"")
+        self.assertEqual(status_code, 200)
+        self.assertIn("text/html", content_type)
+        decoded = body.decode("utf-8")
+        self.assertIn("/v1/hive/topics/topic-123", decoded)
+        self.assertIn("Agent work flow", decoded)
+
     def test_static_brain_hive_topic_detail_route_renders_html(self) -> None:
         response = resolve_static_route("/brain-hive/topic/topic-123")
         self.assertIsNotNone(response)
@@ -1004,8 +1044,8 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             )
             response = conn.getresponse()
             body = json.loads(response.read().decode("utf-8"))
-            self.assertEqual(response.status, 400)
-            self.assertIn("invalid request envelope", str(body.get("error") or "").lower())
+            self.assertEqual(response.status, 403)
+            self.assertIn("updated_by_agent_id", str(body.get("error") or "").lower())
             conn.close()
         finally:
             server.shutdown()
@@ -1042,8 +1082,8 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             )
             response = conn.getresponse()
             body = json.loads(response.read().decode("utf-8"))
-            self.assertEqual(response.status, 400)
-            self.assertIn("invalid request envelope", str(body.get("error") or "").lower())
+            self.assertEqual(response.status, 403)
+            self.assertIn("deleted_by_agent_id", str(body.get("error") or "").lower())
             conn.close()
         finally:
             server.shutdown()
@@ -1080,9 +1120,176 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             )
             response = conn.getresponse()
             body = json.loads(response.read().decode("utf-8"))
-            self.assertEqual(response.status, 400)
-            self.assertIn("invalid request envelope", str(body.get("error") or "").lower())
+            self.assertEqual(response.status, 403)
+            self.assertIn("author_agent_id", str(body.get("error") or "").lower())
             conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_http_server_rejects_spoofed_nullabook_register_actor(self) -> None:
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            spoofed_peer_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+            signed_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/nullabook/register",
+                payload={
+                    "peer_id": spoofed_peer_id,
+                    "handle": f"spoof_{uuid.uuid4().hex[:8]}",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/nullabook/register",
+                body=json.dumps(signed_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 403)
+            self.assertIn("peer_id", str(body.get("error") or "").lower())
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_http_server_rejects_nullabook_post_token_identity_mismatch(self) -> None:
+        from core.nullabook_identity import register_nullabook_account
+
+        local_peer_id = _signer_mod.get_local_peer_id()
+        local_reg = register_nullabook_account(f"owner_{uuid.uuid4().hex[:8]}", peer_id=local_peer_id)
+        other_reg = register_nullabook_account(
+            f"other_{uuid.uuid4().hex[:8]}",
+            peer_id=f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}",
+        )
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            mismatched_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/nullabook/post",
+                payload={
+                    "nullabook_peer_id": local_peer_id,
+                    "content": "Signed social post with mismatched token should fail.",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/nullabook/post",
+                body=json.dumps(mismatched_payload),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-NullaBook-Token": other_reg.token,
+                },
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 403)
+            self.assertIn("identity mismatch", str(body.get("error") or "").lower())
+            conn.close()
+
+            valid_payload = _api_write_auth_mod.build_signed_write_envelope(
+                target_path="/v1/nullabook/post",
+                payload={
+                    "nullabook_peer_id": local_peer_id,
+                    "content": "Signed social post with matching token should pass.",
+                },
+            )
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request(
+                "POST",
+                "/v1/nullabook/post",
+                body=json.dumps(valid_payload),
+                headers={
+                    "Content-Type": "application/json",
+                    "X-NullaBook-Token": local_reg.token,
+                },
+            )
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 200)
+            self.assertTrue(body["ok"])
+            self.assertEqual(body["result"]["peer_id"], local_peer_id)
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_http_server_rejects_spoofed_nullabook_edit_and_delete_actor(self) -> None:
+        from core.nullabook_identity import register_nullabook_account
+        from storage.nullabook_store import create_post
+
+        local_peer_id = _signer_mod.get_local_peer_id()
+        reg = register_nullabook_account(f"editor_{uuid.uuid4().hex[:8]}", peer_id=local_peer_id)
+        post = create_post(local_peer_id, reg.profile.handle, "Original social post.")
+        try:
+            server = _server_mod.build_server(
+                _server_mod.MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            spoofed_peer_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+            for suffix, payload in (
+                (
+                    "edit",
+                    {
+                        "nullabook_peer_id": spoofed_peer_id,
+                        "content": "Hacked content",
+                    },
+                ),
+                (
+                    "delete",
+                    {
+                        "nullabook_peer_id": spoofed_peer_id,
+                    },
+                ),
+            ):
+                with self.subTest(route=suffix):
+                    signed_payload = _api_write_auth_mod.build_signed_write_envelope(
+                        target_path=f"/v1/nullabook/post/{post.post_id}/{suffix}",
+                        payload=payload,
+                    )
+                    conn = http.client.HTTPConnection(host, port, timeout=5)
+                    conn.request(
+                        "POST",
+                        f"/v1/nullabook/post/{post.post_id}/{suffix}",
+                        body=json.dumps(signed_payload),
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-NullaBook-Token": reg.token,
+                        },
+                    )
+                    response = conn.getresponse()
+                    body = json.loads(response.read().decode("utf-8"))
+                    self.assertEqual(response.status, 403)
+                    self.assertIn("nullabook_peer_id", str(body.get("error") or "").lower())
+                    conn.close()
         finally:
             server.shutdown()
             server.server_close()
@@ -1422,6 +1629,72 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2.0)
 
+    def test_http_server_head_supports_health_and_static_routes(self) -> None:
+        try:
+            server = build_server(
+                MeetAndGreetServerConfig(host="127.0.0.1", port=0, require_signed_writes=False),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request("HEAD", "/v1/health")
+            response = conn.getresponse()
+            body = response.read()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(body, b"")
+            self.assertGreater(int(response.getheader("Content-Length") or "0"), 0)
+            conn.close()
+
+            conn = http.client.HTTPConnection(host, port, timeout=5)
+            conn.request("HEAD", "/feed")
+            response = conn.getresponse()
+            body = response.read()
+            self.assertEqual(response.status, 200)
+            self.assertEqual(body, b"")
+            self.assertGreater(int(response.getheader("Content-Length") or "0"), 0)
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+    def test_public_http_server_blocks_metrics_for_get_and_head(self) -> None:
+        try:
+            server = build_server(
+                MeetAndGreetServerConfig(host="0.0.0.0", port=0, auth_token="test-token", require_signed_writes=True),
+                service=self.service,
+            )
+        except PermissionError:
+            self.skipTest("Local socket binds are not permitted in this sandbox.")
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            _host, port = server.server_address
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("GET", "/metrics", headers={"X-Nulla-Meet-Token": "test-token"})
+            response = conn.getresponse()
+            body = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(response.status, 403)
+            self.assertIn("metrics", str(body.get("error") or "").lower())
+            conn.close()
+
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("HEAD", "/metrics", headers={"X-Nulla-Meet-Token": "test-token"})
+            response = conn.getresponse()
+            body = response.read()
+            self.assertEqual(response.status, 403)
+            self.assertEqual(body, b"")
+            conn.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
     def test_metrics_snapshot_route_and_prometheus_export(self) -> None:
         metrics = MeetMetricsCollector()
         metrics.record(method="GET", path="/v1/health", status_code=200, latency_ms=3.5)
@@ -1487,6 +1760,9 @@ def _clear_meet_tables() -> None:
             "meet_nodes",
             "meet_sync_state",
             "payment_status",
+            "nullabook_tokens",
+            "nullabook_posts",
+            "nullabook_profiles",
             "agent_capabilities",
             "peers",
             "peer_endpoints",

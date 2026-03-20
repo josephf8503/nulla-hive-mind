@@ -429,6 +429,111 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
     class Handler(BaseHTTPRequestHandler):
         server_version = "NullaBrainHiveWatch/0.1"
 
+        def do_HEAD(self) -> None:
+            parsed = urlparse(self.path)
+            clean_path = parsed.path.rstrip("/") or "/"
+            qs = parse_qs(parsed.query or "")
+            post_id = str((qs.get("post") or [""])[0]).strip()
+            nullabook_surface_by_path = {
+                "/nullabook": "feed",
+                "/feed": "feed",
+                "/tasks": "tasks",
+                "/agents": "agents",
+                "/proof": "proof",
+            }
+            if clean_path in nullabook_surface_by_path or (clean_path == "/" and post_id):
+                from core.nullabook_feed_page import render_nullabook_page_html
+
+                og_kw: dict[str, str] = {
+                    "initial_tab": nullabook_surface_by_path.get(clean_path, "feed")
+                }
+                body = render_nullabook_page_html(**og_kw).encode("utf-8")
+                self._write_bytes(200, "text/html; charset=utf-8", b"", write_body=False, content_length=len(body))
+                return
+            if clean_path == "/":
+                body = render_public_landing_page_html().encode("utf-8")
+                self._write_bytes(200, "text/html; charset=utf-8", b"", write_body=False, content_length=len(body))
+                return
+            if clean_path in {"/brain-hive", "/hive"}:
+                body = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task").encode("utf-8")
+                self._write_bytes(
+                    200,
+                    "text/html; charset=utf-8",
+                    b"",
+                    headers={
+                        "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
+                        "X-Nulla-Workstation-Surface": "brain-hive",
+                    },
+                    write_body=False,
+                    content_length=len(body),
+                )
+                return
+            if clean_path.startswith("/agent/"):
+                from core.nullabook_profile_page import render_nullabook_profile_page_html
+
+                handle = unquote(clean_path.removeprefix("/agent/").strip("/"))
+                if handle:
+                    body = render_nullabook_profile_page_html(handle=handle).encode("utf-8")
+                    self._write_bytes(200, "text/html; charset=utf-8", b"", write_body=False, content_length=len(body))
+                    return
+            if clean_path.startswith("/task/"):
+                topic_id = unquote(clean_path.removeprefix("/task/").strip("/"))
+                if topic_id:
+                    body = render_topic_detail_html(
+                        topic_api_endpoint=f"/api/topic/{topic_id}",
+                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
+                    ).encode("utf-8")
+                    self._write_bytes(
+                        200,
+                        "text/html; charset=utf-8",
+                        b"",
+                        headers={
+                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
+                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
+                        },
+                        write_body=False,
+                        content_length=len(body),
+                    )
+                    return
+            if clean_path.startswith("/brain-hive/topic/"):
+                topic_id = unquote(clean_path.removeprefix("/brain-hive/topic/").strip("/"))
+                if topic_id:
+                    body = render_topic_detail_html(
+                        topic_api_endpoint=f"/api/topic/{topic_id}",
+                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
+                    ).encode("utf-8")
+                    self._write_bytes(
+                        200,
+                        "text/html; charset=utf-8",
+                        b"",
+                        headers={
+                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
+                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
+                        },
+                        write_body=False,
+                        content_length=len(body),
+                    )
+                    return
+            if clean_path == "/health":
+                body = json.dumps(
+                    {
+                        "ok": True,
+                        "result": {
+                            "service": "brain_hive_watch",
+                            "upstream_count": len(cfg.upstream_base_urls),
+                        },
+                        "error": None,
+                    },
+                    sort_keys=True,
+                ).encode("utf-8")
+                self._write_bytes(200, "application/json", b"", write_body=False, content_length=len(body))
+                return
+            if clean_path == "/api/dashboard":
+                body = json.dumps({"ok": True, "result": None, "error": None}, sort_keys=True).encode("utf-8")
+                self._write_bytes(200, "application/json", b"", write_body=False, content_length=len(body))
+                return
+            self._write_bytes(404, "text/html; charset=utf-8", b"", write_body=False)
+
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             clean_path = parsed.path.rstrip("/") or "/"
@@ -672,10 +777,12 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
             body: bytes,
             *,
             headers: dict[str, str] | None = None,
+            write_body: bool = True,
+            content_length: int | None = None,
         ) -> None:
             self.send_response(status_code)
             self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Length", str(len(body) if content_length is None else int(content_length)))
             self.send_header("Cache-Control", "no-store, must-revalidate")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("X-Content-Type-Options", "nosniff")
@@ -689,7 +796,8 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
             for name, value in dict(headers or {}).items():
                 self.send_header(name, value)
             self.end_headers()
-            self.wfile.write(body)
+            if write_body:
+                self.wfile.write(body)
 
     server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
     tls_context = _build_tls_context(cfg)

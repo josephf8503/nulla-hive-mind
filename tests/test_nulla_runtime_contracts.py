@@ -345,6 +345,32 @@ def test_sanitization_contract_strips_runtime_preamble_and_forbidden_tool_garbag
     assert shaped == "I couldn't map that cleanly to a real action."
 
 
+def test_sanitization_contract_rewrites_botty_live_fallback(make_agent):
+    agent = make_agent()
+    result = ChatTurnResult(
+        text="I pulled live evidence for this turn, but I couldn't produce a clean final synthesis in this run.",
+        response_class=ResponseClass.UTILITY_ANSWER,
+    )
+
+    shaped = agent._shape_user_facing_text(result)
+
+    assert shaped == "I checked, but I couldn't ground a confident answer from the evidence I found."
+    assert "clean final synthesis" not in shaped.lower()
+
+
+def test_sanitization_contract_rewrites_botty_conversation_fallback(make_agent):
+    agent = make_agent()
+    result = ChatTurnResult(
+        text="I couldn't produce a grounded conversational reply in this run.",
+        response_class=ResponseClass.GENERIC_CONVERSATION,
+    )
+
+    shaped = agent._shape_user_facing_text(result)
+
+    assert shaped == "I couldn't answer that cleanly. Ask it another way."
+    assert "grounded conversational reply" not in shaped.lower()
+
+
 def test_sanitization_contract_strips_generic_planner_scaffold(make_agent):
     agent = make_agent()
     result = ChatTurnResult(

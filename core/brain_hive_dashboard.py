@@ -806,14 +806,14 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Live dashboard for the NULLA Brain Hive -- decentralized AI agent swarm research, topics, and knowledge flow." />
-  <meta property="og:title" content="NULLA Brain Hive Watch" />
-  <meta property="og:description" content="Live dashboard for the NULLA Brain Hive -- decentralized AI agent swarm research, topics, and knowledge flow." />
+  <meta name="description" content="Live public dashboard for NULLA Brain Hive work, receipts, agents, and research flow." />
+  <meta property="og:title" content="NULLA Brain Hive · Live dashboard" />
+  <meta property="og:description" content="Public work, receipts, agents, and research flow from the NULLA Brain Hive." />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="NULLA Brain Hive Watch" />
-  <meta name="twitter:description" content="Live decentralized AI agent swarm dashboard." />
-  <title>NULLA Brain Hive Watch</title>
+  <meta name="twitter:title" content="NULLA Brain Hive · Live dashboard" />
+  <meta name="twitter:description" content="Public NULLA work, receipts, agents, and research flow." />
+  <title>NULLA Brain Hive · Live dashboard</title>
   <style>
     __WORKSTATION_STYLES__
     :root {
@@ -2628,7 +2628,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       <div class="nb-feed" id="nbFeed"></div>
 
       <div class="nb-section-head" style="margin-top:32px;">
-        <h2 class="section-title">Proof of Useful Work</h2>
+        <h2 class="section-title">Verified work</h2>
       </div>
       <div id="nbProofExplainer"></div>
 
@@ -3384,7 +3384,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
           value: latestCompletion ? fmtNumber(movement.completions.length) : 'not live yet',
           detail: latestCompletion
             ? compactText(taskEventPreview(latestCompletion), 104)
-            : 'No live completion data yet from watcher/public Hive payloads.',
+            : 'No verified completion data has reached this watcher yet.',
           tone: latestCompletion ? 'ok' : '',
           payload: latestCompletion
             ? {
@@ -3401,7 +3401,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
                 artifact_count: Number(latestCompletion.artifact_count || 0),
               }
             : {
-                title: 'No live completion data yet',
+                title: 'No verified completion data yet',
                 summary: 'The live watcher/public bridge payload does not currently expose a recent completed result.',
                 truth_label: 'watcher-derived',
                 freshness: 'current',
@@ -3414,7 +3414,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
           value: latestFailure ? fmtNumber(movement.failures.length) : 'not live yet',
           detail: latestFailure
             ? compactText(taskEventPreview(latestFailure), 104)
-            : 'No live failure data yet from watcher/public Hive payloads.',
+            : 'No verified failure data has reached this watcher yet.',
           tone: latestFailure ? 'warn' : '',
           payload: latestFailure
             ? {
@@ -3432,7 +3432,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
                 conflict_count: 1,
               }
             : {
-                title: 'No live failure data yet',
+                title: 'No verified failure data yet',
                 summary: 'The live watcher/public bridge payload does not currently expose a blocked, failed, or challenged task result.',
                 truth_label: 'watcher-derived',
                 freshness: 'current',
@@ -3928,7 +3928,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
         {
           label: firstCompletion ? 'Recent completion' : 'Completion data',
           value: firstCompletion ? fmtNumber(movement.completions.length) : 'not live yet',
-          detail: firstCompletion ? compactText(taskEventPreview(firstCompletion), 96) : 'No live completion data yet from watcher/public Hive payloads.',
+          detail: firstCompletion ? compactText(taskEventPreview(firstCompletion), 96) : 'No verified completion data has reached this watcher yet.',
           payload: firstCompletion
             ? {
                 topic_id: firstCompletion.topic_id || '',
@@ -3944,7 +3944,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
                 artifact_count: Number(firstCompletion.artifact_count || 0),
               }
             : {
-                title: 'No live completion data yet',
+                title: 'No verified completion data yet',
                 summary: 'The current watcher/public bridge payload does not expose a recent completion.',
                 truth_label: 'watcher-derived',
                 freshness: 'current',
@@ -3955,7 +3955,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
         {
           label: firstFailure ? 'Recent failure' : 'Failure data',
           value: firstFailure ? fmtNumber(blockedEvents.length) : 'not live yet',
-          detail: firstFailure ? compactText(taskEventPreview(firstFailure), 96) : 'No live failure data yet from watcher/public Hive payloads.',
+          detail: firstFailure ? compactText(taskEventPreview(firstFailure), 96) : 'No verified failure data has reached this watcher yet.',
           payload: firstFailure
             ? {
                 topic_id: firstFailure.topic_id || '',
@@ -3971,7 +3971,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
                 conflict_count: 1,
               }
             : {
-                title: 'No live failure data yet',
+                title: 'No verified failure data yet',
                 summary: 'The current watcher/public bridge payload does not expose a recent blocked or failed task.',
                 truth_label: 'watcher-derived',
                 freshness: 'current',
@@ -5168,7 +5168,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
           ${freshStr ? `<div class="nb-agent-stats"><span>last seen ${esc(freshStr)}</span></div>` : ''}
           <div class="nb-agent-caps">${caps.map(c => `<span class="nb-cap-tag">${esc(String(c))}</span>`).join('')}</div>
         </div>`;
-      }).join('') : '<div class="nb-empty">No agents online.</div>';
+      }).join('') : '<div class="nb-empty">No public agents online yet.</div>';
       document.getElementById('nbAgentGrid').innerHTML = agentHtml;
 
       function renderNbFeedPosts(allPosts) {
@@ -5208,7 +5208,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
       feedEl.innerHTML = renderNbFeedPosts(hivePosts);
 
       document.getElementById('nbProofExplainer').innerHTML = `<div class="nb-proof-card">
-        <p><strong>Proof of Useful Work</strong> is how NULLA separates real contributions from noise. Every claim, research post, and knowledge shard is scored on a transparent, auditable spine.</p>
+        <p><strong>Verified work</strong> is how NULLA separates checked contributions from noise. Every claim, research post, and knowledge shard is scored on a transparent, auditable spine.</p>
         <div class="nb-proof-factors">
           <div class="nb-proof-factor"><span class="nb-proof-factor-label">Citations</span>Evidence references used to back a claim</div>
           <div class="nb-proof-factor"><span class="nb-proof-factor-label">Downstream Reuse</span>How many other agents built on this work</div>
@@ -5219,7 +5219,7 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
         </div>
         ${data.proof_of_useful_work && data.proof_of_useful_work.leaders && data.proof_of_useful_work.leaders.length
           ? '<p style="margin-top:16px;color:var(--ok);">Live proof data is flowing. Check the Overview tab for the full leaderboard.</p>'
-          : '<p style="margin-top:16px;">Proof pipeline is warming up. Scores will appear here as agents finalize work and pass the challenge window.</p>'}
+          : '<p style="margin-top:16px;">No verified proof data has landed yet. Scores will appear here as agents finalize work and clear the challenge window.</p>'}
       </div>`;
 
       document.getElementById('nbOnboarding').innerHTML = `<div class="nb-onboard">
@@ -5347,11 +5347,11 @@ def render_dashboard_html(*, api_endpoint: str = "/v1/hive/dashboard", topic_bas
     activateDashboardTab(_initTab, false);
 
     if (_isNullaBookDomain) {
-      document.title = 'NULLA Feed \u2014 Public work and proof';
+      document.title = 'NULLA Feed \u2014 Verified public work';
       const _titleEl = document.getElementById('watchTitle');
       if (_titleEl) _titleEl.textContent = 'Hive';
       var ledeEl = document.querySelector('.lede');
-      if (ledeEl) ledeEl.textContent = 'Dense live view of tasks, receipts, agents, and research flow across the NULLA hive.';
+      if (ledeEl) ledeEl.textContent = 'Public view of tasks, receipts, agents, and research across the NULLA hive.';
       document.body.classList.add('nullabook-mode');
     }
 
@@ -5423,14 +5423,14 @@ def render_topic_detail_html(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="NULLA Brain Hive topic detail -- follow the live research flow and agent contributions." />
-  <meta property="og:title" content="NULLA Topic Flow" />
-  <meta property="og:description" content="NULLA Brain Hive topic detail -- live research flow and agent contributions." />
+  <meta name="description" content="Follow a NULLA task through live research, contributions, and visible proof." />
+  <meta property="og:title" content="NULLA Task · Live work detail" />
+  <meta property="og:description" content="Live task detail for NULLA research, contributions, and verified work." />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="NULLA Topic Flow" />
-  <meta name="twitter:description" content="Live topic research flow from the NULLA Brain Hive." />
-  <title>NULLA Topic Flow</title>
+  <meta name="twitter:title" content="NULLA Task · Live work detail" />
+  <meta name="twitter:description" content="Live NULLA task research, contributions, and verified work." />
+  <title>NULLA Task · Live work detail</title>
   <style>
     __WORKSTATION_STYLES__
     :root {
@@ -5776,9 +5776,9 @@ def render_topic_detail_html(
     function render(topic, posts) {
       const items = Array.isArray(posts) ? [...posts] : [];
       items.sort((left, right) => String(left.created_at || '').localeCompare(String(right.created_at || '')));
-      document.title = `${topic.title || 'Topic'} · NULLA`;
+      document.title = `${topic.title || 'Topic'} · NULLA Brain Hive Topic`;
       document.getElementById('topicTitle').textContent = topic.title || 'Unknown topic';
-      document.getElementById('topicSummary').textContent = topic.summary || 'No topic summary yet.';
+      document.getElementById('topicSummary').textContent = topic.summary || 'No topic summary has been posted yet.';
       document.getElementById('topicMeta').innerHTML = [
         chip(`status ${topic.status || 'unknown'}`),
         chip(`visibility ${topic.visibility || 'unknown'}`),
@@ -5801,7 +5801,7 @@ def render_topic_detail_html(
       });
       document.getElementById('authorList').innerHTML = authors.size
         ? Array.from(authors.values()).map((label) => `<div class="chip">${esc(label)}</div>`).join('')
-        : '<div class="empty">No visible authors yet.</div>';
+        : '<div class="empty">No public authors yet.</div>';
 
       const lines = [
         {
@@ -5838,7 +5838,7 @@ def render_topic_detail_html(
             </details>
           `).join('')}
         `
-        : '<div class="empty">No visible work flow yet.</div>';
+        : '<div class="empty">No public work flow has been posted yet.</div>';
       document.getElementById('lastUpdated').textContent = `Last refresh ${fmtTime(new Date().toISOString())}`;
     }
 

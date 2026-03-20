@@ -356,7 +356,7 @@ HONEST_DEGRADATION_CASES = (
             confidence=0.84,
             trust_score=0.84,
         ),
-        "remembered text as a fresh answer",
+        "could not ground a current answer confidently",
     ),
 )
 

@@ -1268,21 +1268,26 @@ class PublicHiveBridge:
 
 def load_public_hive_bridge_config() -> PublicHiveBridgeConfig:
     ensure_public_hive_agent_bootstrap()
-    raw = _load_agent_bootstrap()
+    runtime = _load_json_file(config_path("agent-bootstrap.json"))
+    sample = _load_agent_bootstrap(include_runtime=False)
     discovered = _discover_local_cluster_bootstrap(project_root=PROJECT_ROOT)
     env_urls = _split_csv(os.environ.get("NULLA_MEET_SEED_URLS", ""))
-    raw_seed_urls = [str(url).strip() for url in list(raw.get("meet_seed_urls") or []) if str(url).strip()]
-    seed_urls = tuple(env_urls or raw_seed_urls or list(discovered.get("meet_seed_urls") or []))
-    auth_tokens_by_base_url = _merge_auth_tokens_by_base_url(raw)
-    if not auth_tokens_by_base_url:
-        auth_tokens_by_base_url = dict(discovered.get("auth_tokens_by_base_url") or {})
-    write_grants_by_base_url = _merge_write_grants_by_base_url(raw)
+    runtime_seed_urls = [str(url).strip() for url in list(runtime.get("meet_seed_urls") or []) if str(url).strip()]
+    sample_seed_urls = [str(url).strip() for url in list(sample.get("meet_seed_urls") or []) if str(url).strip()]
+    seed_urls = tuple(env_urls or runtime_seed_urls or sample_seed_urls or list(discovered.get("meet_seed_urls") or []))
+    env_auth_tokens_by_base_url = _json_env_object(os.environ.get("NULLA_MEET_AUTH_TOKENS_JSON", ""))
+    auth_tokens_by_base_url = env_auth_tokens_by_base_url or _merge_auth_tokens_by_base_url(runtime)
+    env_write_grants_by_base_url = _json_env_write_grants(os.environ.get("NULLA_MEET_WRITE_GRANTS_JSON", ""))
+    write_grants_by_base_url = env_write_grants_by_base_url or _merge_write_grants_by_base_url(runtime)
     if not write_grants_by_base_url:
-        write_grants_by_base_url = dict(discovered.get("write_grants_by_base_url") or {})
+        write_grants_by_base_url = _merge_write_grants_by_base_url(sample)
     env_auth_token = _clean_token(str(os.environ.get("NULLA_MEET_AUTH_TOKEN", "")).strip())
-    raw_auth_token = _clean_token(str(raw.get("auth_token") or "").strip()) or _clean_token(
-        str(discovered.get("auth_token") or "").strip()
-    )
+    raw_auth_token = _clean_token(str(runtime.get("auth_token") or "").strip())
+    env_tls_insecure = str(os.environ.get("NULLA_MEET_TLS_INSECURE_SKIP_VERIFY") or "").strip().lower()
+    if env_tls_insecure:
+        tls_insecure_skip_verify = env_tls_insecure in {"1", "true", "yes", "on"}
+    else:
+        tls_insecure_skip_verify = bool(runtime.get("tls_insecure_skip_verify", False))
     enabled_raw = str(os.environ.get("NULLA_PUBLIC_HIVE_ENABLED", "1")).strip().lower()
     enabled = enabled_raw not in {"0", "false", "no", "off"} and bool(seed_urls)
     topic_target_url = seed_urls[0] if seed_urls else None
@@ -1292,17 +1297,24 @@ def load_public_hive_bridge_config() -> PublicHiveBridgeConfig:
         topic_target_url=topic_target_url,
         home_region=str(
             os.environ.get("NULLA_HOME_REGION")
-            or raw.get("home_region")
+            or runtime.get("home_region")
             or discovered.get("home_region")
+            or sample.get("home_region")
             or "global"
         ).strip()
         or "global",
-        request_timeout_seconds=max(3, int(float(os.environ.get("NULLA_MEET_TIMEOUT_SECONDS") or raw.get("request_timeout_seconds") or 8))),
+        request_timeout_seconds=max(3, int(float(os.environ.get("NULLA_MEET_TIMEOUT_SECONDS") or runtime.get("request_timeout_seconds") or sample.get("request_timeout_seconds") or 8))),
         auth_token=env_auth_token or raw_auth_token,
         auth_tokens_by_base_url=auth_tokens_by_base_url,
         write_grants_by_base_url=write_grants_by_base_url,
-        tls_ca_file=str(raw.get("tls_ca_file") or discovered.get("tls_ca_file") or "").strip() or None,
-        tls_insecure_skip_verify=bool(raw.get("tls_insecure_skip_verify", discovered.get("tls_insecure_skip_verify", False))),
+        tls_ca_file=str(
+            os.environ.get("NULLA_MEET_TLS_CA_FILE")
+            or runtime.get("tls_ca_file")
+            or discovered.get("tls_ca_file")
+            or sample.get("tls_ca_file")
+            or ""
+        ).strip() or None,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
     )
 
 
@@ -1315,30 +1327,30 @@ def ensure_public_hive_agent_bootstrap() -> Path | None:
     auth_token = _clean_token(str(os.environ.get("NULLA_MEET_AUTH_TOKEN", "")).strip())
     auth_tokens_by_base_url = _json_env_object(os.environ.get("NULLA_MEET_AUTH_TOKENS_JSON", ""))
     write_grants_by_base_url = _json_env_write_grants(os.environ.get("NULLA_MEET_WRITE_GRANTS_JSON", ""))
-    raw = _load_agent_bootstrap(include_runtime=False)
+    sample = _load_agent_bootstrap(include_runtime=False)
     discovered = _discover_local_cluster_bootstrap(project_root=PROJECT_ROOT)
-    raw_seed_urls = [str(url).strip() for url in list(raw.get("meet_seed_urls") or []) if str(url).strip()]
-    resolved_seed_urls = seed_urls or raw_seed_urls or list(discovered.get("meet_seed_urls") or [])
+    sample_seed_urls = [str(url).strip() for url in list(sample.get("meet_seed_urls") or []) if str(url).strip()]
+    resolved_seed_urls = seed_urls or sample_seed_urls or list(discovered.get("meet_seed_urls") or [])
     if not resolved_seed_urls:
         return None
 
     payload: dict[str, Any] = {
         "home_region": str(
             os.environ.get("NULLA_HOME_REGION")
-            or raw.get("home_region")
+            or sample.get("home_region")
             or discovered.get("home_region")
             or "global"
         ).strip()
         or "global",
         "meet_seed_urls": resolved_seed_urls,
-        "prefer_home_region_first": bool(raw.get("prefer_home_region_first", True)),
-        "cross_region_summary_only": bool(raw.get("cross_region_summary_only", True)),
-        "allow_local_fallback": bool(raw.get("allow_local_fallback", True)),
-        "keep_local_cache": bool(raw.get("keep_local_cache", True)),
+        "prefer_home_region_first": bool(sample.get("prefer_home_region_first", True)),
+        "cross_region_summary_only": bool(sample.get("cross_region_summary_only", True)),
+        "allow_local_fallback": bool(sample.get("allow_local_fallback", True)),
+        "keep_local_cache": bool(sample.get("keep_local_cache", True)),
     }
     resolved_tls_ca_file = str(
         os.environ.get("NULLA_MEET_TLS_CA_FILE")
-        or raw.get("tls_ca_file")
+        or sample.get("tls_ca_file")
         or discovered.get("tls_ca_file")
         or ""
     ).strip()
@@ -1346,22 +1358,16 @@ def ensure_public_hive_agent_bootstrap() -> Path | None:
         payload["tls_ca_file"] = resolved_tls_ca_file
     resolved_tls_insecure = str(
         os.environ.get("NULLA_MEET_TLS_INSECURE_SKIP_VERIFY")
-        or raw.get("tls_insecure_skip_verify")
-        or discovered.get("tls_insecure_skip_verify")
         or ""
     ).strip().lower()
     if resolved_tls_insecure in {"1", "true", "yes", "on"}:
         payload["tls_insecure_skip_verify"] = True
-    resolved_auth_token = auth_token or _clean_token(str(discovered.get("auth_token") or "").strip())
-    if resolved_auth_token:
-        payload["auth_token"] = resolved_auth_token
-    merged_auth_tokens = _merge_auth_tokens_by_base_url(raw)
-    merged_auth_tokens.update(dict(discovered.get("auth_tokens_by_base_url") or {}))
-    merged_auth_tokens.update(auth_tokens_by_base_url)
+    if auth_token:
+        payload["auth_token"] = auth_token
+    merged_auth_tokens = dict(auth_tokens_by_base_url)
     if merged_auth_tokens:
         payload["auth_tokens_by_base_url"] = merged_auth_tokens
-    merged_write_grants = _merge_write_grants_by_base_url(raw)
-    merged_write_grants.update(dict(discovered.get("write_grants_by_base_url") or {}))
+    merged_write_grants = _merge_write_grants_by_base_url(sample)
     merged_write_grants.update(write_grants_by_base_url)
     if merged_write_grants:
         payload["write_grants_by_base_url"] = merged_write_grants
@@ -1458,7 +1464,6 @@ def write_public_hive_agent_bootstrap(
         for base, token in dict(payload.get("auth_tokens_by_base_url") or {}).items()
         if str(base).strip() and _clean_token(str(token or "").strip())
     }
-    merged_tokens.update(dict(discovered.get("auth_tokens_by_base_url") or {}))
     for base, token in dict(auth_tokens_by_base_url or {}).items():
         normalized = _normalize_base_url(str(base or "").strip())
         clean_token = _clean_token(str(token or "").strip())
@@ -1756,6 +1761,8 @@ def ensure_public_hive_auth(
     bundled = _load_json_file(root / "config" / "agent-bootstrap.json")
     discovered = _discover_local_cluster_bootstrap(project_root=root)
     sample = _load_agent_bootstrap(include_runtime=False)
+    env_auth_token = _clean_token(str(os.environ.get("NULLA_MEET_AUTH_TOKEN", "")).strip())
+    env_auth_tokens_by_base_url = _json_env_object(os.environ.get("NULLA_MEET_AUTH_TOKENS_JSON", ""))
 
     seed_urls = [
         str(url).strip()
@@ -1772,12 +1779,13 @@ def ensure_public_hive_auth(
         return {"ok": True, "status": "disabled", "seed_count": 0, "target_path": str(destination)}
 
     merged_auth_tokens: dict[str, str] = {}
-    for payload in (sample, discovered, bundled, existing):
+    for payload in (bundled, existing):
         for base, token in dict(payload.get("auth_tokens_by_base_url") or {}).items():
             normalized = _normalize_base_url(str(base or "").strip())
             clean_token = _clean_token(str(token or "").strip())
             if normalized and clean_token:
                 merged_auth_tokens[normalized] = clean_token
+    merged_auth_tokens.update(env_auth_tokens_by_base_url)
     merged_write_grants: dict[str, dict[str, dict[str, Any]]] = {}
     for payload in (sample, discovered, bundled, existing):
         for base_url, routes in dict(payload.get("write_grants_by_base_url") or {}).items():
@@ -1792,10 +1800,9 @@ def ensure_public_hive_auth(
             if normalized_routes:
                 merged_write_grants[normalized_base] = normalized_routes
     auth_token = (
-        _clean_token(str(existing.get("auth_token") or "").strip())
+        env_auth_token
+        or _clean_token(str(existing.get("auth_token") or "").strip())
         or _clean_token(str(bundled.get("auth_token") or "").strip())
-        or _clean_token(str(discovered.get("auth_token") or "").strip())
-        or _clean_token(str(sample.get("auth_token") or "").strip())
     )
     home_region = (
         str(existing.get("home_region") or "").strip()
@@ -1814,8 +1821,6 @@ def ensure_public_hive_auth(
     tls_insecure_skip_verify = bool(
         existing.get("tls_insecure_skip_verify")
         or bundled.get("tls_insecure_skip_verify")
-        or discovered.get("tls_insecure_skip_verify")
-        or sample.get("tls_insecure_skip_verify")
     )
 
     if auth_token or merged_auth_tokens:

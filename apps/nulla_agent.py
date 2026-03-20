@@ -268,6 +268,10 @@ class NullaAgent:
             raw_user_input=user_input,
             effective_input=effective_input,
             source_context=runtime_source_context,
+            allow_followup_resume=not self._blocks_runtime_followup_resume(
+                session_id=session_id,
+                source_context=runtime_source_context,
+            ),
         )
         runtime_source_context = dict(checkpoint_bundle.get("source_context") or runtime_source_context)
         checkpoint_state = str(checkpoint_bundle.get("state") or "created")
@@ -1012,7 +1016,11 @@ class NullaAgent:
             elif model_final_answer_hit:
                 response = model_final_text
             elif is_chat_surface:
-                response = self._chat_surface_honest_degraded_response(model_execution)
+                response = self._chat_surface_honest_degraded_response(
+                    model_execution,
+                    user_input=effective_input,
+                    interpretation=interpreted,
+                )
                 rendered_via = "honest_degraded_chat"
                 response_reason = "chat_model_unavailable_degraded"
             else:
@@ -1206,8 +1214,18 @@ class NullaAgent:
             return ""
         return self._model_final_response_text(model_execution)
 
-    def _chat_surface_honest_degraded_response(self, model_execution: Any) -> str:
+    def _chat_surface_honest_degraded_response(
+        self,
+        model_execution: Any,
+        *,
+        user_input: str = "",
+        interpretation: Any | None = None,
+    ) -> str:
         source = str(getattr(model_execution, "source", "") or "").strip().lower()
+        live_mode = self._live_info_mode(user_input, interpretation=interpretation) if str(user_input or "").strip() else ""
+        if source in {"exact_cache_hit", "memory_hit", "no_provider_available"} and live_mode == "fresh_lookup":
+            query = self._normalize_live_info_query(user_input, mode=live_mode)
+            return self._live_info_failure_text(query=query, mode=live_mode)
         if source == "exact_cache_hit":
             return (
                 "I found a matching cached answer for this topic, but this chat path requires a live model response, "
@@ -2459,7 +2477,11 @@ class NullaAgent:
             "last_tool_payload"
         ):
             return False
-        if self._looks_like_resume_request(user_input):
+        # Generic "do it/proceed" phrasing should only evict the chat lane when there is
+        # actual resumable runtime state. Otherwise normal conversational requests like
+        # "do all step by step" get misrouted into the tool planner and degrade to a
+        # fake failure instead of using the provider/chat surface.
+        if self._looks_like_explicit_resume_request(user_input):
             return False
         if self._live_info_mode(user_input, interpretation=interpretation):
             return True
@@ -2509,12 +2531,14 @@ class NullaAgent:
         raw_user_input: str,
         effective_input: str,
         source_context: dict[str, object] | None,
+        allow_followup_resume: bool = True,
     ) -> dict[str, Any]:
         base_source_context = dict(source_context or {})
         base_source_context.setdefault("runtime_session_id", session_id)
         base_source_context.setdefault("session_id", session_id)
         resumable = latest_resumable_checkpoint(session_id)
-        wants_resume = self._looks_like_resume_request(raw_user_input)
+        explicit_resume = self._looks_like_explicit_resume_request(raw_user_input)
+        wants_resume = explicit_resume or (allow_followup_resume and self._is_proceed_message(raw_user_input))
         same_request_retry = bool(
             resumable
             and self._resume_request_key(effective_input) == self._resume_request_key(str(resumable.get("request_text") or ""))
@@ -2536,7 +2560,7 @@ class NullaAgent:
                     "effective_input": str(resumed.get("request_text") or effective_input),
                     "source_context": merged_source_context,
                 }
-        if wants_resume and not resumable:
+        if explicit_resume and not resumable:
             return {
                 "state": "missing_resume",
                 "checkpoint": None,
@@ -2557,6 +2581,24 @@ class NullaAgent:
             "effective_input": effective_input,
             "source_context": base_source_context,
         }
+
+    def _blocks_runtime_followup_resume(
+        self,
+        *,
+        session_id: str,
+        source_context: dict[str, object] | None,
+    ) -> bool:
+        if self._nullabook_pending.get(session_id):
+            return True
+        hive_state = session_hive_state(session_id)
+        if self._has_pending_hive_create_confirmation(
+            session_id=session_id,
+            hive_state=hive_state,
+            source_context=source_context,
+        ):
+            return True
+        interaction_mode = str(hive_state.get("interaction_mode") or "").strip().lower()
+        return interaction_mode in {"hive_task_active", "hive_task_selection_pending"}
 
     def _resolve_runtime_task(
         self,
@@ -2633,7 +2675,7 @@ class NullaAgent:
         merged["conversation_history"] = history[-12:]
         return merged
 
-    def _looks_like_resume_request(self, text: str) -> bool:
+    def _looks_like_explicit_resume_request(self, text: str) -> bool:
         normalized = self._resume_request_key(text)
         return normalized in {
             "continue",
@@ -2646,6 +2688,9 @@ class NullaAgent:
             "go on",
             "pick up where you left off",
         }
+
+    def _looks_like_resume_request(self, text: str) -> bool:
+        return self._looks_like_explicit_resume_request(text) or self._is_proceed_message(text)
 
     def _resume_request_key(self, text: str) -> str:
         return " ".join(str(text or "").strip().lower().split())
@@ -3750,7 +3795,7 @@ class NullaAgent:
             return f'I tried the live web lane for "{query}", but no current weather results came back.'
         if mode == "news":
             return f'I tried the live web lane for "{query}", but no current news results came back.'
-        return f'I tried the live web lane for "{query}", but no grounded live results came back.'
+        return f'I checked the live web lane for "{query}", but I could not ground a current answer confidently.'
 
     _nullabook_pending: dict[str, dict[str, str]]
 
@@ -4112,7 +4157,7 @@ class NullaAgent:
             if compact in {"no", "nah", "nope", "cancel", "stop"}:
                 self._nullabook_pending.pop(session_id, None)
                 return self._nullabook_result(session_id, user_input, source_context, "Okay, I won't post it.")
-            if compact.startswith(("yes", "post it", "just post", "send it", "do it")):
+            if compact.startswith(("yes", "post it", "just post", "send it", "do it")) or self._is_proceed_message(compact):
                 self._nullabook_pending.pop(session_id, None)
                 content = str(pending.get("content") or "").strip()
                 if not content:
@@ -7057,6 +7102,18 @@ class NullaAgent:
             if response_class in {ResponseClass.TASK_FAILED_USER_SAFE, ResponseClass.SYSTEM_ERROR_USER_SAFE}:
                 return "I couldn't map that cleanly to a real action."
             return "I couldn't resolve that cleanly."
+        degraded_fallback_markers = (
+            "couldn't produce a clean final synthesis in this run",
+            "couldn't produce a grounded conversational reply in this run",
+            "couldn't produce a grounded help reply in this run",
+            "couldn't produce a clean final summary",
+        )
+        if any(marker in lowered for marker in degraded_fallback_markers):
+            if response_class == ResponseClass.UTILITY_ANSWER:
+                return "I checked, but I couldn't ground a confident answer from the evidence I found."
+            if response_class in {ResponseClass.TASK_FAILED_USER_SAFE, ResponseClass.SYSTEM_ERROR_USER_SAFE}:
+                return "I got part of the work done, but I couldn't close it out cleanly."
+            return "I couldn't answer that cleanly. Ask it another way."
         return sanitized
 
     def _strip_runtime_preamble(self, text: str, *, allow_planner_style: bool = False) -> str:

@@ -72,3 +72,13 @@ def test_build_gate_steps_for_b_contains_targeted_then_cumulative_then_full() ->
     assert "tests/test_nulla_hive_task_flow.py" in steps[1].command
     assert "tests/test_web_research_runtime.py" in steps[1].command
     assert steps[2].command == ("pytest", "-q")
+
+
+def test_pack_g_covers_browser_and_public_entry_surfaces() -> None:
+    pack = SMOKE_PACKS["G"]
+
+    assert "tests/test_public_landing_page.py" in pack.targets
+    assert "tests/test_nullabook_profile_page.py" in pack.targets
+    assert "tests/test_meet_and_greet_service.py" in pack.targets
+    assert "tests/test_browser_render_flag.py" in pack.targets
+    assert "tests/test_public_web_browser_smoke.py" in pack.targets

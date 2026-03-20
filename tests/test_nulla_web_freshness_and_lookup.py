@@ -68,7 +68,7 @@ def test_latest_telegram_updates_trigger_planned_web_lookup(make_agent, context_
             source_context={"surface": "openclaw", "platform": "openclaw"},
         )
 
-    assert planned_search.called
+    assert planned_search.call_count >= 1
     assert result["response_class"] == "utility_answer"
     assert "canonical source" in result["response"].lower()
     assert "telegram bot api" in result["response"].lower()
@@ -766,9 +766,9 @@ def test_empty_fresh_lookup_honestly_degrades_instead_of_using_memory_as_final_s
             source_context={"surface": "openclaw", "platform": "openclaw"},
         )
 
-    assert planned_search.called
-    assert "no grounded live results came back" not in result["response"].lower()
-    assert "remembered text as a fresh answer" in result["response"].lower()
+    assert planned_search.call_count >= 1
+    assert "remembered text as a fresh answer" not in result["response"].lower()
+    assert "could not ground a current answer confidently" in result["response"].lower()
     assert result["model_execution"]["source"] == "memory_hit"
     assert result["model_execution"]["used_model"] is False
     for marker in FORBIDDEN_CHAT_WRAPPERS:

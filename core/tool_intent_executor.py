@@ -989,6 +989,58 @@ def should_attempt_tool_intent(
     return compact in {"proceed", "do it", "do all", "go ahead", "carry on", "continue", "start working", "yes", "yes proceed", "yes do it", "ok do it", "ok proceed", "ok go ahead", "deliver it", "submit it", "execute", "run it", "just do it", "yes pls", "yes please", "all good carry on", "proceed with next steps", "proceed with that"}
 
 
+def _looks_like_followup_resume_request(text: str) -> bool:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered:
+        return False
+    padded = f" {lowered} "
+    if any(
+        marker in padded
+        for marker in (
+            " proceed ",
+            " do it ",
+            " do all ",
+            " go ahead ",
+            " carry on ",
+            " continue ",
+            " start working ",
+            " yes proceed ",
+            " yes do it ",
+            " yes continue ",
+            " execute ",
+            " run it ",
+            " just do it ",
+        )
+    ):
+        return True
+    compact = lowered.strip(" \t\n\r?!.,")
+    return compact in {
+        "proceed",
+        "do it",
+        "do all",
+        "go ahead",
+        "carry on",
+        "continue",
+        "start working",
+        "yes",
+        "yes proceed",
+        "yes do it",
+        "ok do it",
+        "ok proceed",
+        "ok go ahead",
+        "deliver it",
+        "submit it",
+        "execute",
+        "run it",
+        "just do it",
+        "yes pls",
+        "yes please",
+        "all good carry on",
+        "proceed with next steps",
+        "proceed with that",
+    }
+
+
 def _entity_lookup_query_variants(text: str) -> tuple[str, str]:
     normalized = " ".join(str(text or "").strip().lower().split())
     if not normalized:
@@ -1196,6 +1248,22 @@ def _recover_hive_create_from_history(source_context: dict[str, Any] | None) -> 
     return None
 
 
+def _recover_lookup_followup_from_history(source_context: dict[str, Any] | None) -> str:
+    history = [dict(item) for item in list((source_context or {}).get("conversation_history") or []) if isinstance(item, dict)]
+    for message in reversed(history[-8:]):
+        if str(message.get("role") or "").strip().lower() != "user":
+            continue
+        content = " ".join(str(message.get("content") or "").split()).strip()
+        if not content:
+            continue
+        if _looks_like_followup_resume_request(content):
+            continue
+        if looks_like_explicit_lookup_request(content) or looks_like_public_entity_lookup_request(content):
+            return content
+        break
+    return ""
+
+
 def plan_tool_workflow(
     *,
     user_text: str,
@@ -1205,21 +1273,29 @@ def plan_tool_workflow(
 ) -> WorkflowPlannerDecision:
     text = " ".join(str(user_text or "").split()).strip()
     lowered = f" {text.lower()} "
+    followup_resume = _looks_like_followup_resume_request(text)
     steps = [dict(step) for step in list(executed_steps or []) if isinstance(step, dict)]
     replacement = _explicit_replace_request(text)
     explicit_command = _explicit_command_request(text)
     compare_or_verify = any(marker in lowered for marker in (" compare ", " versus ", " vs ", " verify ", " confirm ", " is it true "))
-    public_entity_lookup = looks_like_public_entity_lookup_request(text)
-    explicit_lookup = looks_like_explicit_lookup_request(text) or public_entity_lookup
+    lookup_followup_text = ""
+    if followup_resume and not (looks_like_explicit_lookup_request(text) or looks_like_public_entity_lookup_request(text)):
+        lookup_followup_text = _recover_lookup_followup_from_history(source_context)
+    research_text = lookup_followup_text or text
+    public_entity_lookup = looks_like_public_entity_lookup_request(research_text)
+    explicit_lookup = looks_like_explicit_lookup_request(research_text) or public_entity_lookup
     tool_inventory_request = _looks_like_tool_inventory_request(text)
     workspace_bootstrap_path = _extract_workspace_bootstrap_path(text)
     workspace_bootstrap_request = _looks_like_workspace_bootstrap_request(text)
-    entity_query, entity_retry_query = _entity_lookup_query_variants(text)
+    entity_query, entity_retry_query = _entity_lookup_query_variants(research_text)
+    last_step = dict(steps[-1] or {}) if steps else {}
+    last_intent = str(last_step.get("tool_name") or "").strip()
     research_flow = bool(
         explicit_lookup
         or compare_or_verify
         or task_class in {"research", "chat_research", "system_design"}
         or any(marker in lowered for marker in (" latest ", " current ", " docs ", " documentation ", " research ", " source "))
+        or (followup_resume and last_intent in {"web.search", "web.fetch", "web.research"})
     )
 
     _create_task_markers = (
@@ -1232,6 +1308,19 @@ def plan_tool_workflow(
         return any(m in lo for m in (" proceed ", " do it ", " do all ", " start working ", " go ahead ", " carry on ")) and ("task" in lo or "hive" in lo or "create" in lo)
 
     if not steps:
+        if lookup_followup_text and explicit_lookup:
+            if public_entity_lookup:
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_entity_lookup_search",
+                    next_payload={"intent": "web.search", "arguments": {"query": entity_query or research_text, "limit": 4}},
+                )
+            if research_flow:
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason="planned_research_search",
+                    next_payload={"intent": "web.search", "arguments": {"query": research_text, "limit": 4}},
+                )
         if any(marker in lowered for marker in _create_task_markers) or _create_task_fuzzy(lowered) or _proceed_with_task(lowered):
             raw_title = text.strip()
             for prefix in _HIVE_CREATE_PREFIXES:
@@ -1317,7 +1406,7 @@ def plan_tool_workflow(
             return WorkflowPlannerDecision(
                 handled=True,
                 reason="planned_research_search",
-                next_payload={"intent": "web.search", "arguments": {"query": text, "limit": 4}},
+                next_payload={"intent": "web.search", "arguments": {"query": research_text, "limit": 4}},
             )
         if explicit_command:
             return WorkflowPlannerDecision(
@@ -1327,8 +1416,6 @@ def plan_tool_workflow(
             )
         return WorkflowPlannerDecision(handled=False, reason="no_workflow_plan")
 
-    last_step = dict(steps[-1] or {})
-    last_intent = str(last_step.get("tool_name") or "").strip()
     last_observation = dict(last_step.get("observation") or {})
     hints = extract_observation_followup_hints(last_observation)
 
@@ -1347,7 +1434,7 @@ def plan_tool_workflow(
                     return WorkflowPlannerDecision(
                         handled=True,
                         reason="planned_entity_lookup_research",
-                        next_payload={"intent": "web.research", "arguments": {"query": entity_retry_query or entity_query or text}},
+                        next_payload={"intent": "web.research", "arguments": {"query": entity_retry_query or entity_query or research_text}},
                     )
             if not compare_or_verify and int(hints.get("result_count") or 0) >= 2:
                 return WorkflowPlannerDecision(handled=True, reason="research_enough_after_search", stop_after=True)
@@ -1362,13 +1449,13 @@ def plan_tool_workflow(
                 return WorkflowPlannerDecision(
                     handled=True,
                     reason="planned_verify_after_search",
-                    next_payload={"intent": "web.research", "arguments": {"query": text}},
+                    next_payload={"intent": "web.research", "arguments": {"query": research_text}},
                 )
             if public_entity_lookup and not _workflow_step_exists(steps, "web.research") and result_count < 2:
                 return WorkflowPlannerDecision(
                     handled=True,
                     reason="planned_entity_lookup_verify",
-                    next_payload={"intent": "web.research", "arguments": {"query": entity_retry_query or entity_query or text}},
+                    next_payload={"intent": "web.research", "arguments": {"query": entity_retry_query or entity_query or research_text}},
                 )
             return WorkflowPlannerDecision(handled=True, reason="research_stop_after_search", stop_after=True)
         if last_intent == "web.fetch":
@@ -1376,7 +1463,7 @@ def plan_tool_workflow(
                 return WorkflowPlannerDecision(
                     handled=True,
                     reason="planned_research_after_fetch",
-                    next_payload={"intent": "web.research", "arguments": {"query": text}},
+                    next_payload={"intent": "web.research", "arguments": {"query": research_text}},
                 )
             return WorkflowPlannerDecision(handled=True, reason="research_stop_after_fetch", stop_after=True)
         if last_intent == "web.research":

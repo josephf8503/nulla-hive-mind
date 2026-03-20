@@ -207,6 +207,89 @@ class SignedApiWriteAuthTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, f"Signed write signer must match payload field '{field}'"):
                     api_write_auth.unwrap_signed_write(target_path=route, raw_payload=envelope)
 
+    def test_nullabook_mutations_reject_spoofed_peer_ids(self) -> None:
+        spoofed_peer_id = f"peer-{'d' * 32}"
+        cases = [
+            (
+                "/v1/nullabook/register",
+                "peer_id",
+                {
+                    "peer_id": spoofed_peer_id,
+                    "handle": "spoof_register",
+                },
+            ),
+            (
+                "/v1/nullabook/post",
+                "nullabook_peer_id",
+                {
+                    "nullabook_peer_id": spoofed_peer_id,
+                    "content": "Spoofed social post attempt.",
+                },
+            ),
+            (
+                "/v1/nullabook/post/post-123/reply",
+                "nullabook_peer_id",
+                {
+                    "nullabook_peer_id": spoofed_peer_id,
+                    "content": "Spoofed reply attempt.",
+                },
+            ),
+            (
+                "/v1/nullabook/post/post-123/edit",
+                "nullabook_peer_id",
+                {
+                    "nullabook_peer_id": spoofed_peer_id,
+                    "content": "Spoofed edit attempt.",
+                },
+            ),
+            (
+                "/v1/nullabook/post/post-123/delete",
+                "nullabook_peer_id",
+                {
+                    "nullabook_peer_id": spoofed_peer_id,
+                },
+            ),
+        ]
+        for route, field, payload in cases:
+            with self.subTest(route=route):
+                envelope = api_write_auth.build_signed_write_envelope(target_path=route, payload=payload)
+                with self.assertRaisesRegex(ValueError, f"Signed write signer must match payload field '{field}'"):
+                    api_write_auth.unwrap_signed_write(target_path=route, raw_payload=envelope)
+
+    def test_nullabook_mutations_require_identity_fields(self) -> None:
+        cases = [
+            (
+                "/v1/nullabook/register",
+                {"handle": "missing_identity"},
+                "peer_id, nullabook_peer_id",
+            ),
+            (
+                "/v1/nullabook/post",
+                {"content": "Missing peer id"},
+                "nullabook_peer_id",
+            ),
+            (
+                "/v1/nullabook/post/post-123/reply",
+                {"content": "Missing peer id"},
+                "nullabook_peer_id",
+            ),
+            (
+                "/v1/nullabook/post/post-123/edit",
+                {"content": "Missing peer id"},
+                "nullabook_peer_id",
+            ),
+            (
+                "/v1/nullabook/post/post-123/delete",
+                {},
+                "nullabook_peer_id",
+            ),
+        ]
+        for route, payload, field_list in cases:
+            with self.subTest(route=route):
+                envelope = api_write_auth.build_signed_write_envelope(target_path=route, payload=payload)
+                with self.assertRaisesRegex(ValueError, field_list):
+                    api_write_auth.unwrap_signed_write(target_path=route, raw_payload=envelope)
+
     def test_cluster_registration_injects_owner_peer_id(self) -> None:
         payload = {
             "node_id": "seed-eu-1",

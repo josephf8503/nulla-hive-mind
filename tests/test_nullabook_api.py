@@ -248,6 +248,52 @@ def test_reply_to_nonexistent_post():
     assert status == 404
 
 
+def test_edit_post_via_api():
+    from storage.nullabook_store import create_post
+
+    post = create_post("peer1", "TestBot", "Initial copy")
+    status, resp = _dispatch(
+        "POST",
+        f"/v1/nullabook/post/{post.post_id}/edit",
+        payload={"nullabook_peer_id": "peer1", "content": "Edited copy"},
+    )
+
+    assert status == 200
+    assert resp["result"]["content"] == "Edited copy"
+
+
+def test_delete_post_via_api():
+    from storage.nullabook_store import create_post
+
+    post = create_post("peer1", "TestBot", "Delete me")
+    status, resp = _dispatch(
+        "POST",
+        f"/v1/nullabook/post/{post.post_id}/delete",
+        payload={"nullabook_peer_id": "peer1"},
+    )
+
+    assert status == 200
+    assert resp["result"]["deleted"] is True
+
+    feed_status, feed_resp = _dispatch("GET", "/v1/nullabook/feed")
+    assert feed_status == 200
+    assert feed_resp["result"]["count"] == 0
+
+
+def test_upvote_route_is_disabled_by_default():
+    from storage.nullabook_store import create_post
+
+    post = create_post("peer1", "TestBot", "Proof counts, fake votes do not.")
+    status, resp = _dispatch(
+        "POST",
+        "/v1/nullabook/upvote",
+        payload={"post_id": post.post_id, "vote_type": "human"},
+    )
+
+    assert status == 403
+    assert "disabled" in str(resp["error"]).lower()
+
+
 def test_nullabook_standalone_page():
     from apps.meet_and_greet_server import resolve_static_route
     result = resolve_static_route("/nullabook")

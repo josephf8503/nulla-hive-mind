@@ -10,8 +10,8 @@ system:
   stream_transfer_threshold_bytes: 24576
   max_fragment_buckets: 2048
   mesh_psk_b64: ""
-  require_mesh_encryption: false
-  stream_tls_enabled: false
+  require_mesh_encryption: true
+  stream_tls_enabled: true
   stream_tls_certfile: ""
   stream_tls_keyfile: ""
   stream_tls_ca_file: ""

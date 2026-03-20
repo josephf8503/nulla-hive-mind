@@ -180,6 +180,44 @@ def build_server(
         def do_OPTIONS(self) -> None:
             self._write_bytes_response(204, "text/plain", b"")
 
+        def do_HEAD(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path == "/metrics":
+                if not _metrics_access_allowed(cfg.host):
+                    self._write_bytes_response(403, "text/plain; charset=utf-8", b"", write_body=False)
+                    return
+                body = metrics.render_prometheus().encode("utf-8")
+                self._write_bytes_response(
+                    200,
+                    "text/plain; version=0.0.4",
+                    b"",
+                    write_body=False,
+                    content_length=len(body),
+                )
+                return
+            static_response = resolve_static_route(parsed.path)
+            if static_response is not None:
+                status_code, content_type, body = static_response
+                self._write_bytes_response(
+                    status_code,
+                    content_type,
+                    b"",
+                    write_body=False,
+                    content_length=len(body),
+                )
+                return
+            if parsed.path == "/v1/health":
+                body = json.dumps(_ok({"status": "ok"})[1], sort_keys=True).encode("utf-8")
+                self._write_bytes_response(
+                    200,
+                    "application/json",
+                    b"",
+                    write_body=False,
+                    content_length=len(body),
+                )
+                return
+            self._write_bytes_response(404, "text/plain; charset=utf-8", b"", write_body=False)
+
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             if _requires_auth_for_request(cfg.host) and _is_protected_api_path(parsed.path):
@@ -188,6 +226,9 @@ def build_server(
                     self._write_response(401, _error_envelope("Unauthorized request."))
                     return
             if parsed.path == "/metrics":
+                if not _metrics_access_allowed(cfg.host):
+                    self._write_response(403, _error_envelope("Metrics are not exposed on public binds."))
+                    return
                 body = metrics.render_prometheus().encode("utf-8")
                 self._write_bytes_response(200, "text/plain; version=0.0.4", body)
                 return
@@ -226,9 +267,11 @@ def build_server(
                     target_type="meet_server",
                     details={"error": str(exc)},
                 )
+                status_code = 403 if _is_forbidden_write_error(exc) else 400
                 latency_ms = (time.perf_counter() - started) * 1000.0
-                metrics.record(method="POST", path=parsed.path, status_code=400, latency_ms=latency_ms)
-                self._write_response(400, _error_envelope("Invalid request envelope."))
+                metrics.record(method="POST", path=parsed.path, status_code=status_code, latency_ms=latency_ms)
+                error_message = str(exc).strip() or "Invalid request envelope."
+                self._write_response(status_code, _error_envelope(error_message if status_code == 403 else "Invalid request envelope."))
                 return
             limit_key, limit_per_minute = _resolve_write_rate_limit(
                 cfg.host,
@@ -296,8 +339,20 @@ def build_server(
                 nb_peer_id: str | None = None
                 if nb_token:
                     nb_peer_id = _verify_nullabook_token_safe(nb_token)
-                    if nb_peer_id:
-                        payload.setdefault("nullabook_peer_id", nb_peer_id)
+                    if _is_nullabook_mutation_path(parsed.path) and not nb_peer_id:
+                        latency_ms = (time.perf_counter() - started) * 1000.0
+                        metrics.record(method="POST", path=parsed.path, status_code=401, latency_ms=latency_ms)
+                        self._write_response(401, _error_envelope("Invalid NullaBook token."))
+                        return
+                if _is_nullabook_mutation_path(parsed.path):
+                    _enforce_nullabook_request_identity(
+                        parsed.path,
+                        payload,
+                        signer_peer_id=str(request_meta.get("signer_peer_id") or "").strip(),
+                        token_peer_id=nb_peer_id,
+                    )
+                    if nb_peer_id and parsed.path != "/v1/nullabook/register":
+                        payload["nullabook_peer_id"] = nb_peer_id
             except Exception as exc:
                 audit_logger.log(
                     "meet_write_rejected",
@@ -305,9 +360,11 @@ def build_server(
                     target_type="meet_server",
                     details={"error": str(exc)},
                 )
+                status_code = 403 if _is_forbidden_write_error(exc) else 400
                 latency_ms = (time.perf_counter() - started) * 1000.0
-                metrics.record(method="POST", path=parsed.path, status_code=400, latency_ms=latency_ms)
-                self._write_response(400, _error_envelope("Invalid request envelope."))
+                metrics.record(method="POST", path=parsed.path, status_code=status_code, latency_ms=latency_ms)
+                error_message = str(exc).strip() or "Invalid request envelope."
+                self._write_response(status_code, _error_envelope(error_message if status_code == 403 else "Invalid request envelope."))
                 return
             query = parse_qs(parsed.query)
             status_code, envelope = dispatch_request("POST", parsed.path, query, payload, svc, hive_service, metrics)
@@ -333,10 +390,18 @@ def build_server(
             body = json.dumps(payload, sort_keys=True).encode("utf-8")
             self._write_bytes_response(status_code, "application/json", body)
 
-        def _write_bytes_response(self, status_code: int, content_type: str, body: bytes) -> None:
+        def _write_bytes_response(
+            self,
+            status_code: int,
+            content_type: str,
+            body: bytes,
+            *,
+            write_body: bool = True,
+            content_length: int | None = None,
+        ) -> None:
             self.send_response(status_code)
             self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Length", str(len(body) if content_length is None else int(content_length)))
             origin = str(cfg.cors_allowed_origin or "").strip()
             if origin:
                 self.send_header("Access-Control-Allow-Origin", origin)
@@ -344,7 +409,8 @@ def build_server(
                 self.send_header("Access-Control-Allow-Headers", str(cfg.cors_allowed_headers))
                 self.send_header("Access-Control-Max-Age", "600")
             self.end_headers()
-            self.wfile.write(body)
+            if write_body:
+                self.wfile.write(body)
 
     server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
     _wrap_server_tls(server, cfg)
@@ -950,7 +1016,7 @@ def _handle_nullabook_reply(parent_id: str, payload: dict[str, Any]) -> tuple[in
 
 
 def _handle_nullabook_register(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    from core.nullabook_identity import get_profile, register_nullabook_account, update_profile
+    from core.nullabook_identity import get_profile, register_nullabook_account, rename_handle, update_profile
     handle = str(payload.get("handle") or "").strip()
     bio = str(payload.get("bio") or "").strip()
     twitter = str(payload.get("twitter_handle") or "").strip()
@@ -962,6 +1028,11 @@ def _handle_nullabook_register(payload: dict[str, Any]) -> tuple[int, dict[str, 
     display_name = str(payload.get("display_name") or "").strip()
     existing = get_profile(peer_id)
     if existing and existing.status == "active":
+        if handle != existing.handle:
+            try:
+                existing = rename_handle(peer_id, handle)
+            except Exception as exc:
+                return _error(409, str(exc))
         updates: dict[str, Any] = {}
         if bio and bio != existing.bio:
             updates["bio"] = bio
@@ -969,8 +1040,6 @@ def _handle_nullabook_register(payload: dict[str, Any]) -> tuple[int, dict[str, 
             updates["twitter_handle"] = twitter
         if display_name and display_name != existing.display_name:
             updates["display_name"] = display_name
-        if handle != existing.handle:
-            updates["handle"] = handle
         if updates:
             update_profile(peer_id, **updates)
             existing = get_profile(peer_id)
@@ -1030,6 +1099,8 @@ def _handle_nullabook_delete_post(post_id: str, payload: dict[str, Any]) -> tupl
 
 def _handle_nullabook_upvote(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     from storage.nullabook_store import ensure_upvote_columns, post_to_dict, upvote_post
+    if not _nullabook_human_upvotes_enabled():
+        return _error(403, "Public human voting is disabled on this runtime.")
     ensure_upvote_columns()
     post_id = str(payload.get("post_id") or "").strip()
     vote_type = str(payload.get("vote_type") or "human").strip()
@@ -1122,6 +1193,16 @@ def _requires_write_auth(host: str) -> bool:
     return host not in {"127.0.0.1", "localhost", "::1"}
 
 
+def _metrics_access_allowed(host: str) -> bool:
+    return not _requires_write_auth(host)
+
+
+def _is_forbidden_write_error(exc: Exception) -> bool:
+    if isinstance(exc, PermissionError):
+        return True
+    return exc.__class__.__name__ == "SignedWriteIdentityError"
+
+
 def _requires_auth_for_request(host: str) -> bool:
     return _requires_write_auth(host)
 
@@ -1166,6 +1247,51 @@ def _format_public_hive_quota_error(quota: Any) -> str:
 
 def _server_peer_id() -> str:
     return get_local_peer_id()
+
+
+def _nullabook_human_upvotes_enabled() -> bool:
+    flag = str(os.environ.get("NULLA_ENABLE_NULLABOOK_HUMAN_UPVOTES", "") or "").strip().lower()
+    return flag in {"1", "true", "yes", "on"}
+
+
+def _is_nullabook_mutation_path(path: str) -> bool:
+    clean = path.rstrip("/") or "/"
+    if clean == "/v1/nullabook/register":
+        return True
+    if clean == "/v1/nullabook/post":
+        return True
+    return clean.startswith("/v1/nullabook/post/") and clean.endswith(("/reply", "/edit", "/delete"))
+
+
+def _enforce_nullabook_request_identity(
+    path: str,
+    payload: dict[str, Any],
+    *,
+    signer_peer_id: str,
+    token_peer_id: str | None,
+) -> None:
+    clean = path.rstrip("/") or "/"
+    identity_fields = ("peer_id", "nullabook_peer_id") if clean == "/v1/nullabook/register" else ("nullabook_peer_id",)
+    identities: list[str] = []
+    if signer_peer_id:
+        identities.append(signer_peer_id)
+    if token_peer_id:
+        identities.append(str(token_peer_id).strip())
+    for field in identity_fields:
+        value = str(payload.get(field) or "").strip()
+        if value:
+            identities.append(value)
+    identities = [value for value in identities if value]
+    if not identities:
+        return
+    canonical = identities[0]
+    for value in identities[1:]:
+        if value != canonical:
+            raise PermissionError("NullaBook write identity mismatch.")
+    if clean == "/v1/nullabook/register":
+        payload["peer_id"] = canonical
+        if "nullabook_peer_id" in payload or token_peer_id:
+            payload["nullabook_peer_id"] = canonical
 
 
 def _is_protected_api_path(path: str) -> bool:

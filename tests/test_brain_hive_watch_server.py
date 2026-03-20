@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import threading
@@ -496,9 +497,9 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task")
         self.assertIn("/api/dashboard", html)
         self.assertIn("/task", html)
-        self.assertIn("NULLA Brain Hive", html)
+        self.assertIn("NULLA Brain Hive · Live dashboard", html)
         self.assertIn("NULLA Operator Workstation", html)
-        self.assertIn("Brain Hive Watch", html)
+        self.assertIn("Verified work", html)
         self.assertIn("workstation v1", html)
         self.assertIn("wk-topbar", html)
         self.assertIn(">Overview<", html)
@@ -545,8 +546,8 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         self.assertIn("Stale peer/source rows", html)
         self.assertIn("Truth / debug", html)
         self.assertIn("Old raw peer counts were misleading here because", html)
-        self.assertIn("No live completion data yet from watcher/public Hive payloads.", html)
-        self.assertIn("No live failure data yet from watcher/public Hive payloads.", html)
+        self.assertIn("No verified completion data has reached this watcher yet.", html)
+        self.assertIn("No verified failure data has reached this watcher yet.", html)
         self.assertIn("objectModelRail", html)
         self.assertIn("brainInspectorTitle", html)
         self.assertIn("brainInspectorTruth", html)
@@ -816,6 +817,7 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         self.assertIn("/api/topic/topic-123", html)
         self.assertIn("/api/topic/topic-123/posts", html)
         self.assertIn("NULLA Operator Workstation", html)
+        self.assertIn("NULLA Task · Live work detail", html)
         self.assertIn("wk-topbar", html)
         self.assertIn("workstation v1", html)
         self.assertIn("Back to Hive", html)
@@ -917,6 +919,62 @@ class BrainHiveWatchServerTests(unittest.TestCase):
                 self.assertIn("let activeTab = 'feed'", body)
                 self.assertIn("window.location.origin + '/feed?post='", body)
                 self.assertIn('href="/feed" data-tab="feed" class="is-active">Feed<', body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
+    def test_watch_server_public_surface_routes_render_expected_shells(self) -> None:
+        server = build_server(
+            BrainHiveWatchServerConfig(
+                host="127.0.0.1",
+                port=0,
+                upstream_base_urls=("http://127.0.0.1:8766",),
+            )
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            route_expectations = (
+                ("/tasks", "let activeTab = 'tasks'"),
+                ("/proof", "let activeTab = 'proof'"),
+                ("/agent/TestBot", "At a glance"),
+                ("/task/topic-123", "Agent work flow"),
+            )
+            for path, marker in route_expectations:
+                with self.subTest(path=path):
+                    with request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as response:
+                        body = response.read().decode("utf-8")
+                        self.assertEqual(response.status, 200)
+                        self.assertIn(marker, body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=1)
+
+    def test_watch_server_head_supports_public_routes(self) -> None:
+        server = build_server(
+            BrainHiveWatchServerConfig(
+                host="127.0.0.1",
+                port=0,
+                upstream_base_urls=("http://127.0.0.1:8766",),
+            )
+        )
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = int(server.server_address[1])
+            for path in ("/", "/feed", "/task/topic-123", "/agent/TestBot", "/health", "/api/dashboard"):
+                with self.subTest(path=path):
+                    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+                    conn.request("HEAD", path)
+                    response = conn.getresponse()
+                    body = response.read()
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(body, b"")
+                    self.assertGreaterEqual(int(response.getheader("Content-Length") or "0"), 0)
+                    conn.close()
         finally:
             server.shutdown()
             server.server_close()

@@ -133,7 +133,7 @@ def test_public_hive_bridge_allows_seed_urls_without_token() -> None:
     assert cfg.enabled is True
     assert cfg.meet_seed_urls == ("https://seed-eu.example.test:8766",)
     assert cfg.auth_token is None
-    assert cfg.tls_insecure_skip_verify is True
+    assert cfg.tls_insecure_skip_verify is False
 
 
 def test_public_hive_bridge_loads_route_scoped_write_grants() -> None:
@@ -291,7 +291,7 @@ def test_public_hive_bridge_update_status_reports_invalid_claim_for_semantic_htt
     assert result["status"] == "invalid_claim"
 
 
-def test_public_hive_bridge_discovers_real_auth_token_from_local_watch_config() -> None:
+def test_public_hive_bridge_ignores_discovered_auth_token_from_local_watch_config() -> None:
     watch_config = {
         "auth_token": "real-cluster-token",
         "upstream_base_urls": [
@@ -313,12 +313,13 @@ def test_public_hive_bridge_discovers_real_auth_token_from_local_watch_config() 
         cfg = load_public_hive_bridge_config()
 
     assert cfg.enabled is True
-    assert cfg.auth_token == "real-cluster-token"
+    assert cfg.auth_token is None
     assert cfg.meet_seed_urls == tuple(watch_config["upstream_base_urls"])
     assert cfg.tls_ca_file == "/tmp/cluster-ca.pem"
+    assert cfg.tls_insecure_skip_verify is False
 
 
-def test_public_hive_bridge_maps_region_tokens_onto_selected_watch_urls() -> None:
+def test_public_hive_bridge_ignores_discovered_region_tokens_for_selected_watch_urls() -> None:
     do_ip_watch_urls = [
         "https://104.248.81.71:8766",
         "https://157.245.211.185:8766",
@@ -337,6 +338,8 @@ def test_public_hive_bridge_maps_region_tokens_onto_selected_watch_urls() -> Non
 
     def fake_load_json(path: Path) -> dict[str, object]:
         target = str(path)
+        if target.endswith("config/agent-bootstrap.json"):
+            return {}
         if target.endswith("do_ip_first_4node/watch-edge-1.json"):
             return {
                 "auth_token": "set-strong-meet-token-before-startup",
@@ -391,11 +394,7 @@ def test_public_hive_bridge_maps_region_tokens_onto_selected_watch_urls() -> Non
 
     assert cfg.meet_seed_urls == tuple(do_ip_watch_urls)
     assert cfg.auth_token is None
-    assert cfg.auth_tokens_by_base_url == {
-        "https://104.248.81.71:8766": real_tokens["eu"],
-        "https://157.245.211.185:8766": real_tokens["us"],
-        "https://159.65.136.157:8766": real_tokens["apac"],
-    }
+    assert cfg.auth_tokens_by_base_url == {}
     assert cfg.tls_ca_file == "/tmp/cluster-ca.pem"
 
 

@@ -51,7 +51,7 @@ dev = [
 Homepage = "https://github.com/Parad0x-Labs/nulla-hive-mind"
 Repository = "https://github.com/Parad0x-Labs/nulla-hive-mind"
 "Bug Tracker" = "https://github.com/Parad0x-Labs/nulla-hive-mind/issues"
-"Brain Hive Watch" = "https://161.35.145.74.sslip.io/brain-hive"
+"Brain Hive Watch" = "https://nullabook.com/hive"
 
 [project.scripts]
 nulla-agent = "apps.nulla_agent:main"

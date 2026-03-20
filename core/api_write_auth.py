@@ -10,6 +10,11 @@ from core.meet_and_greet_models import SignedApiWriteEnvelope
 from network import signer
 from network.protocol import consume_nonce_once
 
+
+class SignedWriteIdentityError(PermissionError, ValueError):
+    """Raised when signer identity does not match the route's actor fields."""
+
+
 _ROUTE_BINDINGS: dict[str, tuple[str, ...]] = {
     "/v1/presence/register": ("agent_id",),
     "/v1/presence/heartbeat": ("agent_id",),
@@ -171,18 +176,32 @@ def unwrap_signed_write_with_meta(
 
 def _enforce_route_binding(target_path: str, payload: dict[str, Any], signer_peer_id: str) -> None:
     path = target_path.rstrip("/") or "/"
+    if path == "/v1/nullabook/register":
+        _enforce_nullabook_identity_fields(
+            path,
+            payload,
+            signer_peer_id,
+            required_fields=("peer_id", "nullabook_peer_id"),
+        )
+        return
+    if path == "/v1/nullabook/post":
+        _enforce_nullabook_identity_fields(path, payload, signer_peer_id, required_fields=("nullabook_peer_id",))
+        return
+    if path.startswith("/v1/nullabook/post/") and path.endswith(("/reply", "/edit", "/delete")):
+        _enforce_nullabook_identity_fields(path, payload, signer_peer_id, required_fields=("nullabook_peer_id",))
+        return
     bound_fields = _ROUTE_BINDINGS.get(path)
     if path == "/v1/payments/status":
         payer = str(payload.get("payer_peer_id") or "")
         payee = str(payload.get("payee_peer_id") or "")
         if signer_peer_id not in {payer, payee}:
-            raise ValueError("Signed write signer must match the payer or payee for payment status updates.")
+            raise SignedWriteIdentityError("Signed write signer must match the payer or payee for payment status updates.")
         return
     if path == "/v1/cluster/nodes":
         metadata = dict(payload.get("metadata") or {})
         owner_peer_id = str(metadata.get("owner_peer_id") or signer_peer_id)
         if owner_peer_id != signer_peer_id:
-            raise ValueError("Signed write signer must match metadata.owner_peer_id for meet node registration.")
+            raise SignedWriteIdentityError("Signed write signer must match metadata.owner_peer_id for meet node registration.")
         metadata["owner_peer_id"] = signer_peer_id
         payload["metadata"] = metadata
         return
@@ -190,4 +209,24 @@ def _enforce_route_binding(target_path: str, payload: dict[str, Any], signer_pee
         return
     for field in bound_fields:
         if str(payload.get(field) or "") != signer_peer_id:
-            raise ValueError(f"Signed write signer must match payload field '{field}'.")
+            raise SignedWriteIdentityError(f"Signed write signer must match payload field '{field}'.")
+
+
+def _enforce_nullabook_identity_fields(
+    path: str,
+    payload: dict[str, Any],
+    signer_peer_id: str,
+    *,
+    required_fields: tuple[str, ...],
+) -> None:
+    seen = False
+    for field in required_fields:
+        value = str(payload.get(field) or "").strip()
+        if not value:
+            continue
+        seen = True
+        if value != signer_peer_id:
+            raise SignedWriteIdentityError(f"Signed write signer must match payload field '{field}'.")
+    if not seen:
+        field_list = ", ".join(required_fields)
+        raise SignedWriteIdentityError(f"Signed write signer must match one of payload fields: {field_list}.")

@@ -17,14 +17,14 @@ def render_public_landing_page_html() -> str:
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>NULLA Hive Mind · Local-first AI agent</title>
-<meta name="description" content="NULLA is a local-first AI agent with memory, tools, and optional trusted helpers. It starts on your machine and expands only when you choose."/>
-<meta property="og:title" content="NULLA Hive Mind"/>
-<meta property="og:description" content="Local-first AI with memory, tools, and trusted reach."/>
+<title>NULLA · Local-first agent runtime</title>
+<meta name="description" content="NULLA starts on your machine, keeps memory and tools close, and only reaches out when you ask it to."/>
+<meta property="og:title" content="NULLA · Local-first agent runtime"/>
+<meta property="og:description" content="Start local, keep control, and expand only when you choose."/>
 <meta property="og:type" content="website"/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="NULLA Hive Mind"/>
-<meta name="twitter:description" content="Start local. Stay in control. Expand only when you choose."/>
+<meta name="twitter:title" content="NULLA · Local-first agent runtime"/>
+<meta name="twitter:description" content="NULLA starts on your machine and expands only when you ask it to."/>
 <style>
 {public_site_base_styles()}
 .nl-page {{
@@ -333,26 +333,26 @@ def render_public_landing_page_html() -> str:
 <main class="ns-shell nl-page">
   <section class="nl-hero">
     <div class="nl-hero-copy">
-      <div class="nl-eyebrow">Local-first AI agent</div>
-      <h1>Your AI. On your machine first.</h1>
-      <p>NULLA is a local-first AI agent with memory, tools, and optional trusted helpers, so you can do real work without giving up control.</p>
+      <div class="nl-eyebrow">Local-first agent runtime</div>
+      <h1>Your agent. On your machine first.</h1>
+      <p>NULLA starts local, keeps memory and tools close, and only reaches outside when you ask for more reach.</p>
       <div class="nl-hero-actions">
         <a class="ns-button" href="{INSTALL_URL}" target="_blank" rel="noreferrer noopener">Get NULLA</a>
         <a class="ns-button ns-button--secondary" href="#how-it-works">See how it works</a>
         <a class="ns-button ns-button--secondary" href="/feed">Open Feed</a>
       </div>
-      <div class="nl-mini-note">Alpha now. Real local runtime. Real helper lane. Honest status. No pretending.</div>
+      <div class="nl-mini-note">Real local runtime. Honest status. No forced cloud.</div>
     </div>
     <div class="nl-hero-side">
       <div class="nl-side-card">
         <div class="nl-side-label">One clear story</div>
-        <strong>Local agent. Trusted reach.</strong>
-        <p>NULLA is one system with multiple surfaces. OpenClaw, Hive, watch, and the public web are ways to access the same runtime, not separate products.</p>
+        <strong>One system. Many doors.</strong>
+        <p>OpenClaw, Hive, watch, and the public web all point at the same runtime instead of pretending to be separate products.</p>
       </div>
       <div class="nl-side-card">
         <div class="nl-side-label">What matters</div>
         <strong>Memory, tools, results.</strong>
-        <p>Start on your hardware. Keep context. Use tools. Ask trusted helpers only when you want more reach.</p>
+        <p>Keep context. Use tools. Ask for help only when you want more reach.</p>
       </div>
     </div>
   </section>
@@ -360,13 +360,13 @@ def render_public_landing_page_html() -> str:
   <section class="nl-panel nl-one-lane">
     <div class="nl-label">What NULLA is</div>
     <h2>One system. One lane.</h2>
-    <p>NULLA is not a pile of disconnected AI surfaces. The core flow is simple and legible: local runtime first, memory and tools in the middle, optional trusted helpers only when needed, then results back to you.</p>
+    <p>NULLA is not a pile of disconnected AI surfaces. The core flow is simple and legible: local runtime first, memory and tools in the middle, help only when needed, then results back to you.</p>
     <div class="nl-lane-rail" aria-label="NULLA core lane">
-      <span class="nl-pill">Local NULLA agent</span>
+      <span class="nl-pill">Local runtime</span>
       <span class="nl-arrow">&rarr;</span>
       <span class="nl-pill">Memory + tools</span>
       <span class="nl-arrow">&rarr;</span>
-      <span class="nl-pill">Optional trusted helpers</span>
+      <span class="nl-pill">Outside help, when asked</span>
       <span class="nl-arrow">&rarr;</span>
       <span class="nl-pill">Results</span>
     </div>
@@ -376,7 +376,7 @@ def render_public_landing_page_html() -> str:
     <div class="nl-section-head">
       <div class="nl-label">What it does</div>
       <h2>Built for useful work, not disposable chat.</h2>
-      <p class="nl-section-copy">The core lane stays the same whether you are using OpenClaw, Hive, watch, or the public web: start local, keep control, expand only when you choose.</p>
+      <p class="nl-section-copy">The core lane stays the same whether you are using OpenClaw, Hive, watch, or the public web: start local, keep control, and expand only when you choose.</p>
     </div>
     <div class="nl-grid-3">
       <article class="nl-panel">
@@ -389,7 +389,7 @@ def render_public_landing_page_html() -> str:
       </article>
       <article class="nl-panel">
         <h3>Expands only when needed</h3>
-        <p>When you want more reach, NULLA can ask trusted helpers for research or delegated work without abandoning the local-first model.</p>
+        <p>When you want more reach, NULLA can ask for outside help on research or delegated work without abandoning the local-first model.</p>
       </article>
     </div>
   </section>
@@ -439,7 +439,7 @@ def render_public_landing_page_html() -> str:
       </article>
       <article class="nl-surface-card">
         <h3>Watch / Hive</h3>
-        <p>Track coordination, tasks, and proof without turning the product into dashboard sludge.</p>
+        <p>Track coordination, tasks, and proof without turning the product into another dashboard.</p>
       </article>
       <article class="nl-surface-card">
         <h3>Public web</h3>
@@ -482,8 +482,8 @@ def render_public_landing_page_html() -> str:
         </ul>
       </article>
       <article class="nl-status-card nl-status-card--honest">
-        <h3>Not pretending yet</h3>
-        <p>These are not production-finished, even if parts already exist in code.</p>
+        <h3>Still unfinished</h3>
+        <p>These parts exist, but they are not production-finished yet.</p>
         <ul>
           <li>Production-grade public mesh</li>
           <li>Trustless economics</li>
@@ -507,7 +507,7 @@ def render_public_landing_page_html() -> str:
     <div class="nl-side-card">
       <div class="nl-side-label">Quick links</div>
       <strong>Start local. Read the truth.</strong>
-      <p>The README should explain NULLA in under a minute. The docs home should tell you where to go next. The status page should tell you what is still alpha without spin.</p>
+      <p>The README should explain NULLA in under a minute. The docs home should tell you where to go next. The status page should tell you what still needs work without spin.</p>
       <div class="nl-inline-links">
         <a href="{STATUS_URL}" target="_blank" rel="noreferrer noopener">Read status</a>
         <a href="{INSTALL_URL}" target="_blank" rel="noreferrer noopener">Install</a>

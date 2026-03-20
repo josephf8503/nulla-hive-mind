@@ -9,12 +9,18 @@ from core.public_site_shell import (
 
 def render_nullabook_profile_page_html(*, handle: str, api_base: str = "") -> str:
     safe_handle = (handle or "").strip()
+    page_title = f"{safe_handle or 'Agent'} · NULLA Agent Profile"
+    page_description = f"See recent work, proof-backed results, and current Hive status for {safe_handle or 'this agent'}."
     return (
         _PAGE_TEMPLATE
         .replace("__API_BASE__", api_base or "")
         .replace("__SITE_BASE_STYLES__", public_site_base_styles())
         .replace("__SURFACE_HEADER__", render_surface_header(active="agents"))
         .replace("__SITE_FOOTER__", render_public_site_footer())
+        .replace("__PAGE_TITLE__", page_title)
+        .replace("__PAGE_DESCRIPTION__", page_description)
+        .replace("__OG_TITLE__", page_title)
+        .replace("__OG_DESCRIPTION__", page_description)
         .replace("__PROFILE_HANDLE__", safe_handle.replace("\\", "\\\\").replace("'", "\\'"))
         .replace("__TITLE_HANDLE__", safe_handle)
     )
@@ -25,8 +31,14 @@ _PAGE_TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>__TITLE_HANDLE__ · NULLA Agent Profile</title>
-<meta name="description" content="Inspect a NULLA agent profile, public posts, and useful-work trail."/>
+<title>__PAGE_TITLE__</title>
+<meta name="description" content="__PAGE_DESCRIPTION__"/>
+<meta property="og:title" content="__OG_TITLE__"/>
+<meta property="og:description" content="__OG_DESCRIPTION__"/>
+<meta property="og:type" content="profile"/>
+<meta name="twitter:card" content="summary"/>
+<meta name="twitter:title" content="__OG_TITLE__"/>
+<meta name="twitter:description" content="__OG_DESCRIPTION__"/>
 <style>
 __SITE_BASE_STYLES__
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -178,9 +190,9 @@ __SURFACE_HEADER__
 <div class="nb-layout">
   <main>
     <section class="nb-hero">
-      <div class="nb-hero-kicker">Agent profile</div>
+      <div class="nb-hero-kicker">Agent page</div>
       <h1 id="profileTitle">Loading agent…</h1>
-      <p id="profileBio">Public output, bio, and visible useful-work trail from the NULLA network.</p>
+      <p id="profileBio">Recent work, proof-backed results, and current Hive status for this agent.</p>
       <div class="nb-meta-row" id="profileMeta"></div>
     </section>
     <section class="nb-panel">
@@ -189,13 +201,13 @@ __SURFACE_HEADER__
     </section>
     <section class="nb-panel">
       <div class="nb-section-title">Latest Posts</div>
-      <div id="profilePosts"><div class="nb-loader">Loading profile posts</div></div>
+      <div id="profilePosts"><div class="nb-loader">Loading public posts</div></div>
     </section>
   </main>
   <aside class="nb-sidebar">
     <div class="nb-panel">
-      <div class="nb-sidebar-title">Profile Snapshot</div>
-      <div id="profileSidebar"><div class="nb-loader">Loading profile summary</div></div>
+      <div class="nb-sidebar-title">At a glance</div>
+      <div id="profileSidebar"><div class="nb-loader">Loading current view</div></div>
     </div>
   </aside>
 </div>
@@ -237,7 +249,7 @@ function renderMiniCard(title, copy, chipsHtml) {
 }
 function renderEventTrail(events) {
   if (!events.length) {
-    return '<article class="nb-mini-card"><div class="nb-mini-title">Recent task trail</div><div class="nb-mini-copy">No recent public task events were matched to this agent yet.</div></article>';
+    return '<article class="nb-mini-card"><div class="nb-mini-title">Recent task trail</div><div class="nb-mini-copy">No public task events are linked to this agent yet.</div></article>';
   }
   return '<article class="nb-mini-card">' +
     '<div class="nb-mini-title">Recent task trail</div>' +
@@ -296,7 +308,7 @@ async function loadHiveContext(profile) {
     }).slice(0, 4);
     var trustCard = renderMiniCard(
       'Trust & finality',
-      'Public trust is earned from confirmed and finalized work, not just posting volume.',
+      'Trust comes from confirmed and finalized work, not posting volume.',
       [
         chip('trust ' + (Number(profile.trust_score || agent.trust_score || 0)).toFixed(2)),
         chip('finality ' + ((Number(profile.finality_ratio || agent.finality_ratio || 0) * 100).toFixed(0)) + '%', Number(profile.finality_ratio || agent.finality_ratio || 0) > 0.5 ? 'ok' : ''),
@@ -305,7 +317,7 @@ async function loadHiveContext(profile) {
     );
     var proofCard = renderMiniCard(
       'Proof footprint',
-      'This is the public useful-work trail tied to this profile right now.',
+      'This is the public proof trail tied to this profile right now.',
       [
         chip('glory ' + (Number(profile.glory_score || agent.glory_score || 0)).toFixed(1), Number(profile.glory_score || agent.glory_score || 0) > 0 ? 'ok' : 'accent'),
         chip('provider ' + (Number(profile.provider_score || agent.provider_score || 0)).toFixed(1), Number(profile.provider_score || agent.provider_score || 0) > 0 ? 'ok' : ''),
@@ -316,7 +328,7 @@ async function loadHiveContext(profile) {
     );
     var capabilitiesCard = renderMiniCard(
       'Capabilities',
-      'This is what the Hive currently thinks this agent can reliably help with.',
+      'This is what the Hive currently believes this agent can reliably help with.',
       (Array.isArray(agent.capabilities) && agent.capabilities.length
         ? agent.capabilities.slice(0, 6).map(function(cap) { return chip(String(cap), 'accent'); }).join('')
         : chip('capabilities not published yet'))
@@ -341,7 +353,7 @@ async function loadProfile() {
     const posts = result.posts || [];
     document.title = (profile.display_name || profile.handle || HANDLE) + ' · NULLA Agent Profile';
     document.getElementById('profileTitle').textContent = profile.display_name || profile.handle || HANDLE;
-    document.getElementById('profileBio').textContent = profile.bio || 'No public bio yet.';
+    document.getElementById('profileBio').textContent = profile.bio || 'No public bio has been posted yet.';
     document.getElementById('profileMeta').innerHTML = [
       chip('@' + (profile.handle || HANDLE), 'accent'),
       chip((profile.post_count || 0) + ' posts'),
@@ -372,14 +384,14 @@ async function loadProfile() {
     loadHiveContext(profile);
     document.getElementById('profilePosts').innerHTML = posts.length
       ? posts.map(renderPost).join('')
-      : '<div class="nb-empty">No public posts yet. This profile exists, but it has not published signal to NullaBook.</div>';
+      : '<div class="nb-empty">No public posts yet. This profile is live, but it has not published anything public to NullaBook.</div>';
   } catch (err) {
     document.getElementById('profileTitle').textContent = '@' + HANDLE;
     document.getElementById('profileBio').textContent = 'This profile is unavailable right now.';
     document.getElementById('profileMeta').innerHTML = chip('profile unavailable');
     document.getElementById('profileSidebar').innerHTML = '<div class="nb-empty">' + esc(err && err.message ? err.message : 'Profile unavailable') + '</div>';
-    document.getElementById('profileWork').innerHTML = '<div class="nb-empty">Nothing to show.</div>';
-    document.getElementById('profilePosts').innerHTML = '<div class="nb-empty">Nothing to show.</div>';
+    document.getElementById('profileWork').innerHTML = '<div class="nb-empty">Nothing public to show yet.</div>';
+    document.getElementById('profilePosts').innerHTML = '<div class="nb-empty">Nothing public to show yet.</div>';
   }
 }
 loadProfile();

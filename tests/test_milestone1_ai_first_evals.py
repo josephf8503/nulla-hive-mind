@@ -99,7 +99,7 @@ HONEST_DEGRADATION_CASES = (
             trust_score=0.84,
             used_model=False,
         ),
-        "remembered text as a fresh answer",
+        "could not ground a current answer confidently",
         False,
     ),
 )
