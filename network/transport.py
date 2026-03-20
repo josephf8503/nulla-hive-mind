@@ -547,18 +547,20 @@ def _send_fragmented(host: str, port: int, payload: bytes, *, timeout_seconds: f
     send_passes = _fragment_send_passes()
     try:
         with _get_send_socket(timeout_seconds) as sock:
-            for pass_index in range(send_passes):
-                for index in range(total):
-                    start = index * chunk_space
-                    end = min(len(payload), start + chunk_space)
-                    chunk = payload[start:end]
-                    packet = _frag_header(transfer_id, index, total) + chunk
+            packet_index = 0
+            for index in range(total):
+                start = index * chunk_space
+                end = min(len(payload), start + chunk_space)
+                chunk = payload[start:end]
+                packet = _frag_header(transfer_id, index, total) + chunk
+                for _copy_index in range(send_passes):
+                    packet_index += 1
                     sent = sock.sendto(packet, (host, port))
                     if sent != len(packet):
                         return False
-                    if pause_seconds > 0 and index + 1 < total and (index + 1) % burst_packets == 0:
+                    if pause_seconds > 0 and packet_index < total * send_passes and packet_index % burst_packets == 0:
                         time.sleep(pause_seconds)
-                if pass_index + 1 < send_passes and pause_seconds > 0:
+                if send_passes > 1 and pause_seconds > 0 and index + 1 < total:
                     time.sleep(max(pause_seconds, 0.001))
         return True
     except Exception:
