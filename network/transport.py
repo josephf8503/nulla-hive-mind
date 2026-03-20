@@ -79,11 +79,11 @@ def _udp_socket_buffer_bytes() -> int:
 
 
 def _fragment_burst_packets() -> int:
-    return max(1, int(policy_engine.get("system.fragment_burst_packets", 8) or 8))
+    return max(1, int(policy_engine.get("system.fragment_burst_packets", 1) or 1))
 
 
 def _fragment_pause_seconds() -> float:
-    return max(0.0, float(policy_engine.get("system.fragment_pause_seconds", 0.001) or 0.0))
+    return max(0.0, float(policy_engine.get("system.fragment_pause_seconds", 0.002) or 0.0))
 
 
 def _mesh_psk_bytes() -> bytes | None:
