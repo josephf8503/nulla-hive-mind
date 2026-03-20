@@ -18,11 +18,17 @@ def test_do_ip_first_bootstrap_uses_canonical_watch_config() -> None:
 
 def test_checked_in_watch_edge_config_stays_as_cluster_template() -> None:
     payload = json.loads(
-        (PROJECT_ROOT / "config" / "meet_clusters" / "do_ip_first_4node" / "watch-edge-1.json").read_text(
+        (
+            PROJECT_ROOT
+            / "config"
+            / "meet_clusters"
+            / "separated_watch_4node"
+            / "watch-edge-1.json"
+        ).read_text(
             encoding="utf-8"
         )
     )
 
-    assert payload["public_url"] == "https://161.35.145.74:8788"
+    assert payload["public_url"] == "https://hive.parad0xlabs.com"
     assert payload["bind_host"] == "0.0.0.0"
     assert payload["bind_port"] == 8788
