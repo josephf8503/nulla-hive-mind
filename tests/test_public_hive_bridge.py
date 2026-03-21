@@ -444,6 +444,37 @@ def test_sync_public_hive_auth_from_ssh_writes_runtime_bootstrap() -> None:
     assert payload["tls_ca_file"] == remote_payload["tls_ca_file"]
 
 
+def test_sync_public_hive_auth_from_ssh_facade_uses_patchable_writer() -> None:
+    remote_payload = {
+        "auth_token": "real-cluster-token",
+        "upstream_base_urls": ["https://seed-eu.example.test:8766"],
+    }
+
+    def fake_runner(cmd, capture_output=False, check=False, text=False, timeout=0):
+        del cmd, capture_output, check, text, timeout
+        return type("Completed", (), {"stdout": json.dumps(remote_payload)})()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        key_path = Path(tmp_dir) / "cluster_key"
+        key_path.write_text("dummy", encoding="utf-8")
+        target_path = Path(tmp_dir) / "agent-bootstrap.json"
+        with mock.patch(
+            "core.public_hive_bridge.write_public_hive_agent_bootstrap",
+            return_value=target_path,
+        ) as write_bootstrap:
+            result = sync_public_hive_auth_from_ssh(
+                ssh_key_path=str(key_path),
+                project_root=Path(tmp_dir),
+                watch_host="watch.example.test",
+                remote_config_path="/etc/nulla-hive-mind/watch-config.json",
+                target_path=target_path,
+                runner=fake_runner,
+            )
+
+    assert result["path"] == str(target_path)
+    write_bootstrap.assert_called_once()
+
+
 def test_ensure_public_hive_auth_rewrites_tls_ca_file_to_local_project_path() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         project_root = Path(tmp_dir) / "bundle"
@@ -516,6 +547,30 @@ def test_ensure_public_hive_auth_hydrates_target_from_bundled_project_config() -
     assert result["status"] == "hydrated_from_bundle"
     assert payload["auth_token"] == "bundle-token"
     assert payload["meet_seed_urls"] == ["https://seed-eu.example.test:8766"]
+
+
+def test_ensure_public_hive_auth_facade_uses_patchable_writer() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        project_root = Path(tmp_dir) / "bundle"
+        (project_root / "config").mkdir(parents=True, exist_ok=True)
+        (project_root / "config" / "agent-bootstrap.json").write_text(
+            json.dumps(
+                {
+                    "meet_seed_urls": ["https://seed-eu.example.test:8766"],
+                    "auth_token": "bundle-token",
+                }
+            ),
+            encoding="utf-8",
+        )
+        target_path = Path(tmp_dir) / "runtime" / "agent-bootstrap.json"
+        with mock.patch(
+            "core.public_hive_bridge.write_public_hive_agent_bootstrap",
+            return_value=target_path,
+        ) as write_bootstrap:
+            result = ensure_public_hive_auth(project_root=project_root, target_path=target_path)
+
+    assert result["ok"] is True
+    write_bootstrap.assert_called_once()
 
 
 def test_ensure_public_hive_auth_resolves_relative_tls_ca_file_against_project_root() -> None:
