@@ -4,10 +4,16 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
+from core.execution import (
+    ToolIntentExecution as ExtractedToolIntentExecution,
+    plan_tool_workflow as extracted_plan_tool_workflow,
+    should_attempt_tool_intent as extracted_should_attempt_tool_intent,
+)
 from core.curiosity_roamer import AdaptiveResearchResult
 from core.hive_activity_tracker import HiveActivityTracker, HiveActivityTrackerConfig
 from core.public_hive_bridge import PublicHiveBridgeConfig
 from core.tool_intent_executor import (
+    ToolIntentExecution,
     execute_tool_intent,
     plan_tool_workflow,
     runtime_tool_specs,
@@ -16,6 +22,11 @@ from core.tool_intent_executor import (
 
 
 class ToolIntentExecutorTests(unittest.TestCase):
+    def test_facade_exports_share_extracted_execution_symbols(self) -> None:
+        self.assertIs(plan_tool_workflow, extracted_plan_tool_workflow)
+        self.assertIs(should_attempt_tool_intent, extracted_should_attempt_tool_intent)
+        self.assertIs(ToolIntentExecution, ExtractedToolIntentExecution)
+
     def test_builder_style_integration_request_skips_tool_intent_gate(self) -> None:
         should_run = should_attempt_tool_intent(
             "Help me build a next gen Telegram bot from official docs and good GitHub repos.",

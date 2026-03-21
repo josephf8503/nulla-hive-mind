@@ -7,7 +7,20 @@ from unittest import mock
 
 from apps.nulla_agent import NullaAgent
 from core.execution_gate import ExecutionGate
-from core.local_operator_actions import list_operator_tools, operator_capability_ledger
+from core.local_operator_actions import (
+    OperatorActionIntent,
+    OperatorActionResult,
+    list_operator_tools,
+    operator_capability_ledger,
+    parse_operator_action_intent,
+)
+from core.operator import (
+    OperatorActionIntent as ExtractedOperatorActionIntent,
+    OperatorActionResult as ExtractedOperatorActionResult,
+    list_operator_tools as extracted_list_operator_tools,
+    operator_capability_ledger as extracted_operator_capability_ledger,
+    parse_operator_action_intent as extracted_parse_operator_action_intent,
+)
 from core.persistent_memory import maybe_handle_memory_command
 from core.runtime_paths import data_path
 from core.user_preferences import maybe_handle_preference_command
@@ -52,6 +65,29 @@ class OperatorActionTests(unittest.TestCase):
             conn.commit()
         finally:
             conn.close()
+
+    def test_facade_exports_share_extracted_operator_symbols(self) -> None:
+        self.assertIs(OperatorActionIntent, ExtractedOperatorActionIntent)
+        self.assertIs(OperatorActionResult, ExtractedOperatorActionResult)
+        self.assertEqual(
+            parse_operator_action_intent('list tools please'),
+            extracted_parse_operator_action_intent('list tools please'),
+        )
+
+        tools = [
+            {
+                "tool_id": "schedule_calendar_event",
+                "category": "calendar",
+                "destructive": True,
+                "available": False,
+                "description": "Create local calendar events.",
+            }
+        ]
+        with mock.patch("core.local_operator_actions.list_operator_tools", return_value=tools):
+            ledger = operator_capability_ledger()
+
+        self.assertEqual(list_operator_tools(), extracted_list_operator_tools())
+        self.assertEqual(ledger, extracted_operator_capability_ledger(tools=tools))
 
     def test_disk_inspection_creates_cleanup_preview(self) -> None:
         agent = NullaAgent(backend_name="test-backend", device="openclaw-test", persona_id="default")

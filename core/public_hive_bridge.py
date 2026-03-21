@@ -9,7 +9,6 @@ import ssl
 import subprocess
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -27,25 +26,13 @@ from core.brain_hive_models import (
 )
 from core.meet_and_greet_models import PresenceUpsertRequest
 from core.privacy_guard import text_privacy_risks
+from core.public_hive import PublicHiveBridgeConfig
+from core.public_hive import config as public_hive_config
+from core.public_hive import truth as public_hive_truth
 from core.runtime_paths import CONFIG_HOME_DIR, PROJECT_ROOT, config_path
 from network.signer import get_local_peer_id
 
-_PLACEHOLDER_TOKEN_RE = re.compile(r"(?:replace|set|change).*(?:token|secret)", re.IGNORECASE)
 _UNSET_SENTINEL = object()
-
-
-@dataclass(frozen=True)
-class PublicHiveBridgeConfig:
-    enabled: bool = True
-    meet_seed_urls: tuple[str, ...] = ()
-    topic_target_url: str | None = None
-    home_region: str = "global"
-    request_timeout_seconds: int = 8
-    auth_token: str | None = None
-    auth_tokens_by_base_url: dict[str, str] = field(default_factory=dict)
-    write_grants_by_base_url: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
-    tls_ca_file: str | None = None
-    tls_insecure_skip_verify: bool = False
 
 
 class PublicHiveBridge:
@@ -1267,54 +1254,20 @@ class PublicHiveBridge:
 
 
 def load_public_hive_bridge_config() -> PublicHiveBridgeConfig:
-    ensure_public_hive_agent_bootstrap()
-    runtime = _load_json_file(config_path("agent-bootstrap.json"))
-    sample = _load_agent_bootstrap(include_runtime=False)
-    discovered = _discover_local_cluster_bootstrap(project_root=PROJECT_ROOT)
-    env_urls = _split_csv(os.environ.get("NULLA_MEET_SEED_URLS", ""))
-    runtime_seed_urls = [str(url).strip() for url in list(runtime.get("meet_seed_urls") or []) if str(url).strip()]
-    sample_seed_urls = [str(url).strip() for url in list(sample.get("meet_seed_urls") or []) if str(url).strip()]
-    seed_urls = tuple(env_urls or runtime_seed_urls or sample_seed_urls or list(discovered.get("meet_seed_urls") or []))
-    env_auth_tokens_by_base_url = _json_env_object(os.environ.get("NULLA_MEET_AUTH_TOKENS_JSON", ""))
-    auth_tokens_by_base_url = env_auth_tokens_by_base_url or _merge_auth_tokens_by_base_url(runtime)
-    env_write_grants_by_base_url = _json_env_write_grants(os.environ.get("NULLA_MEET_WRITE_GRANTS_JSON", ""))
-    write_grants_by_base_url = env_write_grants_by_base_url or _merge_write_grants_by_base_url(runtime)
-    if not write_grants_by_base_url:
-        write_grants_by_base_url = _merge_write_grants_by_base_url(sample)
-    env_auth_token = _clean_token(str(os.environ.get("NULLA_MEET_AUTH_TOKEN", "")).strip())
-    raw_auth_token = _clean_token(str(runtime.get("auth_token") or "").strip())
-    env_tls_insecure = str(os.environ.get("NULLA_MEET_TLS_INSECURE_SKIP_VERIFY") or "").strip().lower()
-    if env_tls_insecure:
-        tls_insecure_skip_verify = env_tls_insecure in {"1", "true", "yes", "on"}
-    else:
-        tls_insecure_skip_verify = bool(runtime.get("tls_insecure_skip_verify", False))
-    enabled_raw = str(os.environ.get("NULLA_PUBLIC_HIVE_ENABLED", "1")).strip().lower()
-    enabled = enabled_raw not in {"0", "false", "no", "off"} and bool(seed_urls)
-    topic_target_url = seed_urls[0] if seed_urls else None
-    return PublicHiveBridgeConfig(
-        enabled=enabled,
-        meet_seed_urls=seed_urls,
-        topic_target_url=topic_target_url,
-        home_region=str(
-            os.environ.get("NULLA_HOME_REGION")
-            or runtime.get("home_region")
-            or discovered.get("home_region")
-            or sample.get("home_region")
-            or "global"
-        ).strip()
-        or "global",
-        request_timeout_seconds=max(3, int(float(os.environ.get("NULLA_MEET_TIMEOUT_SECONDS") or runtime.get("request_timeout_seconds") or sample.get("request_timeout_seconds") or 8))),
-        auth_token=env_auth_token or raw_auth_token,
-        auth_tokens_by_base_url=auth_tokens_by_base_url,
-        write_grants_by_base_url=write_grants_by_base_url,
-        tls_ca_file=str(
-            os.environ.get("NULLA_MEET_TLS_CA_FILE")
-            or runtime.get("tls_ca_file")
-            or discovered.get("tls_ca_file")
-            or sample.get("tls_ca_file")
-            or ""
-        ).strip() or None,
-        tls_insecure_skip_verify=tls_insecure_skip_verify,
+    return public_hive_config.load_public_hive_bridge_config(
+        ensure_public_hive_agent_bootstrap_fn=ensure_public_hive_agent_bootstrap,
+        load_json_file_fn=_load_json_file,
+        load_agent_bootstrap_fn=_load_agent_bootstrap,
+        discover_local_cluster_bootstrap_fn=_discover_local_cluster_bootstrap,
+        split_csv_fn=_split_csv,
+        json_env_object_fn=_json_env_object,
+        merge_auth_tokens_by_base_url_fn=_merge_auth_tokens_by_base_url,
+        json_env_write_grants_fn=_json_env_write_grants,
+        merge_write_grants_by_base_url_fn=_merge_write_grants_by_base_url,
+        clean_token_fn=_clean_token,
+        config_path_fn=config_path,
+        project_root=PROJECT_ROOT,
+        env=os.environ,
     )
 
 
@@ -1578,25 +1531,15 @@ def sync_public_hive_auth_from_ssh(
 
 
 def _split_csv(value: str) -> list[str]:
-    return [item.strip() for item in str(value or "").split(",") if item.strip()]
+    return public_hive_config._split_csv(value)
 
 
 def _load_json_file(path: Path) -> dict[str, Any]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    return public_hive_config._load_json_file(path)
 
 
 def public_hive_has_auth(config: PublicHiveBridgeConfig | None = None, *, payload: dict[str, Any] | None = None) -> bool:
-    if config is not None:
-        if _clean_token(str(config.auth_token or "").strip()):
-            return True
-        return any(_clean_token(str(token or "").strip()) for token in dict(config.auth_tokens_by_base_url or {}).values())
-    raw = dict(payload or {})
-    if _clean_token(str(raw.get("auth_token") or "").strip()):
-        return True
-    return any(_clean_token(str(token or "").strip()) for token in dict(raw.get("auth_tokens_by_base_url") or {}).values())
+    return public_hive_config.public_hive_has_auth(config, payload=payload)
 
 
 def public_hive_write_requires_auth(
@@ -1605,119 +1548,38 @@ def public_hive_write_requires_auth(
     seed_urls: list[str] | tuple[str, ...] | None = None,
     topic_target_url: str | None = None,
 ) -> bool:
-    urls = [str(url).strip() for url in list(seed_urls or []) if str(url).strip()]
-    if config is not None:
-        urls.extend(str(url).strip() for url in list(config.meet_seed_urls or ()) if str(url).strip())
-        if str(config.topic_target_url or "").strip():
-            urls.append(str(config.topic_target_url or "").strip())
-    if str(topic_target_url or "").strip():
-        urls.append(str(topic_target_url or "").strip())
-    return any(_url_requires_auth(url) for url in urls)
+    return public_hive_config.public_hive_write_requires_auth(
+        config,
+        seed_urls=seed_urls,
+        topic_target_url=topic_target_url,
+    )
 
 
 def public_hive_write_enabled(config: PublicHiveBridgeConfig | None = None) -> bool:
-    cfg = config or load_public_hive_bridge_config()
-    if not cfg.enabled or not cfg.meet_seed_urls:
-        return False
-    if not public_hive_write_requires_auth(cfg):
-        return True
-    return public_hive_has_auth(cfg)
+    return public_hive_config.public_hive_write_enabled(
+        config,
+        load_public_hive_bridge_config_fn=load_public_hive_bridge_config,
+    )
 
 
 def _annotate_public_hive_truth(row: dict[str, Any]) -> dict[str, Any]:
-    payload = dict(row or {})
-    payload["truth_source"] = "public_bridge"
-    payload["truth_label"] = "public-bridge-derived"
-    if bool(payload.get("truth_overlay")):
-        payload["truth_transport"] = "direct_overlay"
-    else:
-        payload["truth_transport"] = "compat_fallback" if bool(payload.get("compat_fallback")) else "direct"
-    reference_at = str(payload.get("updated_at") or payload.get("created_at") or "").strip()
-    if reference_at:
-        payload["truth_timestamp"] = reference_at
-    return payload
+    return public_hive_truth.annotate_public_hive_truth(row)
 
 
 def _annotate_public_hive_packet_truth(packet: dict[str, Any]) -> dict[str, Any]:
-    payload = dict(packet or {})
-    payload["truth_source"] = "public_bridge"
-    payload["truth_label"] = "public-bridge-derived"
-    if bool(payload.get("truth_overlay")):
-        payload["truth_transport"] = "direct_overlay"
-    else:
-        payload["truth_transport"] = "compat_fallback" if bool(payload.get("compat_fallback")) else "direct"
-    topic = dict(payload.get("topic") or {})
-    reference_at = str(topic.get("updated_at") or topic.get("created_at") or payload.get("updated_at") or "").strip()
-    if reference_at:
-        payload["truth_timestamp"] = reference_at
-    return payload
+    return public_hive_truth.annotate_public_hive_packet_truth(packet)
 
 
 def _research_queue_truth_complete(row: dict[str, Any]) -> bool:
-    payload = dict(row or {})
-    required = {
-        "artifact_resolution_status",
-        "nonempty_query_count",
-        "dead_query_count",
-        "promoted_finding_count",
-        "mined_feature_count",
-        "research_quality_status",
-        "research_quality_reasons",
-    }
-    return required.issubset(payload.keys())
+    return public_hive_truth.research_queue_truth_complete(row)
 
 
 def _research_packet_truth_complete(packet: dict[str, Any]) -> bool:
-    payload = dict(packet or {})
-    required = {
-        "source_domains",
-        "artifact_refs",
-        "artifact_resolution_status",
-        "nonempty_query_count",
-        "dead_query_count",
-        "promoted_finding_count",
-        "mined_feature_count",
-        "research_quality_status",
-        "research_quality_reasons",
-    }
-    return required.issubset(payload.keys())
+    return public_hive_truth.research_packet_truth_complete(packet)
 
 
 def _resolve_local_tls_ca_file(tls_ca_file: str | None, *, project_root: str | Path | None = None) -> str | None:
-    raw = str(tls_ca_file or "").strip()
-    if not raw:
-        return None
-
-    root = Path(project_root).expanduser().resolve() if project_root else PROJECT_ROOT.resolve()
-    candidate = Path(raw).expanduser()
-    if candidate.is_absolute() and candidate.is_file():
-        return str(candidate.resolve())
-    if not candidate.is_absolute():
-        rooted_candidate = (root / candidate).resolve()
-        if rooted_candidate.is_file():
-            return str(rooted_candidate)
-
-    normalized = raw.replace("\\", "/")
-    relative_from_config = ""
-    marker = "/config/"
-    if marker in normalized:
-        relative_from_config = "config/" + normalized.split(marker, 1)[1].lstrip("/")
-
-    local_candidates: list[Path] = []
-    if relative_from_config:
-        local_candidates.append(root / relative_from_config)
-    if candidate.name:
-        local_candidates.extend(
-            [
-                root / "config" / "meet_clusters" / "do_ip_first_4node" / "tls" / candidate.name,
-                root / "config" / "meet_clusters" / "separated_watch_4node" / "tls" / candidate.name,
-                root / "config" / "tls" / candidate.name,
-            ]
-        )
-    for local_path in local_candidates:
-        if local_path.is_file():
-            return str(local_path.resolve())
-    return raw
+    return public_hive_config._resolve_local_tls_ca_file(tls_ca_file, project_root=project_root or PROJECT_ROOT)
 
 
 def find_public_hive_ssh_key(project_root: str | Path | None = None) -> Path | None:
@@ -1998,162 +1860,63 @@ def _discover_local_cluster_bootstrap(*, project_root: str | Path | None = None)
 
 
 def _json_env_object(value: str) -> dict[str, str]:
-    try:
-        raw = json.loads(str(value or "").strip() or "{}")
-    except Exception:
-        raw = {}
-    out: dict[str, str] = {}
-    for base, token in dict(raw or {}).items():
-        clean_token = _clean_token(str(token or "").strip())
-        clean_base = _normalize_base_url(str(base or "").strip())
-        if clean_base and clean_token:
-            out[clean_base] = clean_token
-    return out
+    return public_hive_config._json_env_object(value)
 
 
 def _json_env_write_grants(value: str) -> dict[str, dict[str, dict[str, Any]]]:
-    try:
-        raw = json.loads(str(value or "").strip() or "{}")
-    except Exception:
-        raw = {}
-    out: dict[str, dict[str, dict[str, Any]]] = {}
-    for base_url, routes in dict(raw or {}).items():
-        normalized_base = _normalize_base_url(str(base_url or "").strip())
-        if not normalized_base or not isinstance(routes, dict):
-            continue
-        normalized_routes: dict[str, dict[str, Any]] = {}
-        for route, grant in dict(routes).items():
-            clean_route = str(route or "").rstrip("/") or "/"
-            if not clean_route or not isinstance(grant, dict):
-                continue
-            normalized_routes[clean_route] = dict(grant)
-        if normalized_routes:
-            out[normalized_base] = normalized_routes
-    return out
+    return public_hive_config._json_env_write_grants(value)
 
 
 def _merge_auth_tokens_by_base_url(raw: dict[str, Any]) -> dict[str, str]:
-    merged = {
-        _normalize_base_url(base): str(token).strip()
-        for base, token in dict(raw.get("auth_tokens_by_base_url") or {}).items()
-        if str(base).strip() and _clean_token(str(token or "").strip())
-    }
-    merged.update(_json_env_object(os.environ.get("NULLA_MEET_AUTH_TOKENS_JSON", "")))
-    return merged
+    return public_hive_config._merge_auth_tokens_by_base_url(raw)
 
 
 def _merge_write_grants_by_base_url(raw: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
-    merged: dict[str, dict[str, dict[str, Any]]] = {}
-    raw_value = dict(raw.get("write_grants_by_base_url") or {})
-    for base_url, routes in raw_value.items():
-        normalized_base = _normalize_base_url(str(base_url or "").strip())
-        if not normalized_base or not isinstance(routes, dict):
-            continue
-        merged[normalized_base] = {
-            (str(route or "").rstrip("/") or "/"): dict(grant)
-            for route, grant in routes.items()
-            if str(route or "").strip() and isinstance(grant, dict)
-        }
-    env_value = _json_env_write_grants(os.environ.get("NULLA_MEET_WRITE_GRANTS_JSON", ""))
-    for base_url, routes in env_value.items():
-        merged[base_url] = dict(routes)
-    return merged
+    return public_hive_config._merge_write_grants_by_base_url(raw)
 
 
 def _clean_token(value: str) -> str | None:
-    cleaned = str(value or "").strip()
-    if not cleaned or _PLACEHOLDER_TOKEN_RE.search(cleaned):
-        return None
-    return cleaned
+    return public_hive_config._clean_token(value)
 
 
 def _url_requires_auth(url: str) -> bool:
-    parsed = urlsplit(str(url or "").strip())
-    host = str(parsed.hostname or "").strip().lower()
-    if host in {"", "localhost", "127.0.0.1", "::1"}:
-        return False
-    return bool(host)
+    return public_hive_config._url_requires_auth(url)
 
 
 def _normalize_base_url(url: str) -> str:
-    parsed = urlsplit(str(url or "").strip())
-    if not parsed.scheme or not parsed.netloc:
-        return str(url or "").rstrip("/")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), "", "", "")).rstrip("/")
+    return public_hive_config._normalize_base_url(url)
 
 
 def _normalize_presence_status(value: str) -> str:
-    lowered = str(value or "idle").strip().lower()
-    if lowered in {"idle", "busy", "offline", "limited"}:
-        return lowered
-    return "idle"
+    return public_hive_truth.normalize_presence_status(value)
 
 
 def _task_title(task_summary: str) -> str:
-    trimmed = str(task_summary or "").strip()
-    if len(trimmed) > 112:
-        trimmed = trimmed[:109].rstrip() + "..."
-    return f"Task: {trimmed}"[:180]
+    return public_hive_truth.task_title(task_summary)
 
 
 def _topic_tags(*, task_class: str, text: str, extra: list[str] | None = None) -> list[str]:
-    tokens: list[str] = []
-    for item in [str(task_class or "").strip().lower(), *[str(v).strip().lower() for v in list(extra or [])]]:
-        if item and item not in tokens:
-            tokens.append(item[:32])
-    for raw in re.findall(r"[a-z0-9][a-z0-9_\-]{2,}", str(text or "").lower()):
-        if raw not in tokens:
-            tokens.append(raw[:32])
-        if len(tokens) >= 8:
-            break
-    return tokens[:8]
+    return public_hive_truth.topic_tags(task_class=task_class, text=text, extra=extra)
 
 
 def _public_post_body(response: str) -> str:
-    text = str(response or "").strip()
-    if not text:
-        return ""
-    if text.lower().startswith("workflow:\n"):
-        parts = text.split("\n\n", 1)
-        text = parts[1].strip() if len(parts) == 2 else text
-    text = " ".join(text.split())
-    if len(text) > 1600:
-        text = text[:1597].rstrip() + "..."
-    return text
+    return public_hive_truth.public_post_body(response)
 
 
 def _fallback_public_post_body(*, task_summary: str, task_class: str) -> str:
-    text = (
-        f"Public-safe update from NULLA: working on {str(task_class or 'research').strip() or 'research'} "
-        f"for '{str(task_summary or '').strip()}'."
-    ).strip()
-    return text[:1600]
+    return public_hive_truth.fallback_public_post_body(task_summary=task_summary, task_class=task_class)
 
 
 def _commons_topic_title(topic: str) -> str:
-    trimmed = " ".join(str(topic or "").split()).strip()
-    if len(trimmed) > 132:
-        trimmed = trimmed[:129].rstrip() + "..."
-    return f"Agent Commons: {trimmed}"[:180]
+    return public_hive_truth.commons_topic_title(topic)
 
 
 def _commons_topic_summary(*, topic: str, summary: str) -> str:
-    text = (
-        "Idle agent commons thread for bounded brainstorming and curiosity. "
-        f"Current focus: {str(topic or '').strip()}. "
-        f"Working note: {str(summary or '').strip()}"
-    ).strip()
-    return text[:3000]
+    return public_hive_truth.commons_topic_summary(topic=topic, summary=summary)
 
 
 def _commons_post_body(*, topic: str, summary: str, public_body: str) -> str:
-    base = _public_post_body(public_body) or str(summary or "").strip()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%MZ")
-    text = (
-        f"Commons update [{stamp}] on {str(topic or '').strip()}: "
-        f"{base or str(summary or '').strip()}"
-    ).strip()
-    return text[:1600]
+    return public_hive_truth.commons_post_body(topic=topic, summary=summary, public_body=public_body)
 
 
 def _topic_match_score(
@@ -2163,50 +1926,21 @@ def _topic_match_score(
     topic_tags: list[str],
     topic: dict[str, Any],
 ) -> int:
-    score = 0
-    wanted_tags = {str(item or "").strip().lower() for item in topic_tags if str(item or "").strip()}
-    existing_tags = {
-        str(item or "").strip().lower()
-        for item in list(topic.get("topic_tags") or [])
-        if str(item or "").strip()
-    }
-    tag_overlap = wanted_tags & existing_tags
-    score += min(3, len(tag_overlap))
-    if str(task_class or "").strip().lower() in existing_tags:
-        score += 1
-    task_tokens = set(_content_tokens(task_summary))
-    topic_tokens = set(
-        _content_tokens(str(topic.get("title") or ""))
-        + _content_tokens(str(topic.get("summary") or ""))
+    return public_hive_truth.topic_match_score(
+        task_summary=task_summary,
+        task_class=task_class,
+        topic_tags=topic_tags,
+        topic=topic,
     )
-    score += min(4, len(task_tokens & topic_tokens))
-    return score
 
 
 def _content_tokens(text: str) -> list[str]:
-    return [token[:32] for token in re.findall(r"[a-z0-9][a-z0-9_\-]{2,}", str(text or "").lower())]
+    return public_hive_truth.content_tokens(text)
 
 
 def _http_error_detail(exc: urllib.error.HTTPError, *, fallback: str) -> str:
-    try:
-        raw = exc.read().decode("utf-8", "replace").strip()
-    except Exception:
-        raw = ""
-    if raw:
-        try:
-            payload = json.loads(raw)
-        except Exception:
-            payload = None
-        if isinstance(payload, dict):
-            detail = str(payload.get("error") or "").strip()
-            if detail:
-                return detail
-        return raw[:800]
-    code = int(getattr(exc, "code", 0) or 0)
-    return f"{fallback} (HTTP {code})" if code else fallback
+    return public_hive_truth.http_error_detail(exc, fallback=fallback)
 
 
 def _route_missing(exc: Exception) -> bool:
-    if isinstance(exc, urllib.error.HTTPError):
-        return int(getattr(exc, "code", 0) or 0) == 404
-    return False
+    return public_hive_truth.route_missing(exc)

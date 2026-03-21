@@ -20,6 +20,10 @@ _IGNORED_DIRS = {
     "dist",
 }
 
+_IGNORED_KEY_ARTIFACT_ROOTS = (
+    Path("artifacts/acceptance_runs"),
+)
+
 _LEGACY_ROOT_DOCS = {
     "CURSOR_AUDIT_REPORT.md",
     "Cursor_Claude_Handover.md",
@@ -49,7 +53,10 @@ def _repo_key_artifacts() -> list[str]:
     for path in PROJECT_ROOT.rglob("node_signing_key.b64"):
         if any(part in _IGNORED_DIRS for part in path.parts):
             continue
-        matches.append(str(path.relative_to(PROJECT_ROOT)))
+        relative = path.relative_to(PROJECT_ROOT)
+        if any(relative == root or root in relative.parents for root in _IGNORED_KEY_ARTIFACT_ROOTS):
+            continue
+        matches.append(str(relative))
     return sorted(matches)
 
 
