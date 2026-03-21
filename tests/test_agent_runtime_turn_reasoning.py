@@ -1,0 +1,264 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+from unittest import mock
+
+from apps.nulla_agent import (
+    ChatTurnResult,
+    NullaAgent,
+    ResponseClass,
+    adapt_user_input,
+    append_conversation_event,
+    audit_logger,
+    build_generalized_query,
+    build_media_context_snippets,
+    build_plan,
+    dispatch_query_shard,
+    explicit_planner_style_requested,
+    feedback_engine,
+    from_task_result,
+    ingest_media_evidence,
+    orchestrate_parent_task,
+    policy_engine,
+    render_response,
+    request_relevant_holders,
+    should_use_planner_renderer,
+)
+from core.identity_manager import load_active_persona
+from core.memory_first_router import ModelExecutionDecision
+
+
+def _build_agent() -> NullaAgent:
+    return NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
+
+
+def _configure_grounded_turn_agent(agent: NullaAgent, *, context_result: Any) -> tuple[Any, dict[str, str], Any, Any]:
+    task = SimpleNamespace(
+        task_id="task-123",
+        task_summary="Research proof receipts",
+        environment_os="darwin",
+        environment_shell="zsh",
+        environment_runtime="python",
+        environment_version_hint="3.12",
+    )
+    classification = {"task_class": "research"}
+    interpreted = adapt_user_input("research proof receipts", session_id="turn-reasoning-session")
+    persona = load_active_persona(agent.persona_id)
+    adaptive_research = SimpleNamespace(
+        enabled=False,
+        tool_gap_note="",
+        admitted_uncertainty=False,
+        notes=[],
+        reason="not_needed",
+        strategy="none",
+        actions_taken=[],
+        to_dict=lambda: {"enabled": False, "reason": "not_needed", "strategy": "none", "actions_taken": []},
+    )
+
+    agent.context_loader.load = mock.Mock(return_value=context_result)  # type: ignore[assignment]
+    agent._should_frontload_curiosity = mock.Mock(return_value=False)  # type: ignore[method-assign]
+    agent._maybe_execute_model_tool_intent = mock.Mock(return_value=None)  # type: ignore[method-assign]
+    agent._model_routing_profile = mock.Mock(return_value=(classification, {"output_mode": ""}))  # type: ignore[method-assign]
+    agent._collect_adaptive_research = mock.Mock(return_value=adaptive_research)  # type: ignore[method-assign]
+    agent.memory_router.resolve = mock.Mock(  # type: ignore[assignment]
+        return_value=ModelExecutionDecision(
+            source="provider",
+            task_hash="reasoning-hash",
+            provider_id="ollama:qwen",
+            used_model=True,
+            output_text="",
+            confidence=0.82,
+            trust_score=0.82,
+        )
+    )
+    agent.media_pipeline.analyze = mock.Mock(  # type: ignore[assignment]
+        return_value=SimpleNamespace(
+            used_provider=False,
+            provider_id="",
+            candidate_id="",
+            reason="no_media",
+            evidence_items=[],
+            analysis_text="",
+        )
+    )
+    agent._collect_live_web_notes = mock.Mock(return_value=[])  # type: ignore[method-assign]
+    agent._web_note_plan_candidates = mock.Mock(return_value=[])  # type: ignore[method-assign]
+    agent._default_gate = mock.Mock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(mode="advice_only", requires_user_approval=False)
+    )
+    agent._maybe_publish_public_task = mock.Mock(return_value={})  # type: ignore[method-assign]
+    agent._grounded_response_class = mock.Mock(return_value=ResponseClass.GENERIC_CONVERSATION)  # type: ignore[method-assign]
+    agent._turn_result = mock.Mock(  # type: ignore[method-assign]
+        return_value=ChatTurnResult(
+            text="rendered answer",
+            response_class=ResponseClass.GENERIC_CONVERSATION,
+            workflow_summary="workflow summary",
+            debug_origin="grounded_plan",
+        )
+    )
+    agent._apply_interaction_transition = mock.Mock()  # type: ignore[method-assign]
+    agent._decorate_chat_response = mock.Mock(return_value="decorated answer")  # type: ignore[method-assign]
+    agent._emit_chat_truth_metrics = mock.Mock()  # type: ignore[method-assign]
+    agent._emit_runtime_event = mock.Mock()  # type: ignore[method-assign]
+    agent._finalize_runtime_checkpoint = mock.Mock()  # type: ignore[method-assign]
+    agent._runtime_preview = mock.Mock(return_value="preview")  # type: ignore[method-assign]
+    agent._task_workflow_summary = mock.Mock(return_value="workflow summary")  # type: ignore[method-assign]
+    agent._chat_surface_honest_degraded_response = mock.Mock(return_value="degraded answer")  # type: ignore[method-assign]
+    agent._store_local_shard = mock.Mock()  # type: ignore[method-assign]
+    agent.hive_activity_tracker.note_watched_topic = mock.Mock()  # type: ignore[method-assign]
+    return task, classification, interpreted, persona
+
+
+def test_execute_grounded_turn_facade_delegates_to_extracted_module() -> None:
+    agent = _build_agent()
+    task = mock.Mock(task_id="task-123")
+    classification = {"task_class": "research"}
+    interpreted = SimpleNamespace(understanding_confidence=0.8)
+    persona = mock.sentinel.persona
+
+    with mock.patch(
+        "core.agent_runtime.turn_reasoning.execute_grounded_turn",
+        return_value={"response": "done"},
+    ) as execute_grounded_turn:
+        result = agent._execute_grounded_turn(
+            task=task,
+            effective_input="research proof receipts",
+            classification=classification,
+            interpreted=interpreted,
+            persona=persona,
+            session_id="turn-reasoning-session",
+            source_context={"surface": "openclaw"},
+        )
+
+    assert result == {"response": "done"}
+    execute_grounded_turn.assert_called_once_with(
+        agent,
+        task=task,
+        effective_input="research proof receipts",
+        classification=classification,
+        interpreted=interpreted,
+        persona=persona,
+        session_id="turn-reasoning-session",
+        source_context={"surface": "openclaw"},
+        adapt_user_input_fn=adapt_user_input,
+        ingest_media_evidence_fn=ingest_media_evidence,
+        build_media_context_snippets_fn=build_media_context_snippets,
+        orchestrate_parent_task_fn=orchestrate_parent_task,
+        build_plan_fn=build_plan,
+        render_response_fn=render_response,
+        explicit_planner_style_requested_fn=explicit_planner_style_requested,
+        should_use_planner_renderer_fn=should_use_planner_renderer,
+        request_relevant_holders_fn=request_relevant_holders,
+        dispatch_query_shard_fn=dispatch_query_shard,
+        build_generalized_query_fn=build_generalized_query,
+        feedback_engine_module=feedback_engine,
+        policy_engine_module=policy_engine,
+        from_task_result_fn=from_task_result,
+        append_conversation_event_fn=append_conversation_event,
+        audit_logger_module=audit_logger,
+    )
+
+
+def test_execute_grounded_turn_uses_app_level_render_override(make_agent, context_result_factory) -> None:
+    agent = make_agent()
+    task, classification, interpreted, persona = _configure_grounded_turn_agent(
+        agent,
+        context_result=context_result_factory(local_candidates=[{"candidate_id": "local-1"}], retrieval_confidence_score=0.9),
+    )
+
+    with mock.patch("apps.nulla_agent.orchestrate_parent_task", return_value=None) as orchestrate_parent_task_mock, mock.patch(
+        "apps.nulla_agent.ingest_media_evidence",
+        return_value=[],
+    ), mock.patch(
+        "apps.nulla_agent.build_media_context_snippets",
+        return_value=[],
+    ), mock.patch(
+        "apps.nulla_agent.build_plan",
+        return_value=SimpleNamespace(confidence=0.72),
+    ), mock.patch(
+        "apps.nulla_agent.render_response",
+        return_value="rendered answer",
+    ) as render_response_mock, mock.patch(
+        "apps.nulla_agent.explicit_planner_style_requested",
+        return_value=False,
+    ), mock.patch(
+        "apps.nulla_agent.should_use_planner_renderer",
+        return_value=True,
+    ), mock.patch(
+        "apps.nulla_agent.feedback_engine.evaluate_outcome",
+        return_value=SimpleNamespace(is_success=False, is_durable=False),
+    ), mock.patch(
+        "apps.nulla_agent.feedback_engine.apply",
+        return_value=None,
+    ):
+        result = agent._execute_grounded_turn(
+            task=task,
+            effective_input="research proof receipts",
+            classification=classification,
+            interpreted=interpreted,
+            persona=persona,
+            session_id="turn-reasoning-session",
+            source_context={"surface": "openclaw", "platform": "openclaw"},
+        )
+
+    assert result["response"] == "decorated answer"
+    render_response_mock.assert_called_once()
+    orchestrate_parent_task_mock.assert_called_once()
+
+
+def test_execute_grounded_turn_uses_app_level_swarm_query_overrides(make_agent, context_result_factory) -> None:
+    agent = make_agent()
+    task, classification, interpreted, persona = _configure_grounded_turn_agent(
+        agent,
+        context_result=context_result_factory(local_candidates=[], retrieval_confidence_score=0.0),
+    )
+
+    with mock.patch("apps.nulla_agent.orchestrate_parent_task", return_value=None), mock.patch(
+        "apps.nulla_agent.ingest_media_evidence",
+        return_value=[],
+    ), mock.patch(
+        "apps.nulla_agent.build_media_context_snippets",
+        return_value=[],
+    ), mock.patch(
+        "apps.nulla_agent.build_plan",
+        return_value=SimpleNamespace(confidence=0.72),
+    ), mock.patch(
+        "apps.nulla_agent.render_response",
+        return_value="rendered answer",
+    ), mock.patch(
+        "apps.nulla_agent.explicit_planner_style_requested",
+        return_value=False,
+    ), mock.patch(
+        "apps.nulla_agent.should_use_planner_renderer",
+        return_value=True,
+    ), mock.patch(
+        "apps.nulla_agent.feedback_engine.evaluate_outcome",
+        return_value=SimpleNamespace(is_success=False, is_durable=False),
+    ), mock.patch(
+        "apps.nulla_agent.feedback_engine.apply",
+        return_value=None,
+    ), mock.patch(
+        "apps.nulla_agent.build_generalized_query",
+        return_value={"query_id": "query-123"},
+    ) as build_generalized_query_mock, mock.patch(
+        "apps.nulla_agent.request_relevant_holders",
+        return_value=[],
+    ) as request_relevant_holders_mock, mock.patch(
+        "apps.nulla_agent.dispatch_query_shard",
+        return_value=None,
+    ) as dispatch_query_shard_mock:
+        result = agent._execute_grounded_turn(
+            task=task,
+            effective_input="research proof receipts",
+            classification=classification,
+            interpreted=interpreted,
+            persona=persona,
+            session_id="turn-reasoning-session",
+            source_context={"surface": "openclaw", "platform": "openclaw"},
+        )
+
+    assert result["response"] == "decorated answer"
+    build_generalized_query_mock.assert_called_once_with(task, classification)
+    request_relevant_holders_mock.assert_called_once_with("research", task.task_summary, query_id="query-123", limit=3)
+    dispatch_query_shard_mock.assert_called_once_with({"query_id": "query-123"}, limit=5)

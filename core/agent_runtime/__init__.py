@@ -11,6 +11,7 @@ from . import (
     presence,
     response,
     turn_dispatch,
+    turn_reasoning,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "presence",
     "response",
     "turn_dispatch",
+    "turn_reasoning",
 ]
