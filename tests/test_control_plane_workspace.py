@@ -6,12 +6,24 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import core.control_plane_workspace as control_plane_workspace
+from core.control_plane import policies as control_plane_policies
+from core.control_plane import schemas as control_plane_schemas
+from core.control_plane import templates as control_plane_templates
 from core.control_plane_workspace import collect_control_plane_status, sync_control_plane_workspace
 from storage.db import get_connection
 from storage.migrations import run_migrations
 
 
 class ControlPlaneWorkspaceTests(unittest.TestCase):
+    def test_control_plane_workspace_facade_reuses_extracted_libraries(self) -> None:
+        self.assertEqual(control_plane_workspace._schema_library(), control_plane_schemas.schema_library())
+        self.assertEqual(control_plane_workspace._control_plane_policy_text(), control_plane_policies.control_plane_policy_text())
+        self.assertEqual(
+            control_plane_workspace._template_library(),
+            control_plane_templates.template_library(spawn_policy_fn=control_plane_workspace._spawn_policy),
+        )
+
     def test_sync_control_plane_workspace_creates_real_mirror_and_templates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

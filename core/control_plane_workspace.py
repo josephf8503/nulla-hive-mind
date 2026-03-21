@@ -6,6 +6,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.control_plane import policies as control_plane_policies
+from core.control_plane import schemas as control_plane_schemas
+from core.control_plane import templates as control_plane_templates
 from core import policy_engine, runtime_paths
 from storage.db import DEFAULT_DB_PATH, get_connection
 from storage.migrations import run_migrations
@@ -890,322 +893,30 @@ def _runtime_receipts(conn: Any, session_id: str, *, limit: int) -> list[dict[st
 
 
 def _budget_caps_policy() -> dict[str, Any]:
-    return {
-        "generated_at": _utcnow(),
-        "swarm_dispatch": {
-            "free_tier_daily_swarm_points": float(policy_engine.get("economics.free_tier_daily_swarm_points", 24.0) or 24.0),
-            "free_tier_max_dispatch_points": float(policy_engine.get("economics.free_tier_max_dispatch_points", 12.0) or 12.0),
-        },
-        "public_hive": {
-            "daily_quota_low": float(policy_engine.get("economics.public_hive_daily_quota_low", 24.0) or 24.0),
-            "daily_quota_mid": float(policy_engine.get("economics.public_hive_daily_quota_mid", 192.0) or 192.0),
-            "daily_quota_high": float(policy_engine.get("economics.public_hive_daily_quota_high", 768.0) or 768.0),
-            "bonus_per_active_claim": float(
-                policy_engine.get("economics.public_hive_daily_quota_bonus_per_active_claim", 24.0) or 24.0
-            ),
-            "bonus_cap": float(
-                policy_engine.get("economics.public_hive_daily_quota_max_active_claim_bonus", 192.0) or 192.0
-            ),
-            "route_costs": dict(policy_engine.get("economics.public_hive_route_costs", {}) or {}),
-        },
-        "adaptation": {
-            "tick_interval_seconds": int(policy_engine.get("adaptation.tick_interval_seconds", 1800) or 1800),
-            "max_running_jobs": int(policy_engine.get("adaptation.max_running_jobs", 1) or 1),
-            "min_examples_to_train": int(policy_engine.get("adaptation.min_examples_to_train", 24) or 24),
-            "min_structured_examples": int(policy_engine.get("adaptation.min_structured_examples", 12) or 12),
-            "min_high_signal_examples": int(policy_engine.get("adaptation.min_high_signal_examples", 8) or 8),
-            "min_new_examples_since_last_job": int(
-                policy_engine.get("adaptation.min_new_examples_since_last_job", 8) or 8
-            ),
-            "max_conversation_ratio": float(policy_engine.get("adaptation.max_conversation_ratio", 0.45) or 0.45),
-            "promotion_margin": float(policy_engine.get("adaptation.promotion_margin", 0.03) or 0.03),
-            "rollback_margin": float(policy_engine.get("adaptation.rollback_margin", 0.04) or 0.04),
-        },
-    }
-
-
-def _reviewer_lane_policy() -> dict[str, Any]:
-    return {
-        "lane": "reviewer",
-        "purpose": "Validate schema, policy compliance, and output quality before durable promotion.",
-        "source_of_truth": "task_results.status = submitted; useful_outputs stay ineligible until reviewed or approved",
-        "required_checks": [
-            "schema_valid",
-            "policy_compliant",
-            "unexpected_write_behavior_absent",
-            "output_complete_or_explicitly_partial",
-            "human_approval_required_if_risky",
-            "training_eligibility_explicit",
-        ],
-    }
-
-
-def _archivist_lane_policy() -> dict[str, Any]:
-    return {
-        "lane": "archivist",
-        "purpose": "Compact approved outputs into durable summaries without polluting memory with transient noise.",
-        "source_of_truth": "useful_outputs.archive_state in candidate|approved",
-        "archive_rules": [
-            "approved_summaries_only",
-            "strip transient chatter",
-            "preserve task/result IDs for traceability",
-            "prefer role-scoped or shared semantic memory, not raw chat dumps",
-        ],
-    }
-
-
-def _control_plane_policy_text() -> str:
-    return (
-        "# NULLA Control Plane Mirror\n\n"
-        "This workspace is an operator-facing mirror of NULLA's real runtime state.\n"
-        "It does not replace the DB-backed source of truth.\n\n"
-        "Safety posture:\n"
-        "- additive only\n"
-        "- read-mostly mirrors\n"
-        "- review before archive\n"
-        "- approvals stay explicit\n"
-        "- failed or policy-rejected work stays visible in deadletters\n"
+    return control_plane_policies.budget_caps_policy(
+        policy_getter=policy_engine.get,
+        utcnow_fn=_utcnow,
     )
 
 
+def _reviewer_lane_policy() -> dict[str, Any]:
+    return control_plane_policies.reviewer_lane_policy()
+
+
+def _archivist_lane_policy() -> dict[str, Any]:
+    return control_plane_policies.archivist_lane_policy()
+
+
+def _control_plane_policy_text() -> str:
+    return control_plane_policies.control_plane_policy_text()
+
+
 def _schema_library() -> dict[str, dict[str, Any]]:
-    return {
-        "task-manifest.schema.json": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["task_id", "summary", "status", "created_at", "updated_at"],
-            "properties": {
-                "task_id": {"type": "string"},
-                "summary": {"type": "string"},
-                "status": {"type": "string"},
-                "priority": {"type": "string"},
-                "created_at": {"type": "string"},
-                "updated_at": {"type": "string"},
-            },
-        },
-        "lease-manifest.schema.json": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["assignment_id", "task_id", "helper_peer_id", "status", "assigned_at"],
-            "properties": {
-                "assignment_id": {"type": "string"},
-                "task_id": {"type": "string"},
-                "helper_peer_id": {"type": "string"},
-                "status": {"type": "string"},
-                "lease_expires_at": {"type": ["string", "null"]},
-            },
-        },
-        "run-manifest.schema.json": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["session_id", "status", "request_preview", "started_at", "updated_at"],
-            "properties": {
-                "session_id": {"type": "string"},
-                "status": {"type": "string"},
-                "request_preview": {"type": "string"},
-                "task_class": {"type": "string"},
-                "tool_receipts": {"type": "array"},
-                "touched_paths": {"type": "array", "items": {"type": "string"}},
-            },
-        },
-        "approval-manifest.schema.json": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["action_id", "session_id", "action_kind", "status", "created_at"],
-            "properties": {
-                "action_id": {"type": "string"},
-                "session_id": {"type": "string"},
-                "action_kind": {"type": "string"},
-                "status": {"type": "string"},
-                "scope": {"type": "object"},
-            },
-        },
-        "budget-manifest.schema.json": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["generated_at", "day_bucket", "items"],
-            "properties": {
-                "generated_at": {"type": "string"},
-                "day_bucket": {"type": "string"},
-                "items": {"type": "array"},
-            },
-        },
-        "review-manifest.schema.json": {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "required": ["lane", "items"],
-            "properties": {
-                "lane": {"type": "string"},
-                "items": {"type": "array"},
-                "review_required": {"type": "boolean"},
-            },
-        },
-    }
+    return control_plane_schemas.schema_library()
 
 
 def _template_library() -> dict[str, dict[str, Any]]:
-    common = {
-        "research_worker": {
-            "AGENT_ROLE.md": (
-                "# Research Worker\n\n"
-                "Purpose: bounded reading, synthesis, and evidence gathering.\n"
-                "Must not mutate system state or widen permissions.\n"
-            ),
-            "TOOLS.md": (
-                "- read-only file inspection\n"
-                "- bounded web/retrieval when policy allows\n"
-                "- no broad shell writes\n"
-            ),
-            "HEARTBEAT.md": "- confirm queue/task scope\n- confirm read-only posture\n- stop on ambiguity\n",
-            "POLICY.md": "Default deny. Read-mostly. Human approval on any write or risky network action.\n",
-            "spawn.json": _spawn_policy(
-                purpose="bounded_research",
-                allowed_tools=["read", "search", "summarize"],
-                allowed_read_roots=["./workspace", "./docs", "./data"],
-                allowed_write_roots=["./workspace/logs"],
-                shell_allowed=False,
-                network_allowed=True,
-                credential_use=False,
-                max_steps=12,
-                max_lifetime_seconds=900,
-                max_retries=1,
-                max_requests_per_minute=12,
-                review_required=True,
-                archive_behavior="review_then_archive_summary",
-            ),
-        },
-        "liquefy_worker": {
-            "AGENT_ROLE.md": (
-                "# Liquefy Worker\n\n"
-                "Purpose: approved project work, compression/integration support, bounded file operations.\n"
-                "Must stay inside approved project/workspace roots.\n"
-            ),
-            "TOOLS.md": "- bounded shell\n- git status/diff/show\n- python/node project tools within approved roots\n",
-            "HEARTBEAT.md": "- verify path scope\n- verify no destructive command\n- stop for escalation\n",
-            "POLICY.md": "Broader than research but still path-scoped and approval-gated for destructive or external changes.\n",
-            "spawn.json": _spawn_policy(
-                purpose="project_implementation",
-                allowed_tools=["read", "write", "edit", "exec", "diff"],
-                allowed_read_roots=["./workspace", "./docs", "./data", "./core", "./apps", "./storage", "./ops", "./tests"],
-                allowed_write_roots=["./workspace", "./tmp", "./core", "./apps", "./storage", "./ops", "./tests"],
-                shell_allowed=True,
-                network_allowed=False,
-                credential_use=False,
-                max_steps=24,
-                max_lifetime_seconds=1800,
-                max_retries=1,
-                max_requests_per_minute=24,
-                review_required=True,
-                archive_behavior="review_then_archive_summary",
-            ),
-        },
-        "monitor_worker": {
-            "AGENT_ROLE.md": "# Monitor Worker\n\nPurpose: inspect system health, logs, runtime status, and anomaly summaries.\n",
-            "TOOLS.md": "- read-only diagnostics\n- log/status inspection\n- no state changes\n",
-            "HEARTBEAT.md": "- verify read-only mode\n- capture failures with timestamps\n- no mutating actions\n",
-            "POLICY.md": "Read-heavy and conservative. Never change system state without explicit approval.\n",
-            "spawn.json": _spawn_policy(
-                purpose="health_monitoring",
-                allowed_tools=["read", "status", "inspect"],
-                allowed_read_roots=["./workspace", "./data", "./logs", "./config"],
-                allowed_write_roots=["./workspace/logs"],
-                shell_allowed=False,
-                network_allowed=False,
-                credential_use=False,
-                max_steps=10,
-                max_lifetime_seconds=600,
-                max_retries=1,
-                max_requests_per_minute=10,
-                review_required=False,
-                archive_behavior="log_summary_only",
-            ),
-        },
-        "personal_assistant": {
-            "AGENT_ROLE.md": "# Personal Assistant\n\nPurpose: general user-facing help, notes, and bounded personal task organization.\n",
-            "TOOLS.md": "- low-risk note and summary tools\n- no coding or infra powers by default\n",
-            "HEARTBEAT.md": "- keep tone/user context clean\n- avoid coding/infra privileges\n",
-            "POLICY.md": "No broad shell, no infra mutation, no credential use by default.\n",
-            "spawn.json": _spawn_policy(
-                purpose="general_assistance",
-                allowed_tools=["read", "write_notes", "summarize"],
-                allowed_read_roots=["./workspace", "./docs"],
-                allowed_write_roots=["./workspace/logs", "./workspace/memory"],
-                shell_allowed=False,
-                network_allowed=False,
-                credential_use=False,
-                max_steps=8,
-                max_lifetime_seconds=600,
-                max_retries=0,
-                max_requests_per_minute=8,
-                review_required=False,
-                archive_behavior="summary_only",
-            ),
-        },
-        "reviewer": {
-            "AGENT_ROLE.md": "# Reviewer\n\nPurpose: validate worker output before durable promotion.\n",
-            "TOOLS.md": "- schema validation\n- policy checks\n- no broad execution\n",
-            "HEARTBEAT.md": "- verify schema\n- verify policy\n- block on ambiguity\n",
-            "POLICY.md": "Reviewer must never approve ambiguous or policy-violating output.\n",
-            "spawn.json": _spawn_policy(
-                purpose="output_review",
-                allowed_tools=["read", "validate_schema", "compare", "summarize"],
-                allowed_read_roots=["./workspace/control", "./workspace/templates", "./data"],
-                allowed_write_roots=["./workspace/control/approvals", "./workspace/control/queue"],
-                shell_allowed=False,
-                network_allowed=False,
-                credential_use=False,
-                max_steps=10,
-                max_lifetime_seconds=600,
-                max_retries=1,
-                max_requests_per_minute=8,
-                review_required=False,
-                archive_behavior="review_only",
-            ),
-        },
-        "archivist": {
-            "AGENT_ROLE.md": "# Archivist\n\nPurpose: compact approved outputs into durable summaries and logs.\n",
-            "TOOLS.md": "- summary writing\n- memory compaction\n- no direct risky execution\n",
-            "HEARTBEAT.md": "- archive only approved outputs\n- strip transient noise\n- preserve traceability IDs\n",
-            "POLICY.md": "Archivist writes summaries only after review passes. No raw dump of transient chatter.\n",
-            "spawn.json": _spawn_policy(
-                purpose="approved_archive",
-                allowed_tools=["read", "write_notes", "compact"],
-                allowed_read_roots=["./workspace/control", "./workspace/memory", "./workspace/roles"],
-                allowed_write_roots=["./workspace/memory", "./workspace/logs", "./workspace/roles"],
-                shell_allowed=False,
-                network_allowed=False,
-                credential_use=False,
-                max_steps=12,
-                max_lifetime_seconds=900,
-                max_retries=1,
-                max_requests_per_minute=8,
-                review_required=False,
-                archive_behavior="approved_summary_only",
-            ),
-        },
-        "router": {
-            "AGENT_ROLE.md": "# Router\n\nPurpose: classify incoming work and map it onto the narrowest safe worker template.\n",
-            "TOOLS.md": "- classify\n- route\n- no direct execution\n",
-            "HEARTBEAT.md": "- choose narrowest safe template\n- no self-spawn\n- no recursive fanout by default\n",
-            "POLICY.md": "Router may propose worker selection but should not bypass reviewer or approval gates.\n",
-            "spawn.json": _spawn_policy(
-                purpose="routing_only",
-                allowed_tools=["classify", "route", "summarize"],
-                allowed_read_roots=["./workspace/control", "./workspace/templates", "./workspace/core"],
-                allowed_write_roots=["./workspace/control/queue"],
-                shell_allowed=False,
-                network_allowed=False,
-                credential_use=False,
-                max_steps=6,
-                max_lifetime_seconds=300,
-                max_retries=0,
-                max_requests_per_minute=12,
-                review_required=False,
-                archive_behavior="none",
-            ),
-        },
-    }
-    return common
+    return control_plane_templates.template_library(spawn_policy_fn=_spawn_policy)
 
 
 def _spawn_policy(
@@ -1224,50 +935,28 @@ def _spawn_policy(
     review_required: bool,
     archive_behavior: str,
 ) -> dict[str, Any]:
-    return {
-        "purpose": purpose,
-        "allowed_tools": allowed_tools,
-        "allowed_read_roots": allowed_read_roots,
-        "allowed_write_roots": allowed_write_roots,
-        "shell_allowed": shell_allowed,
-        "network_allowed": network_allowed,
-        "credential_use": credential_use,
-        "max_steps": max_steps,
-        "max_lifetime_seconds": max_lifetime_seconds,
-        "max_retries": max_retries,
-        "max_requests_per_minute": max_requests_per_minute,
-        "review_required": review_required,
-        "archive_behavior": archive_behavior,
-        "termination_conditions": [
-            "task_complete",
-            "timeout",
-            "budget_exhausted",
-            "policy_violation",
-            "approval_required",
-        ],
-    }
+    return control_plane_templates.spawn_policy(
+        purpose=purpose,
+        allowed_tools=allowed_tools,
+        allowed_read_roots=allowed_read_roots,
+        allowed_write_roots=allowed_write_roots,
+        shell_allowed=shell_allowed,
+        network_allowed=network_allowed,
+        credential_use=credential_use,
+        max_steps=max_steps,
+        max_lifetime_seconds=max_lifetime_seconds,
+        max_retries=max_retries,
+        max_requests_per_minute=max_requests_per_minute,
+        review_required=review_required,
+        archive_behavior=archive_behavior,
+    )
 
 
 def _paths_from_payload(payload: dict[str, Any]) -> list[str]:
-    paths: set[str] = set()
-
-    def _visit(obj: Any, key: str = "") -> None:
-        if isinstance(obj, dict):
-            for child_key, child_value in obj.items():
-                _visit(child_value, str(child_key))
-            return
-        if isinstance(obj, list):
-            for item in obj:
-                _visit(item, key)
-            return
-        text = str(obj or "").strip()
-        if not text:
-            return
-        if _PATH_KEY_RE.search(key) or text.startswith("/") or re.match(r"^[A-Za-z]:\\\\", text):
-            paths.add(text)
-
-    _visit(payload)
-    return sorted(paths)
+    return control_plane_templates.paths_from_payload(
+        payload,
+        path_key_pattern=_PATH_KEY_RE,
+    )
 
 
 def _table_exists(conn: Any, table_name: str) -> bool:
