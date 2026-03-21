@@ -26,6 +26,7 @@ from core.agent_runtime import nullabook as agent_nullabook_runtime
 from core.agent_runtime import orchestrator as agent_orchestrator_runtime
 from core.agent_runtime import presence as agent_presence_runtime
 from core.agent_runtime import response as agent_response_runtime
+from core.agent_runtime import turn_dispatch as agent_turn_dispatch
 from core.agent_runtime.builder import controller as agent_builder_controller
 from core.agent_runtime.builder import scaffolds as agent_builder_scaffolds
 from core.agent_runtime.builder import support as agent_builder_support
@@ -523,152 +524,18 @@ class NullaAgent:
 
         self._sync_public_presence(status="busy", source_context=source_context)
         try:
-            # 1) create + classify
-            task = self._resolve_runtime_task(
+            turn_bundle = self._prepare_turn_task_bundle(
                 effective_input=effective_input,
+                user_input=user_input,
                 session_id=session_id,
                 source_context=source_context,
+                interpreted=interpreted,
             )
-            self._update_runtime_checkpoint_context(
-                source_context,
-                task_id=task.task_id,
-            )
-            classification_context = interpreted.as_context()
-            if source_context:
-                classification_context["source_context"] = dict(source_context)
-                classification_context["source_surface"] = source_context.get("surface")
-                classification_context["source_platform"] = source_context.get("platform")
-            classification = classify(effective_input, context=classification_context)
-            self._update_task_class(task.task_id, classification["task_class"])
-            self._update_runtime_checkpoint_context(
-                source_context,
-                task_id=task.task_id,
-                task_class=str(classification.get("task_class") or "unknown"),
-            )
-            self._emit_runtime_event(
-                source_context,
-                event_type="task_classified",
-                message=f"Task classified as {classification.get('task_class') or 'unknown'!s}.",
-                task_id=task.task_id,
-                task_class=str(classification.get("task_class") or "unknown"),
-            )
-
-            post_intent, post_error = parse_channel_post_intent(effective_input)
-            if post_intent is not None:
-                dispatch = dispatch_outbound_post_intent(
-                    post_intent,
-                    task_id=task.task_id,
-                    session_id=session_id,
-                    source_context=source_context,
-                )
-                return self._action_fast_path_result(
-                    task_id=task.task_id,
-                    session_id=session_id,
-                    user_input=effective_input,
-                    response=dispatch.response_text,
-                    confidence=0.95 if dispatch.ok else 0.42,
-                    source_context=source_context,
-                    reason=f"channel_post_{dispatch.status}",
-                    success=dispatch.ok,
-                    details={
-                        "platform": dispatch.platform,
-                        "target": dispatch.target,
-                        "record_id": dispatch.record_id,
-                        "error": dispatch.error,
-                    },
-                )
-            if post_error:
-                return self._action_fast_path_result(
-                    task_id=task.task_id,
-                    session_id=session_id,
-                    user_input=effective_input,
-                    response=(
-                        "I can do that, but I need the exact message text. "
-                        "Use a format like: post to Discord: \"We are live tonight.\""
-                    ),
-                    confidence=0.40,
-                    source_context=source_context,
-                    reason="channel_post_missing_message",
-                    success=False,
-                    details={"error": post_error},
-                )
-
-            operator_intent = parse_operator_action_intent(user_input) or parse_operator_action_intent(effective_input)
-            if operator_intent is not None:
-                dispatch = dispatch_operator_action(
-                    operator_intent,
-                    task_id=task.task_id,
-                    session_id=session_id,
-                )
-                workflow_summary = self._action_workflow_summary(
-                    operator_kind=operator_intent.kind,
-                    dispatch_status=dispatch.status,
-                    details=dispatch.details,
-                )
-                return self._action_fast_path_result(
-                    task_id=task.task_id,
-                    session_id=session_id,
-                    user_input=effective_input,
-                    response=dispatch.response_text,
-                    confidence=dispatch.learned_plan.confidence if dispatch.learned_plan else (0.9 if dispatch.ok else 0.45),
-                    source_context=source_context,
-                    reason=f"operator_action_{dispatch.status}",
-                    success=dispatch.ok,
-                    details=dispatch.details,
-                    mode_override=(
-                        "tool_executed"
-                        if dispatch.status == "executed"
-                        else "tool_preview"
-                        if dispatch.status in {"reported", "approval_required"}
-                        else "tool_failed"
-                    ),
-                    task_outcome=(
-                        "success"
-                        if dispatch.status == "executed"
-                        else "pending_approval"
-                        if dispatch.status in {"reported", "approval_required"}
-                        else "failed"
-                    ),
-                    learned_plan=dispatch.learned_plan,
-                    workflow_summary=workflow_summary,
-                )
-
-            hive_confirm = self._maybe_handle_hive_create_confirmation(
-                effective_input, task=task, session_id=session_id, source_context=source_context,
-            )
-            if hive_confirm is not None:
-                return hive_confirm
-
-            raw_hive_create_draft = self._extract_hive_topic_create_draft(user_input)
-            hive_topic_mutation = self._maybe_handle_hive_topic_mutation_request(
-                user_input if raw_hive_create_draft is not None else effective_input,
-                task=task,
-                session_id=session_id,
-                source_context=source_context,
-            )
-            if hive_topic_mutation is not None:
-                return hive_topic_mutation
-
-            hive_topic_create = self._maybe_handle_hive_topic_create_request(
-                user_input if raw_hive_create_draft is not None else effective_input,
-                task=task,
-                session_id=session_id,
-                source_context=source_context,
-            )
-            if hive_topic_create is not None:
-                return hive_topic_create
-
-            builder_fast_path = self._maybe_run_builder_controller(
-                task=task,
-                effective_input=effective_input,
-                classification=classification,
-                interpretation=interpreted,
-                web_notes=[],
-                session_id=session_id,
-                source_context=source_context,
-            )
-            if builder_fast_path is not None:
-                return builder_fast_path
+            frontdoor_result = turn_bundle.get("result")
+            if frontdoor_result is not None:
+                return frontdoor_result
+            task = turn_bundle["task"]
+            classification = dict(turn_bundle.get("classification") or {})
 
             # 2) build tiered prompt context and relevant evidence
             surface = str((source_context or {}).get("surface", "cli")).lower()
@@ -1116,6 +983,29 @@ class NullaAgent:
 
     def _model_final_response_text(self, model_execution: Any) -> str:
         return agent_memory_runtime.model_final_response_text(model_execution)
+
+    def _prepare_turn_task_bundle(
+        self,
+        *,
+        effective_input: str,
+        user_input: str,
+        session_id: str,
+        source_context: dict[str, object] | None,
+        interpreted: Any,
+    ) -> dict[str, Any]:
+        return agent_turn_dispatch.prepare_turn_task_bundle(
+            self,
+            effective_input=effective_input,
+            user_input=user_input,
+            session_id=session_id,
+            source_context=source_context,
+            interpreted=interpreted,
+            classify_fn=classify,
+            parse_channel_post_intent_fn=parse_channel_post_intent,
+            dispatch_outbound_post_intent_fn=dispatch_outbound_post_intent,
+            parse_operator_action_intent_fn=parse_operator_action_intent,
+            dispatch_operator_action_fn=dispatch_operator_action,
+        )
 
     def _chat_surface_cache_or_memory_source(self, model_execution: Any) -> bool:
         return agent_memory_runtime.chat_surface_cache_or_memory_source(model_execution)
