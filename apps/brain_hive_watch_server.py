@@ -1,164 +1,35 @@
 from __future__ import annotations
 
-import json
 import ssl
-import threading
-import time
 from collections.abc import Callable
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, as_completed, wait
-from dataclasses import dataclass, field
-from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib import request
-from urllib.parse import parse_qs, unquote, urlparse, urlsplit, urlunsplit
+from http.server import ThreadingHTTPServer
 
-from core.brain_hive_dashboard import render_dashboard_html, render_not_found_html, render_topic_detail_html
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
-from core.public_landing_page import render_public_landing_page_html
-
-
-@dataclass
-class BrainHiveWatchServerConfig:
-    host: str = "127.0.0.1"
-    port: int = 8788
-    upstream_base_urls: tuple[str, ...] = ("http://127.0.0.1:8766",)
-    request_timeout_seconds: int = 5
-    auth_token: str | None = None
-    auth_tokens_by_base_url: dict[str, str] = field(default_factory=dict)
-    tls_certfile: str | None = None
-    tls_keyfile: str | None = None
-    tls_ca_file: str | None = None
-    tls_insecure_skip_verify: bool = False
-    dashboard_cache_ttl_seconds: float = 5.0
-
-
-def _agent_is_online(agent: dict[str, object]) -> bool:
-    status = str((agent or {}).get("status") or "").strip().lower()
-    if bool((agent or {}).get("online")):
-        return True
-    return status in {"online", "idle", "busy", "limited"}
-
-
-def _agent_profile_key(agent: dict[str, object]) -> tuple[str, str, tuple[str, ...]]:
-    label = str(agent.get("display_name") or agent.get("claim_label") or agent.get("agent_id") or "agent").strip().lower()
-    region = str(agent.get("home_region") or agent.get("current_region") or "global").strip().lower()
-    capabilities = tuple(
-        sorted(
-            str(item).strip().lower()
-            for item in list(agent.get("capabilities") or [])
-            if str(item).strip()
-        )
-    )
-    return (label, region, capabilities)
-
-
-def _agent_profile_rank(agent: dict[str, object]) -> tuple[int, int, int, str]:
-    status = str(agent.get("status") or "").strip().lower()
-    transport = str(agent.get("transport_mode") or "").strip().lower()
-    status_rank = {
-        "busy": 4,
-        "online": 3,
-        "idle": 2,
-        "limited": 1,
-    }.get(status, 0)
-    transport_rank = {
-        "channel_openclaw": 4,
-        "nulla_agent": 3,
-        "direct": 2,
-        "lan_only": 1,
-        "background_openclaw": 0,
-    }.get(transport, 0)
-    capability_count = len([item for item in list(agent.get("capabilities") or []) if str(item).strip()])
-    return (status_rank, transport_rank, capability_count, str(agent.get("agent_id") or ""))
-
-
-def _distinct_visible_agents(agents: list[dict[str, object]]) -> list[dict[str, object]]:
-    chosen: dict[tuple[str, str, tuple[str, ...]], dict[str, object]] = {}
-    for agent in list(agents or []):
-        key = _agent_profile_key(agent)
-        current = chosen.get(key)
-        if current is None or _agent_profile_rank(agent) > _agent_profile_rank(current):
-            chosen[key] = dict(agent)
-    return list(chosen.values())
-
-
-def _normalize_dashboard_presence(snapshot: dict) -> dict:
-    normalized = dict(snapshot or {})
-    raw_agents = [dict(item) for item in list(normalized.get("agents") or []) if isinstance(item, dict)]
-    if not raw_agents:
-        return normalized
-
-    distinct_agents = _distinct_visible_agents(raw_agents)
-    stats = dict(normalized.get("stats") or {})
-    raw_presence = stats.get("presence_agents", stats.get("active_agents", 0))
-    stats["presence_agents"] = int(raw_presence or 0)
-    stats["raw_online_agents"] = sum(1 for agent in raw_agents if _agent_is_online(agent))
-    stats["raw_visible_agents"] = len(raw_agents)
-    stats["duplicate_visible_agents"] = max(0, len(raw_agents) - len(distinct_agents))
-    stats["active_agents"] = sum(1 for agent in distinct_agents if _agent_is_online(agent))
-    stats["visible_agents"] = len(distinct_agents)
-    normalized["stats"] = stats
-    normalized["agents"] = distinct_agents
-
-    region_counts: dict[str, int] = {}
-    for agent in distinct_agents:
-        region = str(agent.get("current_region") or agent.get("home_region") or "global").strip().lower()
-        if _agent_is_online(agent):
-            region_counts[region] = region_counts.get(region, 0) + 1
-
-    region_stats: list[dict[str, object]] = []
-    for row in list(normalized.get("stats", {}).get("region_stats") or []):
-        if not isinstance(row, dict):
-            region_stats.append(row)
-            continue
-        region = str(row.get("region") or "global").strip().lower()
-        updated = dict(row)
-        if region in region_counts:
-            updated["online_agents"] = region_counts[region]
-        region_stats.append(updated)
-    if region_stats:
-        normalized["stats"]["region_stats"] = region_stats
-    return normalized
-
-
-def _parse_dashboard_timestamp(value: object) -> float:
-    if value in (None, "", 0):
-        return 0.0
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        pass
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
-    except Exception:
-        return 0.0
-
-
-def _dashboard_trading_presence_ts(snapshot: dict) -> float:
-    trading = dict(snapshot.get("trading_learning") or {})
-    heartbeat = dict(trading.get("latest_heartbeat") or {})
-    summary = dict(trading.get("latest_summary") or {})
-    latest_ts = max(
-        _parse_dashboard_timestamp(heartbeat.get("last_tick_ts")),
-        _parse_dashboard_timestamp(heartbeat.get("post_created_at")),
-        _parse_dashboard_timestamp(summary.get("post_created_at")),
-    )
-    for topic in list(trading.get("topics") or []):
-        if not isinstance(topic, dict):
-            continue
-        latest_ts = max(
-            latest_ts,
-            _parse_dashboard_timestamp(topic.get("updated_at")),
-            _parse_dashboard_timestamp(topic.get("created_at")),
-        )
-    return latest_ts
-
-
-def _dashboard_freshness_key(snapshot: dict) -> tuple[float, float, int]:
-    presence_ts = _dashboard_trading_presence_ts(snapshot)
-    generated_ts = _parse_dashboard_timestamp(snapshot.get("generated_at"))
-    active_agents = int(dict(snapshot.get("stats") or {}).get("active_agents", 0) or 0)
-    return (presence_ts, generated_ts, active_agents)
+from core.web.watch.config import BrainHiveWatchServerConfig
+from core.web.watch.fetchers import (
+    agent_is_online as _agent_is_online,
+    agent_profile_key as _agent_profile_key,
+    agent_profile_rank as _agent_profile_rank,
+    dashboard_freshness_key as _dashboard_freshness_key,
+    dashboard_trading_presence_ts as _dashboard_trading_presence_ts,
+    distinct_visible_agents as _distinct_visible_agents,
+    fetch_dashboard_from_upstreams as _core_fetch_dashboard_from_upstreams,
+    fetch_topic_from_upstreams as _core_fetch_topic_from_upstreams,
+    fetch_topic_posts_from_upstreams as _core_fetch_topic_posts_from_upstreams,
+    http_get_json as _core_http_get_json,
+    normalize_dashboard_presence as _normalize_dashboard_presence,
+    parse_dashboard_timestamp as _parse_dashboard_timestamp,
+    proxy_nullabook_get as _core_proxy_nullabook_get,
+)
+from core.web.watch.server import build_watch_server
+from core.web.watch.tls import (
+    build_tls_context as _core_build_tls_context,
+    normalize_base_url as _core_normalize_base_url,
+    requires_public_tls as _core_requires_public_tls,
+    ssl_context_for_url as _core_ssl_context_for_url,
+    validate_tls_config as _core_validate_tls_config,
+    watch_tls_enabled as _core_watch_tls_enabled,
+)
 
 
 def _http_get_json(
@@ -169,21 +40,14 @@ def _http_get_json(
     tls_ca_file: str | None = None,
     tls_insecure_skip_verify: bool = False,
 ) -> dict:
-    req = request.Request(url, method="GET")
-    req.add_header("Content-Type", "application/json")
-    token = str(auth_token or "").strip()
-    if token:
-        req.add_header("X-Nulla-Meet-Token", token)
-    with request.urlopen(
-        req,
-        timeout=timeout_seconds,
-        context=_ssl_context_for_url(
-            url,
-            tls_ca_file=tls_ca_file,
-            tls_insecure_skip_verify=tls_insecure_skip_verify,
-        ),
-    ) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    return _core_http_get_json(
+        url,
+        timeout_seconds=timeout_seconds,
+        auth_token=auth_token,
+        tls_ca_file=tls_ca_file,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
+        ssl_context_for_url_func=_ssl_context_for_url,
+    )
 
 
 def _proxy_nullabook_get(
@@ -196,42 +60,17 @@ def _proxy_nullabook_get(
     tls_ca_file: str | None = None,
     tls_insecure_skip_verify: bool = False,
 ) -> dict:
-    """Proxy a NullaBook GET request to the first responsive upstream."""
-    tokens = {
-        _normalize_base_url(base): str(token).strip()
-        for base, token in dict(auth_tokens_by_base_url or {}).items()
-        if str(base).strip() and str(token).strip()
-    }
-    def _fetch_one(base: str) -> tuple[bool, str, dict | str]:
-        clean = str(base).rstrip("/")
-        target = f"{clean}{path}"
-        token = tokens.get(_normalize_base_url(clean)) or auth_token
-        try:
-            result = _http_get_json(
-                target,
-                timeout_seconds=timeout_seconds,
-                auth_token=token,
-                tls_ca_file=tls_ca_file,
-                tls_insecure_skip_verify=tls_insecure_skip_verify,
-            )
-        except Exception as exc:
-            return False, clean, str(exc)
-        if result.get("ok"):
-            return True, clean, result
-        return False, clean, str(result.get("error") or "not ok")
-
-    errors: list[str] = []
-    max_workers = max(1, min(len(upstream_base_urls), 8))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(_fetch_one, base) for base in upstream_base_urls]
-        for future in as_completed(futures):
-            ok, clean, payload_or_error = future.result()
-            if ok:
-                for pending in futures:
-                    pending.cancel()
-                return dict(payload_or_error)
-            errors.append(f"{clean}: {payload_or_error}")
-    raise ValueError("NullaBook proxy failed: " + "; ".join(errors))
+    return _core_proxy_nullabook_get(
+        upstream_base_urls,
+        path,
+        timeout_seconds=timeout_seconds,
+        auth_token=auth_token,
+        auth_tokens_by_base_url=auth_tokens_by_base_url,
+        tls_ca_file=tls_ca_file,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
+        fetch_json=_http_get_json,
+        normalize_base_url_func=_normalize_base_url,
+    )
 
 
 def fetch_dashboard_from_upstreams(
@@ -244,12 +83,7 @@ def fetch_dashboard_from_upstreams(
     tls_insecure_skip_verify: bool = False,
     fetch_json: Callable[[str, str | None], dict] | None = None,
 ) -> dict:
-    tokens = {
-        _normalize_base_url(base): str(token).strip()
-        for base, token in dict(auth_tokens_by_base_url or {}).items()
-        if str(base).strip() and str(token).strip()
-    }
-    fetch = fetch_json or (
+    delegated_fetch = fetch_json or (
         lambda url, token: _http_get_json(
             url,
             timeout_seconds=timeout_seconds,
@@ -258,51 +92,16 @@ def fetch_dashboard_from_upstreams(
             tls_insecure_skip_verify=tls_insecure_skip_verify,
         )
     )
-    def _fetch_one(base: str) -> tuple[bool, str, dict | str, tuple[float, float, int] | None]:
-        clean = str(base).rstrip("/")
-        target = f"{clean}/v1/hive/dashboard"
-        token = tokens.get(_normalize_base_url(clean)) or auth_token
-        try:
-            payload = fetch(target, token)
-        except Exception as exc:  # pragma: no cover - network errors
-            return False, clean, str(exc), None
-        if payload.get("ok"):
-            result = _normalize_dashboard_presence(payload.get("result") or {})
-            result["source_meet_url"] = clean
-            freshness = _dashboard_freshness_key(result)
-            return True, clean, result, freshness
-        return False, clean, str(payload.get("error") or "upstream returned not ok"), None
-
-    errors: list[str] = []
-    best_result: dict | None = None
-    best_key: tuple[float, float, int] | None = None
-    settle_deadline: float | None = None
-    max_workers = max(1, min(len(upstream_base_urls), 8))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        pending = {executor.submit(_fetch_one, base) for base in upstream_base_urls}
-        while pending:
-            timeout = None
-            if settle_deadline is not None:
-                timeout = max(0.0, settle_deadline - time.monotonic())
-            done, pending = wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
-            if not done:
-                break
-            for future in done:
-                ok, clean, payload_or_error, freshness = future.result()
-                if ok:
-                    result = dict(payload_or_error)
-                    if best_result is None or (freshness or (0.0, 0.0, 0)) > (best_key or (0.0, 0.0, 0)):
-                        best_result = result
-                        best_key = freshness
-                    if settle_deadline is None:
-                        settle_deadline = time.monotonic() + 0.15
-                else:
-                    errors.append(f"{clean}: {payload_or_error}")
-        for future in pending:
-            future.cancel()
-    if best_result is not None:
-        return best_result
-    raise ValueError("All upstream meet nodes failed for dashboard fetch: " + "; ".join(errors))
+    return _core_fetch_dashboard_from_upstreams(
+        upstream_base_urls,
+        timeout_seconds=timeout_seconds,
+        auth_token=auth_token,
+        auth_tokens_by_base_url=auth_tokens_by_base_url,
+        tls_ca_file=tls_ca_file,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
+        fetch_json=delegated_fetch,
+        normalize_base_url_func=_normalize_base_url,
+    )
 
 
 def fetch_topic_from_upstreams(
@@ -316,12 +115,7 @@ def fetch_topic_from_upstreams(
     tls_insecure_skip_verify: bool = False,
     fetch_json: Callable[[str, str | None], dict] | None = None,
 ) -> dict:
-    tokens = {
-        _normalize_base_url(base): str(token).strip()
-        for base, token in dict(auth_tokens_by_base_url or {}).items()
-        if str(base).strip() and str(token).strip()
-    }
-    fetch = fetch_json or (
+    delegated_fetch = fetch_json or (
         lambda url, token: _http_get_json(
             url,
             timeout_seconds=timeout_seconds,
@@ -330,23 +124,17 @@ def fetch_topic_from_upstreams(
             tls_insecure_skip_verify=tls_insecure_skip_verify,
         )
     )
-    normalized_topic_id = str(topic_id or "").strip()
-    errors: list[str] = []
-    for base in upstream_base_urls:
-        clean = str(base).rstrip("/")
-        target = f"{clean}/v1/hive/topics/{normalized_topic_id}"
-        token = tokens.get(_normalize_base_url(clean)) or auth_token
-        try:
-            payload = fetch(target, token)
-        except Exception as exc:  # pragma: no cover - network errors
-            errors.append(f"{clean}: {exc}")
-            continue
-        if payload.get("ok"):
-            result = dict(payload.get("result") or {})
-            result["source_meet_url"] = clean
-            return result
-        errors.append(f"{clean}: {payload.get('error') or 'upstream returned not ok'}")
-    raise ValueError("All upstream meet nodes failed for topic fetch: " + "; ".join(errors))
+    return _core_fetch_topic_from_upstreams(
+        upstream_base_urls,
+        topic_id=topic_id,
+        timeout_seconds=timeout_seconds,
+        auth_token=auth_token,
+        auth_tokens_by_base_url=auth_tokens_by_base_url,
+        tls_ca_file=tls_ca_file,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
+        fetch_json=delegated_fetch,
+        normalize_base_url_func=_normalize_base_url,
+    )
 
 
 def fetch_topic_posts_from_upstreams(
@@ -361,12 +149,7 @@ def fetch_topic_posts_from_upstreams(
     tls_insecure_skip_verify: bool = False,
     fetch_json: Callable[[str, str | None], dict] | None = None,
 ) -> list[dict]:
-    tokens = {
-        _normalize_base_url(base): str(token).strip()
-        for base, token in dict(auth_tokens_by_base_url or {}).items()
-        if str(base).strip() and str(token).strip()
-    }
-    fetch = fetch_json or (
+    delegated_fetch = fetch_json or (
         lambda url, token: _http_get_json(
             url,
             timeout_seconds=timeout_seconds,
@@ -375,435 +158,38 @@ def fetch_topic_posts_from_upstreams(
             tls_insecure_skip_verify=tls_insecure_skip_verify,
         )
     )
-    normalized_topic_id = str(topic_id or "").strip()
-    safe_limit = max(1, min(int(limit), 200))
-    errors: list[str] = []
-    for base in upstream_base_urls:
-        clean = str(base).rstrip("/")
-        target = f"{clean}/v1/hive/topics/{normalized_topic_id}/posts?limit={safe_limit}"
-        token = tokens.get(_normalize_base_url(clean)) or auth_token
-        try:
-            payload = fetch(target, token)
-        except Exception as exc:  # pragma: no cover - network errors
-            errors.append(f"{clean}: {exc}")
-            continue
-        if payload.get("ok"):
-            return list(payload.get("result") or [])
-        errors.append(f"{clean}: {payload.get('error') or 'upstream returned not ok'}")
-    raise ValueError("All upstream meet nodes failed for topic post fetch: " + "; ".join(errors))
+    return _core_fetch_topic_posts_from_upstreams(
+        upstream_base_urls,
+        topic_id=topic_id,
+        limit=limit,
+        timeout_seconds=timeout_seconds,
+        auth_token=auth_token,
+        auth_tokens_by_base_url=auth_tokens_by_base_url,
+        tls_ca_file=tls_ca_file,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
+        fetch_json=delegated_fetch,
+        normalize_base_url_func=_normalize_base_url,
+    )
 
 
 def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingHTTPServer:
     cfg = config or BrainHiveWatchServerConfig()
-    _validate_tls_config(cfg)
-    if _requires_public_tls(cfg.host) and not _watch_tls_enabled(cfg):
-        raise ValueError("Public or non-loopback Brain Hive watch bindings require TLS.")
-    dashboard_cache_lock = threading.Lock()
-    dashboard_cache: dict[str, object] = {"fetched_at": 0.0, "snapshot": None}
-
-    def _dashboard_cache_hit() -> dict | None:
-        ttl = max(0.0, float(cfg.dashboard_cache_ttl_seconds or 0.0))
-        if ttl <= 0:
-            return None
-        with dashboard_cache_lock:
-            snapshot = dashboard_cache.get("snapshot")
-            fetched_at = float(dashboard_cache.get("fetched_at") or 0.0)
-        if not isinstance(snapshot, dict):
-            return None
-        if (time.monotonic() - fetched_at) > ttl:
-            return None
-        return dict(snapshot)
-
-    def _dashboard_cache_snapshot() -> dict | None:
-        with dashboard_cache_lock:
-            snapshot = dashboard_cache.get("snapshot")
-        if not isinstance(snapshot, dict):
-            return None
-        return dict(snapshot)
-
-    def _store_dashboard_cache(snapshot: dict) -> None:
-        with dashboard_cache_lock:
-            dashboard_cache["snapshot"] = dict(snapshot)
-            dashboard_cache["fetched_at"] = time.monotonic()
-
-    class Handler(BaseHTTPRequestHandler):
-        server_version = "NullaBrainHiveWatch/0.1"
-
-        def do_HEAD(self) -> None:
-            parsed = urlparse(self.path)
-            clean_path = parsed.path.rstrip("/") or "/"
-            qs = parse_qs(parsed.query or "")
-            post_id = str((qs.get("post") or [""])[0]).strip()
-            nullabook_surface_by_path = {
-                "/nullabook": "feed",
-                "/feed": "feed",
-                "/tasks": "tasks",
-                "/agents": "agents",
-                "/proof": "proof",
-            }
-            if clean_path in nullabook_surface_by_path or (clean_path == "/" and post_id):
-                from core.nullabook_feed_page import render_nullabook_page_html
-
-                og_kw: dict[str, str] = {
-                    "initial_tab": nullabook_surface_by_path.get(clean_path, "feed")
-                }
-                body = render_nullabook_page_html(**og_kw).encode("utf-8")
-                self._write_bytes(200, "text/html; charset=utf-8", b"", write_body=False, content_length=len(body))
-                return
-            if clean_path == "/":
-                body = render_public_landing_page_html().encode("utf-8")
-                self._write_bytes(200, "text/html; charset=utf-8", b"", write_body=False, content_length=len(body))
-                return
-            if clean_path in {"/brain-hive", "/hive"}:
-                body = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task").encode("utf-8")
-                self._write_bytes(
-                    200,
-                    "text/html; charset=utf-8",
-                    b"",
-                    headers={
-                        "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
-                        "X-Nulla-Workstation-Surface": "brain-hive",
-                    },
-                    write_body=False,
-                    content_length=len(body),
-                )
-                return
-            if clean_path.startswith("/agent/"):
-                from core.nullabook_profile_page import render_nullabook_profile_page_html
-
-                handle = unquote(clean_path.removeprefix("/agent/").strip("/"))
-                if handle:
-                    body = render_nullabook_profile_page_html(handle=handle).encode("utf-8")
-                    self._write_bytes(200, "text/html; charset=utf-8", b"", write_body=False, content_length=len(body))
-                    return
-            if clean_path.startswith("/task/"):
-                topic_id = unquote(clean_path.removeprefix("/task/").strip("/"))
-                if topic_id:
-                    body = render_topic_detail_html(
-                        topic_api_endpoint=f"/api/topic/{topic_id}",
-                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
-                    ).encode("utf-8")
-                    self._write_bytes(
-                        200,
-                        "text/html; charset=utf-8",
-                        b"",
-                        headers={
-                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
-                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
-                        },
-                        write_body=False,
-                        content_length=len(body),
-                    )
-                    return
-            if clean_path.startswith("/brain-hive/topic/"):
-                topic_id = unquote(clean_path.removeprefix("/brain-hive/topic/").strip("/"))
-                if topic_id:
-                    body = render_topic_detail_html(
-                        topic_api_endpoint=f"/api/topic/{topic_id}",
-                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
-                    ).encode("utf-8")
-                    self._write_bytes(
-                        200,
-                        "text/html; charset=utf-8",
-                        b"",
-                        headers={
-                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
-                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
-                        },
-                        write_body=False,
-                        content_length=len(body),
-                    )
-                    return
-            if clean_path == "/health":
-                body = json.dumps(
-                    {
-                        "ok": True,
-                        "result": {
-                            "service": "brain_hive_watch",
-                            "upstream_count": len(cfg.upstream_base_urls),
-                        },
-                        "error": None,
-                    },
-                    sort_keys=True,
-                ).encode("utf-8")
-                self._write_bytes(200, "application/json", b"", write_body=False, content_length=len(body))
-                return
-            if clean_path == "/api/dashboard":
-                body = json.dumps({"ok": True, "result": None, "error": None}, sort_keys=True).encode("utf-8")
-                self._write_bytes(200, "application/json", b"", write_body=False, content_length=len(body))
-                return
-            self._write_bytes(404, "text/html; charset=utf-8", b"", write_body=False)
-
-        def do_GET(self) -> None:
-            parsed = urlparse(self.path)
-            clean_path = parsed.path.rstrip("/") or "/"
-            qs = parse_qs(parsed.query or "")
-            post_id = str((qs.get("post") or [""])[0]).strip()
-            nullabook_surface_by_path = {
-                "/nullabook": "feed",
-                "/feed": "feed",
-                "/tasks": "tasks",
-                "/agents": "agents",
-                "/proof": "proof",
-            }
-            if clean_path in nullabook_surface_by_path or (clean_path == "/" and post_id):
-                from core.nullabook_feed_page import render_nullabook_page_html
-                og_kw: dict[str, str] = {
-                    "initial_tab": nullabook_surface_by_path.get(clean_path, "feed")
-                }
-                if post_id:
-                    try:
-                        for base in cfg.upstream_base_urls:
-                            url = f"{str(base).rstrip('/')}/v1/nullabook/feed?limit=1&post_id={post_id}"
-                            token = (cfg.auth_tokens_by_base_url or {}).get(base) or cfg.auth_token
-                            payload = _http_get_json(
-                                url,
-                                timeout_seconds=3,
-                                auth_token=token,
-                                tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
-                            )
-                            posts = ((payload.get("result") or {}).get("posts") or [])
-                            if posts:
-                                p = posts[0]
-                                author = (p.get("author") or {})
-                                name = author.get("display_name") or author.get("handle") or p.get("handle") or "Agent"
-                                og_kw.update(
-                                    {
-                                        "og_title": f"{name} on NULLA Feed",
-                                        "og_description": str(p.get("content") or "")[:300],
-                                        "og_url": f"https://nullabook.com/feed?post={post_id}",
-                                    }
-                                )
-                                break
-                    except Exception:
-                        pass
-                html = render_nullabook_page_html(**og_kw)
-                self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
-                return
-            if clean_path == "/":
-                html = render_public_landing_page_html()
-                self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
-                return
-            if clean_path in {"/brain-hive", "/hive"}:
-                html = render_dashboard_html(api_endpoint="/api/dashboard", topic_base_path="/task")
-                self._write_bytes(
-                    200,
-                    "text/html; charset=utf-8",
-                    html.encode("utf-8"),
-                    headers={
-                        "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
-                        "X-Nulla-Workstation-Surface": "brain-hive",
-                    },
-                )
-                return
-            if clean_path.startswith("/agent/"):
-                from core.nullabook_profile_page import render_nullabook_profile_page_html
-                handle = unquote(clean_path.removeprefix("/agent/").strip("/"))
-                if handle:
-                    html = render_nullabook_profile_page_html(handle=handle)
-                    self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
-                    return
-            if clean_path.startswith("/task/"):
-                topic_id = unquote(clean_path.removeprefix("/task/").strip("/"))
-                if topic_id:
-                    html = render_topic_detail_html(
-                        topic_api_endpoint=f"/api/topic/{topic_id}",
-                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
-                    )
-                    self._write_bytes(
-                        200,
-                        "text/html; charset=utf-8",
-                        html.encode("utf-8"),
-                        headers={
-                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
-                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
-                        },
-                    )
-                    return
-            if clean_path.startswith("/brain-hive/topic/"):
-                topic_id = unquote(clean_path.removeprefix("/brain-hive/topic/").strip("/"))
-                if topic_id:
-                    html = render_topic_detail_html(
-                        topic_api_endpoint=f"/api/topic/{topic_id}",
-                        posts_api_endpoint=f"/api/topic/{topic_id}/posts",
-                    )
-                    self._write_bytes(
-                        200,
-                        "text/html; charset=utf-8",
-                        html.encode("utf-8"),
-                        headers={
-                            "X-Nulla-Workstation-Version": NULLA_WORKSTATION_DEPLOYMENT_VERSION,
-                            "X-Nulla-Workstation-Surface": "brain-hive-topic",
-                        },
-                    )
-                    return
-            if clean_path == "/api/dashboard":
-                cached_snapshot = _dashboard_cache_hit()
-                if cached_snapshot is not None:
-                    self._write_json(200, {"ok": True, "result": cached_snapshot, "error": None, "cache_state": "hit"})
-                    return
-                try:
-                    snapshot = fetch_dashboard_from_upstreams(
-                        cfg.upstream_base_urls,
-                        timeout_seconds=cfg.request_timeout_seconds,
-                        auth_token=cfg.auth_token,
-                        auth_tokens_by_base_url=cfg.auth_tokens_by_base_url,
-                        tls_ca_file=cfg.tls_ca_file,
-                        tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
-                    )
-                    _store_dashboard_cache(snapshot)
-                    self._write_json(200, {"ok": True, "result": snapshot, "error": None, "cache_state": "miss"})
-                except Exception as exc:
-                    stale_snapshot = _dashboard_cache_snapshot()
-                    if stale_snapshot is not None:
-                        self._write_json(200, {"ok": True, "result": stale_snapshot, "error": None, "cache_state": "stale_fallback"})
-                    else:
-                        self._write_json(502, {"ok": False, "result": None, "error": str(exc)})
-                return
-            if clean_path.startswith("/api/topic/") and clean_path.endswith("/posts"):
-                topic_id = unquote(clean_path.removeprefix("/api/topic/").removesuffix("/posts").strip("/"))
-                if topic_id and "/" not in topic_id:
-                    try:
-                        posts = fetch_topic_posts_from_upstreams(
-                            cfg.upstream_base_urls,
-                            topic_id=topic_id,
-                            timeout_seconds=cfg.request_timeout_seconds,
-                            auth_token=cfg.auth_token,
-                            auth_tokens_by_base_url=cfg.auth_tokens_by_base_url,
-                            tls_ca_file=cfg.tls_ca_file,
-                            tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
-                        )
-                        self._write_json(200, {"ok": True, "result": posts, "error": None})
-                    except Exception as exc:
-                        self._write_json(502, {"ok": False, "result": None, "error": str(exc)})
-                    return
-            if clean_path.startswith("/api/topic/"):
-                topic_id = unquote(clean_path.removeprefix("/api/topic/").strip("/"))
-                if topic_id and "/" not in topic_id:
-                    try:
-                        topic = fetch_topic_from_upstreams(
-                            cfg.upstream_base_urls,
-                            topic_id=topic_id,
-                            timeout_seconds=cfg.request_timeout_seconds,
-                            auth_token=cfg.auth_token,
-                            auth_tokens_by_base_url=cfg.auth_tokens_by_base_url,
-                            tls_ca_file=cfg.tls_ca_file,
-                            tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
-                        )
-                        self._write_json(200, {"ok": True, "result": topic, "error": None})
-                    except Exception as exc:
-                        self._write_json(502, {"ok": False, "result": None, "error": str(exc)})
-                    return
-            if clean_path == "/nullabook":
-                from core.nullabook_feed_page import render_nullabook_page_html
-                html = render_nullabook_page_html()
-                self._write_bytes(200, "text/html; charset=utf-8", html.encode("utf-8"))
-                return
-            if clean_path.startswith("/v1/nullabook/") or clean_path == "/v1/hive/search":
-                proxy_path = clean_path
-                if "?" not in proxy_path and self.path and "?" in self.path:
-                    proxy_path += "?" + self.path.split("?", 1)[1]
-                try:
-                    result = _proxy_nullabook_get(
-                        cfg.upstream_base_urls, proxy_path,
-                        timeout_seconds=cfg.request_timeout_seconds,
-                        auth_token=cfg.auth_token,
-                        auth_tokens_by_base_url=cfg.auth_tokens_by_base_url,
-                        tls_ca_file=cfg.tls_ca_file,
-                        tls_insecure_skip_verify=cfg.tls_insecure_skip_verify,
-                    )
-                    self._write_json(200, result)
-                except Exception as exc:
-                    self._write_json(502, {"ok": False, "result": None, "error": str(exc)})
-                return
-            if clean_path == "/health":
-                self._write_json(
-                    200,
-                    {
-                        "ok": True,
-                        "result": {
-                            "service": "brain_hive_watch",
-                            "upstream_count": len(cfg.upstream_base_urls),
-                        },
-                        "error": None,
-                    },
-                )
-                return
-            self._write_bytes(404, "text/html; charset=utf-8", render_not_found_html(parsed.path).encode("utf-8"))
-
-        def do_POST(self) -> None:
-            parsed = urlparse(self.path)
-            clean_path = parsed.path.rstrip("/") or "/"
-            if clean_path == "/v1/nullabook/upvote":
-                try:
-                    length = int(self.headers.get("Content-Length") or "0")
-                    raw_body = self.rfile.read(length) if length > 0 else b""
-                    tokens = {
-                        _normalize_base_url(b): t
-                        for b, t in (cfg.auth_tokens_by_base_url or {}).items()
-                    }
-                    for base in cfg.upstream_base_urls:
-                        url = f"{str(base).rstrip('/')}/v1/nullabook/upvote"
-                        tok = tokens.get(_normalize_base_url(str(base))) or cfg.auth_token
-                        r = request.Request(url, data=raw_body, method="POST")
-                        r.add_header("Content-Type", "application/json")
-                        if tok:
-                            r.add_header("X-Nulla-Meet-Token", tok)
-                        ctx = _ssl_context_for_url(url, tls_insecure_skip_verify=cfg.tls_insecure_skip_verify)
-                        try:
-                            with request.urlopen(r, timeout=cfg.request_timeout_seconds, context=ctx) as resp:
-                                result = json.loads(resp.read().decode("utf-8"))
-                                self._write_json(200, result)
-                                return
-                        except Exception:
-                            continue
-                    self._write_json(502, {"ok": False, "error": "All upstreams failed"})
-                except Exception as exc:
-                    self._write_json(500, {"ok": False, "error": str(exc)})
-                return
-            self._write_json(404, {"ok": False, "error": f"Unknown POST path: {clean_path}"})
-
-        def log_message(self, format: str, *args):
-            return
-
-        def _write_json(self, status_code: int, payload: dict) -> None:
-            body = json.dumps(payload, sort_keys=True).encode("utf-8")
-            self._write_bytes(status_code, "application/json", body)
-
-        def _write_bytes(
-            self,
-            status_code: int,
-            content_type: str,
-            body: bytes,
-            *,
-            headers: dict[str, str] | None = None,
-            write_body: bool = True,
-            content_length: int | None = None,
-        ) -> None:
-            self.send_response(status_code)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body) if content_length is None else int(content_length)))
-            self.send_header("Cache-Control", "no-store, must-revalidate")
-            self.send_header("X-Frame-Options", "DENY")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-            self.send_header("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
-            if content_type.startswith("text/html"):
-                self.send_header(
-                    "Content-Security-Policy",
-                    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-                )
-            for name, value in dict(headers or {}).items():
-                self.send_header(name, value)
-            self.end_headers()
-            if write_body:
-                self.wfile.write(body)
-
-    server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
-    tls_context = _build_tls_context(cfg)
-    if tls_context is not None:
-        server.socket = tls_context.wrap_socket(server.socket, server_side=True)
-    return server
+    return build_watch_server(
+        cfg,
+        workstation_version=NULLA_WORKSTATION_DEPLOYMENT_VERSION,
+        server_factory=ThreadingHTTPServer,
+        validate_tls_config=lambda inner_cfg: _validate_tls_config(inner_cfg),
+        requires_public_tls=lambda host: _requires_public_tls(host),
+        watch_tls_enabled=lambda inner_cfg: _watch_tls_enabled(inner_cfg),
+        fetch_dashboard_from_upstreams=lambda *args, **kwargs: fetch_dashboard_from_upstreams(*args, **kwargs),
+        fetch_topic_from_upstreams=lambda *args, **kwargs: fetch_topic_from_upstreams(*args, **kwargs),
+        fetch_topic_posts_from_upstreams=lambda *args, **kwargs: fetch_topic_posts_from_upstreams(*args, **kwargs),
+        proxy_nullabook_get=lambda *args, **kwargs: _proxy_nullabook_get(*args, **kwargs),
+        http_get_json=lambda *args, **kwargs: _http_get_json(*args, **kwargs),
+        normalize_base_url=lambda url: _normalize_base_url(url),
+        ssl_context_for_url=lambda *args, **kwargs: _ssl_context_for_url(*args, **kwargs),
+        build_tls_context=lambda inner_cfg: _build_tls_context(inner_cfg),
+    )
 
 
 def serve(config: BrainHiveWatchServerConfig | None = None) -> None:
@@ -815,18 +201,15 @@ def serve(config: BrainHiveWatchServerConfig | None = None) -> None:
 
 
 def _normalize_base_url(url: str) -> str:
-    parsed = urlsplit(str(url or "").strip())
-    if not parsed.scheme or not parsed.netloc:
-        return str(url or "").rstrip("/")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), "", "", "")).rstrip("/")
+    return _core_normalize_base_url(url)
 
 
 def _requires_public_tls(host: str) -> bool:
-    return str(host or "").strip().lower() not in {"127.0.0.1", "localhost", "::1"}
+    return _core_requires_public_tls(host)
 
 
 def _watch_tls_enabled(cfg: BrainHiveWatchServerConfig) -> bool:
-    return bool(str(cfg.tls_certfile or "").strip() and str(cfg.tls_keyfile or "").strip())
+    return _core_watch_tls_enabled(cfg)
 
 
 def _ssl_context_for_url(
@@ -835,34 +218,16 @@ def _ssl_context_for_url(
     tls_ca_file: str | None = None,
     tls_insecure_skip_verify: bool = False,
 ) -> ssl.SSLContext | None:
-    if not str(url).lower().startswith("https://"):
-        return None
-    if tls_insecure_skip_verify:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
-    if tls_ca_file:
-        return ssl.create_default_context(cafile=str(tls_ca_file))
-    return ssl.create_default_context()
+    return _core_ssl_context_for_url(
+        url,
+        tls_ca_file=tls_ca_file,
+        tls_insecure_skip_verify=tls_insecure_skip_verify,
+    )
 
 
 def _build_tls_context(cfg: BrainHiveWatchServerConfig) -> ssl.SSLContext | None:
-    certfile = str(cfg.tls_certfile or "").strip()
-    keyfile = str(cfg.tls_keyfile or "").strip()
-    if not certfile and not keyfile:
-        return None
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.minimum_version = ssl.TLSVersion.TLSv1_2
-    context.load_cert_chain(certfile=certfile, keyfile=keyfile)
-    cafile = str(cfg.tls_ca_file or "").strip()
-    if cafile:
-        context.load_verify_locations(cafile=cafile)
-    return context
+    return _core_build_tls_context(cfg)
 
 
 def _validate_tls_config(cfg: BrainHiveWatchServerConfig) -> None:
-    certfile = str(cfg.tls_certfile or "").strip()
-    keyfile = str(cfg.tls_keyfile or "").strip()
-    if (certfile and not keyfile) or (keyfile and not certfile):
-        raise ValueError("Both tls_certfile and tls_keyfile are required when Brain Hive watch TLS is enabled.")
+    _core_validate_tls_config(cfg)
