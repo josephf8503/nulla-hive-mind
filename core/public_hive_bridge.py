@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import re
 import ssl
@@ -14,7 +13,6 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 from core import audit_logger
-from core.api_write_auth import build_signed_write_envelope
 from core.brain_hive_models import (
     HivePostCreateRequest,
     HiveTopicClaimRequest,
@@ -27,6 +25,7 @@ from core.meet_and_greet_models import PresenceUpsertRequest
 from core.privacy_guard import text_privacy_risks
 from core.public_hive import PublicHiveBridgeConfig
 from core.public_hive import bootstrap as public_hive_bootstrap
+from core.public_hive import client as public_hive_client
 from core.public_hive import config as public_hive_config
 from core.public_hive import truth as public_hive_truth
 from core.runtime_paths import CONFIG_HOME_DIR, PROJECT_ROOT, config_path
@@ -45,6 +44,11 @@ class PublicHiveBridge:
         self.config = config or load_public_hive_bridge_config()
         self._urlopen = urlopen or urllib.request.urlopen
         self._nullabook_token: str | None = _UNSET_SENTINEL
+        self._client = public_hive_client.PublicHiveHttpClient(
+            self.config,
+            urlopen=self._urlopen,
+            nullabook_token_fn=self._get_nullabook_token,
+        )
 
     def _get_nullabook_token(self) -> str | None:
         if self._nullabook_token is _UNSET_SENTINEL:
@@ -1064,57 +1068,13 @@ class PublicHiveBridge:
         payload: dict[str, Any],
         base_urls: tuple[str, ...],
     ) -> dict[str, Any]:
-        posted_to: list[str] = []
-        errors: list[str] = []
-        for base_url in base_urls:
-            try:
-                self._post_json(base_url, route, payload)
-                posted_to.append(base_url.rstrip("/"))
-            except Exception as exc:
-                errors.append(f"{base_url.rstrip('/')}: {exc}")
-        return {"ok": bool(posted_to), "status": "posted" if posted_to else "failed", "posted_to": posted_to, "errors": errors}
+        return self._client.post_many(route, payload=payload, base_urls=base_urls)
 
     def _get_json(self, base_url: str, route: str) -> Any:
-        target_path = route if str(route).startswith("/") else f"/{route}"
-        url = f"{str(base_url).rstrip('/')}{target_path}"
-        request = urllib.request.Request(url, method="GET")
-        request.add_header("Content-Type", "application/json")
-        auth_token = self._auth_token_for_url(base_url)
-        if auth_token:
-            request.add_header("X-Nulla-Meet-Token", auth_token)
-        context = self._ssl_context_for_url(url)
-        with self._urlopen(request, timeout=self.config.request_timeout_seconds, context=context) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-        if not payload.get("ok"):
-            raise ValueError(str(payload.get("error") or f"Meet read failed for {url}"))
-        return payload.get("result")
+        return self._client.get_json(base_url, route)
 
     def _post_json(self, base_url: str, route: str, payload: dict[str, Any]) -> dict[str, Any]:
-        target_path = route.rstrip("/") or "/"
-        signed_payload = dict(payload or {})
-        write_grant = self._write_grant_for_request(base_url, target_path)
-        if isinstance(write_grant, dict) and write_grant:
-            signed_payload["write_grant"] = write_grant
-        envelope = build_signed_write_envelope(target_path=target_path, payload=signed_payload)
-        raw = json.dumps(envelope, sort_keys=True).encode("utf-8")
-        url = f"{str(base_url).rstrip('/')}{target_path}"
-        request = urllib.request.Request(url, data=raw, method="POST")
-        request.add_header("Content-Type", "application/json")
-        auth_token = self._auth_token_for_url(base_url)
-        if auth_token:
-            request.add_header("X-Nulla-Meet-Token", auth_token)
-        nb_token = self._get_nullabook_token()
-        if nb_token:
-            request.add_header("X-NullaBook-Token", nb_token)
-        context = self._ssl_context_for_url(url)
-        try:
-            with self._urlopen(request, timeout=self.config.request_timeout_seconds, context=context) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            raise ValueError(_http_error_detail(exc, fallback=f"Meet write failed for {url}")) from exc
-        if not payload.get("ok"):
-            raise ValueError(str(payload.get("error") or f"Meet write failed for {url}"))
-        return dict(payload.get("result") or {})
+        return self._client.post_json(base_url, route, payload)
 
     def _find_related_topic(
         self,
@@ -1228,29 +1188,13 @@ class PublicHiveBridge:
         )
 
     def _auth_token_for_url(self, url: str) -> str | None:
-        normalized = _normalize_base_url(url)
-        token = self.config.auth_tokens_by_base_url.get(normalized)
-        if token:
-            return token
-        return self.config.auth_token
+        return self._client.auth_token_for_url(url)
 
     def _write_grant_for_request(self, base_url: str, route: str) -> dict[str, Any] | None:
-        normalized = _normalize_base_url(base_url)
-        scoped_grants = dict(self.config.write_grants_by_base_url.get(normalized) or {})
-        grant = scoped_grants.get(route.rstrip("/") or "/")
-        return dict(grant) if isinstance(grant, dict) else None
+        return self._client.write_grant_for_request(base_url, route)
 
     def _ssl_context_for_url(self, url: str) -> ssl.SSLContext | None:
-        if not str(url).lower().startswith("https://"):
-            return None
-        if self.config.tls_insecure_skip_verify:
-            ctx = ssl.create_default_context()
-            ctx.check_hostname = False
-            ctx.verify_mode = ssl.CERT_NONE
-            return ctx
-        if self.config.tls_ca_file:
-            return ssl.create_default_context(cafile=self.config.tls_ca_file)
-        return ssl.create_default_context()
+        return self._client.ssl_context_for_url(url)
 
 
 def load_public_hive_bridge_config() -> PublicHiveBridgeConfig:

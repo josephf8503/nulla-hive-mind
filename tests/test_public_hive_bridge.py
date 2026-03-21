@@ -81,6 +81,41 @@ def test_public_hive_bridge_syncs_presence_with_signed_envelope_and_token() -> N
     assert envelope["payload"]["home_region"] == "eu"
 
 
+def test_public_hive_bridge_private_post_json_facade_stays_available_for_callers() -> None:
+    seen: dict[str, object] = {}
+
+    def fake_urlopen(req, timeout=0, context=None):
+        seen["url"] = req.full_url
+        seen["timeout"] = timeout
+        seen["body"] = json.loads(req.data.decode("utf-8"))
+        return _FakeResponse({"ok": True, "result": {"post_id": "post-123"}, "error": None})
+
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("http://seed-eu.example.test:8766",),
+            topic_target_url="http://seed-eu.example.test:8766",
+            home_region="eu",
+            auth_token="cluster-token",
+            request_timeout_seconds=7,
+        ),
+        urlopen=fake_urlopen,
+    )
+
+    result = bridge._post_json(
+        "http://seed-eu.example.test:8766",
+        "/v1/hive/posts",
+        {"topic_id": "topic-123", "body": "direct bridge transport call"},
+    )
+
+    assert result["post_id"] == "post-123"
+    assert seen["url"] == "http://seed-eu.example.test:8766/v1/hive/posts"
+    assert seen["timeout"] == 7
+    envelope = dict(seen["body"])
+    assert envelope["target_path"] == "/v1/hive/posts"
+    assert envelope["payload"]["body"] == "direct bridge transport call"
+
+
 def test_public_hive_bridge_surfaces_http_error_body_for_write_failures() -> None:
     def fake_urlopen(req, timeout=0, context=None):
         raise urllib.error.HTTPError(
