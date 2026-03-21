@@ -18,6 +18,7 @@ from typing import Any
 from core import audit_logger, feedback_engine, policy_engine
 from core.agent_runtime import checkpoints as agent_checkpoint_runtime
 from core.agent_runtime import fast_paths as agent_fast_paths
+from core.agent_runtime import presence as agent_presence_runtime
 from core.agent_runtime import response as agent_response_runtime
 from core.autonomous_topic_research import pick_autonomous_research_signal, research_topic_from_signal
 from core.candidate_knowledge_lane import get_candidate_by_id
@@ -6900,97 +6901,38 @@ class NullaAgent:
         status: str,
         source_context: dict[str, object] | None = None,
     ) -> None:
-        effective_status = self._normalize_public_presence_status(status)
-        with self._public_presence_lock:
-            self._public_presence_status = effective_status
-            if source_context is not None:
-                self._public_presence_source_context = dict(source_context)
-        try:
-            if self._public_presence_registered:
-                result = self.public_hive_bridge.heartbeat_presence(
-                    agent_name=get_agent_display_name(),
-                    capabilities=self._public_capabilities(),
-                    status=effective_status,
-                    transport_mode=self._public_transport_mode(source_context),
-                )
-                if not result.get("ok"):
-                    result = self.public_hive_bridge.sync_presence(
-                        agent_name=get_agent_display_name(),
-                        capabilities=self._public_capabilities(),
-                        status=effective_status,
-                        transport_mode=self._public_transport_mode(source_context),
-                    )
-            else:
-                result = self.public_hive_bridge.sync_presence(
-                    agent_name=get_agent_display_name(),
-                    capabilities=self._public_capabilities(),
-                    status=effective_status,
-                    transport_mode=self._public_transport_mode(source_context),
-                )
-            if result.get("ok"):
-                self._public_presence_registered = True
-        except Exception as exc:
-            audit_logger.log(
-                "public_hive_presence_sync_error",
-                target_id=self.persona_id,
-                target_type="agent",
-                details={"error": str(exc), "status": effective_status},
-            )
-            return
-        if not result.get("ok"):
-            audit_logger.log(
-                "public_hive_presence_sync_failed",
-                target_id=self.persona_id,
-                target_type="agent",
-                details={"status": effective_status, **dict(result or {})},
-            )
+        agent_presence_runtime.sync_public_presence(
+            self,
+            status=status,
+            source_context=source_context,
+            get_agent_display_name_fn=get_agent_display_name,
+            audit_log_fn=audit_logger.log,
+        )
 
     def _start_public_presence_heartbeat(self) -> None:
-        if self._public_presence_running:
-            return
-        self._public_presence_running = True
-        self._public_presence_thread = threading.Thread(
-            target=self._public_presence_heartbeat_loop,
-            name="nulla-public-presence",
-            daemon=True,
+        agent_presence_runtime.start_public_presence_heartbeat(
+            self,
+            thread_factory=threading.Thread,
         )
-        self._public_presence_thread.start()
 
     def _start_idle_commons_loop(self) -> None:
-        if self._idle_commons_running:
-            return
-        self._idle_commons_running = True
-        self._idle_commons_thread = threading.Thread(
-            target=self._idle_commons_loop,
-            name="nulla-idle-commons",
-            daemon=True,
+        agent_presence_runtime.start_idle_commons_loop(
+            self,
+            thread_factory=threading.Thread,
         )
-        self._idle_commons_thread.start()
 
     def _public_presence_heartbeat_loop(self) -> None:
-        while self._public_presence_running:
-            time.sleep(120.0)
-            with self._public_presence_lock:
-                last_status = str(self._public_presence_status or "idle")
-                source_context = dict(self._public_presence_source_context or {})
-            self._sync_public_presence(
-                status=self._normalize_public_presence_status(last_status),
-                source_context=source_context,
-            )
+        agent_presence_runtime.public_presence_heartbeat_loop(
+            self,
+            sleep_fn=time.sleep,
+        )
 
     def _idle_commons_loop(self) -> None:
-        while self._idle_commons_running:
-            time.sleep(90.0)
-            try:
-                self._maybe_run_idle_commons_once()
-                self._maybe_run_autonomous_hive_research_once()
-            except Exception as exc:
-                audit_logger.log(
-                    "idle_commons_loop_error",
-                    target_id=self.persona_id,
-                    target_type="agent",
-                    details={"error": str(exc)},
-                )
+        agent_presence_runtime.idle_commons_loop(
+            self,
+            sleep_fn=time.sleep,
+            audit_log_fn=audit_logger.log,
+        )
 
     def _maybe_run_idle_commons_once(self) -> None:
         prefs = load_preferences()
@@ -7109,17 +7051,17 @@ class NullaAgent:
             self._last_user_activity_ts = time.time()
 
     def _idle_commons_session_id(self) -> str:
-        return f"agent-commons:{signer_mod.get_local_peer_id()}"
+        return agent_presence_runtime.idle_commons_session_id(
+            get_local_peer_id_fn=signer_mod.get_local_peer_id,
+        )
 
     def _normalize_public_presence_status(self, status: str) -> str:
-        lowered = str(status or "idle").strip().lower()
-        if lowered == "busy":
-            return "busy"
-        return self._idle_public_presence_status()
+        return agent_presence_runtime.normalize_public_presence_status(self, status)
 
     def _idle_public_presence_status(self) -> str:
-        prefs = load_preferences()
-        return "idle" if bool(getattr(prefs, "accept_hive_tasks", True)) else "limited"
+        return agent_presence_runtime.idle_public_presence_status(
+            load_preferences_fn=load_preferences,
+        )
 
     def _public_transport_source(self, source_context: dict[str, object] | None) -> dict[str, object]:
         if source_context:

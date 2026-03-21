@@ -1,3 +1,3 @@
-from . import checkpoints, fast_paths, response
+from . import checkpoints, fast_paths, presence, response
 
-__all__ = ["checkpoints", "fast_paths", "response"]
+__all__ = ["checkpoints", "fast_paths", "presence", "response"]
