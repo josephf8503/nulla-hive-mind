@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Any
 
 from core import audit_logger, feedback_engine, policy_engine
+from core.agent_runtime import checkpoints as agent_checkpoint_runtime
 from core.agent_runtime import fast_paths as agent_fast_paths
 from core.agent_runtime import response as agent_response_runtime
 from core.autonomous_topic_research import pick_autonomous_research_signal, research_topic_from_signal
@@ -2501,54 +2502,17 @@ class NullaAgent:
         source_context: dict[str, object] | None,
         allow_followup_resume: bool = True,
     ) -> dict[str, Any]:
-        base_source_context = dict(source_context or {})
-        base_source_context.setdefault("runtime_session_id", session_id)
-        base_source_context.setdefault("session_id", session_id)
-        resumable = latest_resumable_checkpoint(session_id)
-        explicit_resume = self._looks_like_explicit_resume_request(raw_user_input)
-        wants_resume = explicit_resume or (allow_followup_resume and self._is_proceed_message(raw_user_input))
-        same_request_retry = bool(
-            resumable
-            and self._resume_request_key(effective_input) == self._resume_request_key(str(resumable.get("request_text") or ""))
-        )
-        if resumable and (wants_resume or same_request_retry):
-            resumed = resume_runtime_checkpoint(
-                str(resumable.get("checkpoint_id") or ""),
-                source_context=base_source_context,
-            )
-            if resumed is not None:
-                merged_source_context = dict(resumed.get("source_context") or {})
-                merged_source_context.update(base_source_context)
-                merged_source_context["runtime_session_id"] = session_id
-                merged_source_context["session_id"] = session_id
-                merged_source_context["runtime_checkpoint_id"] = str(resumed.get("checkpoint_id") or "")
-                return {
-                    "state": "resumed",
-                    "checkpoint": resumed,
-                    "effective_input": str(resumed.get("request_text") or effective_input),
-                    "source_context": merged_source_context,
-                }
-        if explicit_resume and not resumable:
-            return {
-                "state": "missing_resume",
-                "checkpoint": None,
-                "effective_input": effective_input,
-                "source_context": base_source_context,
-            }
-        checkpoint = create_runtime_checkpoint(
+        return agent_checkpoint_runtime.prepare_runtime_checkpoint(
+            self,
             session_id=session_id,
-            request_text=effective_input,
-            source_context=base_source_context,
+            raw_user_input=raw_user_input,
+            effective_input=effective_input,
+            source_context=source_context,
+            allow_followup_resume=allow_followup_resume,
+            latest_resumable_checkpoint_fn=latest_resumable_checkpoint,
+            resume_runtime_checkpoint_fn=resume_runtime_checkpoint,
+            create_runtime_checkpoint_fn=create_runtime_checkpoint,
         )
-        base_source_context["runtime_session_id"] = session_id
-        base_source_context["session_id"] = session_id
-        base_source_context["runtime_checkpoint_id"] = str(checkpoint.get("checkpoint_id") or "")
-        return {
-            "state": "created",
-            "checkpoint": checkpoint,
-            "effective_input": effective_input,
-            "source_context": base_source_context,
-        }
 
     def _blocks_runtime_followup_resume(
         self,
@@ -2575,14 +2539,15 @@ class NullaAgent:
         session_id: str,
         source_context: dict[str, object] | None,
     ) -> Any:
-        checkpoint_id = self._runtime_checkpoint_id(source_context)
-        if checkpoint_id:
-            checkpoint = get_runtime_checkpoint(checkpoint_id)
-            if checkpoint:
-                existing_task = load_task_record(str(checkpoint.get("task_id") or ""))
-                if existing_task is not None:
-                    return existing_task
-        return create_task_record(effective_input, session_id=session_id)
+        return agent_checkpoint_runtime.resolve_runtime_task(
+            self,
+            effective_input=effective_input,
+            session_id=session_id,
+            source_context=source_context,
+            get_runtime_checkpoint_fn=get_runtime_checkpoint,
+            load_task_record_fn=load_task_record,
+            create_task_record_fn=create_task_record,
+        )
 
     def _update_runtime_checkpoint_context(
         self,
@@ -2591,14 +2556,11 @@ class NullaAgent:
         task_id: str | None = None,
         task_class: str | None = None,
     ) -> None:
-        checkpoint_id = self._runtime_checkpoint_id(source_context)
-        if not checkpoint_id:
-            return
-        update_runtime_checkpoint(
-            checkpoint_id,
+        agent_checkpoint_runtime.update_runtime_checkpoint_context(
+            source_context,
             task_id=task_id,
             task_class=task_class,
-            source_context=dict(source_context or {}),
+            update_runtime_checkpoint_fn=update_runtime_checkpoint,
         )
 
     def _finalize_runtime_checkpoint(
@@ -2609,39 +2571,23 @@ class NullaAgent:
         final_response: str = "",
         failure_text: str = "",
     ) -> None:
-        checkpoint_id = self._runtime_checkpoint_id(source_context)
-        if not checkpoint_id:
-            return
-        finalize_runtime_checkpoint(
-            checkpoint_id,
+        agent_checkpoint_runtime.finalize_runtime_checkpoint(
+            source_context,
             status=status,
             final_response=final_response,
             failure_text=failure_text,
+            finalize_runtime_checkpoint_fn=finalize_runtime_checkpoint,
         )
 
     def _runtime_checkpoint_id(self, source_context: dict[str, object] | None) -> str:
-        return str((source_context or {}).get("runtime_checkpoint_id") or "").strip()
+        return agent_checkpoint_runtime.runtime_checkpoint_id(source_context)
 
     def _merge_runtime_source_contexts(
         self,
         primary: dict[str, Any] | None,
         secondary: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        merged = dict(primary or {})
-        secondary_dict = dict(secondary or {})
-        primary_history = [item for item in list(merged.get("conversation_history") or []) if isinstance(item, dict)]
-        secondary_history = [item for item in list(secondary_dict.get("conversation_history") or []) if isinstance(item, dict)]
-        merged.update(secondary_dict)
-        history: list[dict[str, Any]] = []
-        for item in (primary_history + secondary_history)[-16:]:
-            normalized = self._normalize_tool_history_message(item)
-            role = str(normalized.get("role") or "").strip().lower()
-            content = str(normalized.get("content") or "").strip()
-            if role not in {"system", "user", "assistant"} or not content:
-                continue
-            history.append({"role": role, "content": content[:4000]})
-        merged["conversation_history"] = history[-12:]
-        return merged
+        return agent_checkpoint_runtime.merge_runtime_source_contexts(self, primary, secondary)
 
     def _looks_like_explicit_resume_request(self, text: str) -> bool:
         normalized = self._resume_request_key(text)

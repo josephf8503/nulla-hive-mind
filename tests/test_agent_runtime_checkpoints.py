@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from unittest import mock
+
+from apps.nulla_agent import NullaAgent
+from core.agent_runtime import checkpoints
+
+
+def _build_agent() -> NullaAgent:
+    return NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
+
+
+def test_prepare_runtime_checkpoint_uses_app_level_runtime_continuity_functions() -> None:
+    agent = _build_agent()
+
+    with mock.patch("apps.nulla_agent.latest_resumable_checkpoint", return_value=None) as latest_resumable_checkpoint_mock, mock.patch(
+        "apps.nulla_agent.create_runtime_checkpoint",
+        return_value={"checkpoint_id": "runtime-checkpoint-1"},
+    ) as create_runtime_checkpoint_mock:
+        bundle = agent._prepare_runtime_checkpoint(
+            session_id="session-123",
+            raw_user_input="inspect tool receipts",
+            effective_input="inspect tool receipts",
+            source_context={"surface": "openclaw"},
+        )
+
+    latest_resumable_checkpoint_mock.assert_called_once_with("session-123")
+    create_runtime_checkpoint_mock.assert_called_once_with(
+        session_id="session-123",
+        request_text="inspect tool receipts",
+        source_context={
+            "surface": "openclaw",
+            "runtime_session_id": "session-123",
+            "session_id": "session-123",
+            "runtime_checkpoint_id": "runtime-checkpoint-1",
+        },
+    )
+    assert bundle["state"] == "created"
+    assert bundle["source_context"]["runtime_checkpoint_id"] == "runtime-checkpoint-1"
+
+
+def test_resolve_runtime_task_uses_app_level_task_accessors() -> None:
+    agent = _build_agent()
+    existing_task = object()
+
+    with mock.patch(
+        "apps.nulla_agent.get_runtime_checkpoint",
+        return_value={"task_id": "task-123"},
+    ) as get_runtime_checkpoint_mock, mock.patch(
+        "apps.nulla_agent.load_task_record",
+        return_value=existing_task,
+    ) as load_task_record_mock, mock.patch(
+        "apps.nulla_agent.create_task_record"
+    ) as create_task_record_mock:
+        resolved = agent._resolve_runtime_task(
+            effective_input="inspect checkpoint state",
+            session_id="session-123",
+            source_context={"runtime_checkpoint_id": "runtime-checkpoint-1"},
+        )
+
+    assert resolved is existing_task
+    get_runtime_checkpoint_mock.assert_called_once_with("runtime-checkpoint-1")
+    load_task_record_mock.assert_called_once_with("task-123")
+    create_task_record_mock.assert_not_called()
+
+
+def test_update_runtime_checkpoint_context_uses_app_level_writer() -> None:
+    agent = _build_agent()
+
+    with mock.patch("apps.nulla_agent.update_runtime_checkpoint") as update_runtime_checkpoint_mock:
+        agent._update_runtime_checkpoint_context(
+            {"runtime_checkpoint_id": "runtime-checkpoint-1", "surface": "openclaw"},
+            task_id="task-123",
+            task_class="debugging",
+        )
+
+    update_runtime_checkpoint_mock.assert_called_once_with(
+        "runtime-checkpoint-1",
+        task_id="task-123",
+        task_class="debugging",
+        source_context={"runtime_checkpoint_id": "runtime-checkpoint-1", "surface": "openclaw"},
+    )
+
+
+def test_finalize_runtime_checkpoint_uses_app_level_writer() -> None:
+    agent = _build_agent()
+
+    with mock.patch("apps.nulla_agent.finalize_runtime_checkpoint") as finalize_runtime_checkpoint_mock:
+        agent._finalize_runtime_checkpoint(
+            {"runtime_checkpoint_id": "runtime-checkpoint-1"},
+            status="completed",
+            final_response="done",
+            failure_text="",
+        )
+
+    finalize_runtime_checkpoint_mock.assert_called_once_with(
+        "runtime-checkpoint-1",
+        status="completed",
+        final_response="done",
+        failure_text="",
+    )
+
+
+def test_merge_runtime_source_contexts_facade_matches_extracted_module() -> None:
+    agent = _build_agent()
+    primary = {
+        "conversation_history": [
+            {
+                "role": "assistant",
+                "content": (
+                    "Real tool result from `workspace.search_text`:\n"
+                    'Search matches for "tool_intent":\n'
+                    "- core/tool_intent_executor.py:42 def execute_tool_intent("
+                ),
+            }
+        ]
+    }
+    secondary = {"surface": "openclaw", "platform": "openclaw"}
+
+    assert agent._merge_runtime_source_contexts(primary, secondary) == checkpoints.merge_runtime_source_contexts(
+        agent,
+        primary,
+        secondary,
+    )
