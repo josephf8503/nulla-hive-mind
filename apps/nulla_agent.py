@@ -19,7 +19,9 @@ from core import audit_logger, feedback_engine, policy_engine
 from core.agent_runtime import checkpoints as agent_checkpoint_runtime
 from core.agent_runtime import fast_paths as agent_fast_paths
 from core.agent_runtime import hive_runtime as agent_hive_runtime
+from core.agent_runtime import memory_runtime as agent_memory_runtime
 from core.agent_runtime import nullabook as agent_nullabook_runtime
+from core.agent_runtime import orchestrator as agent_orchestrator_runtime
 from core.agent_runtime import presence as agent_presence_runtime
 from core.agent_runtime import response as agent_response_runtime
 from core.agent_runtime.builder import controller as agent_builder_controller
@@ -388,24 +390,13 @@ class NullaAgent:
             if hive_status is not None:
                 return hive_status
 
-        handled, response = maybe_handle_memory_command(effective_input, session_id=session_id)
-        if handled:
-            return self._fast_path_result(
-                session_id=session_id,
-                user_input=effective_input,
-                response=response,
-                confidence=0.93,
-                source_context=source_context,
-                reason="memory_command",
-            )
-
-        companion_memory = self._maybe_handle_companion_memory_fast_path(
+        memory_result = self._maybe_handle_memory_fast_path(
             effective_input,
             session_id=session_id,
             source_context=source_context,
         )
-        if companion_memory is not None:
-            return companion_memory
+        if memory_result is not None:
+            return memory_result
 
         ui_command = self._ui_command_fast_path(normalized_input, source_surface=source_surface)
         if ui_command:
@@ -1171,23 +1162,29 @@ class NullaAgent:
                 source_context=source_context,
             )
 
+    def _maybe_handle_memory_fast_path(
+        self,
+        user_input: str,
+        *,
+        session_id: str,
+        source_context: dict[str, object] | None,
+    ) -> dict[str, Any] | None:
+        return agent_memory_runtime.maybe_handle_memory_fast_path(
+            self,
+            user_input,
+            session_id=session_id,
+            source_context=source_context,
+            maybe_handle_memory_command_fn=maybe_handle_memory_command,
+        )
+
     def _model_final_response_text(self, model_execution: Any) -> str:
-        final_text = str(getattr(model_execution, "output_text", "") or "").strip()
-        if final_text:
-            return final_text
-        structured = getattr(model_execution, "structured_output", None)
-        if isinstance(structured, dict):
-            return str(structured.get("summary") or structured.get("message") or "").strip()
-        return ""
+        return agent_memory_runtime.model_final_response_text(model_execution)
 
     def _chat_surface_cache_or_memory_source(self, model_execution: Any) -> bool:
-        source = str(getattr(model_execution, "source", "") or "").strip().lower()
-        return source in {"exact_cache_hit", "memory_hit"}
+        return agent_memory_runtime.chat_surface_cache_or_memory_source(model_execution)
 
     def _chat_surface_model_final_text(self, model_execution: Any) -> str:
-        if self._chat_surface_cache_or_memory_source(model_execution):
-            return ""
-        return self._model_final_response_text(model_execution)
+        return agent_memory_runtime.chat_surface_model_final_text(model_execution)
 
     def _chat_surface_honest_degraded_response(
         self,
@@ -1196,29 +1193,11 @@ class NullaAgent:
         user_input: str = "",
         interpretation: Any | None = None,
     ) -> str:
-        source = str(getattr(model_execution, "source", "") or "").strip().lower()
-        live_mode = self._live_info_mode(user_input, interpretation=interpretation) if str(user_input or "").strip() else ""
-        if source in {"exact_cache_hit", "memory_hit", "no_provider_available"} and live_mode == "fresh_lookup":
-            query = self._normalize_live_info_query(user_input, mode=live_mode)
-            return self._live_info_failure_text(query=query, mode=live_mode)
-        if source == "exact_cache_hit":
-            return (
-                "I found a matching cached answer for this topic, but this chat path requires a live model response, "
-                "so I'm not passing cached text off as a fresh answer."
-            )
-        if source == "memory_hit":
-            return (
-                "I found relevant local memory for this topic, but this chat path requires a live model response, "
-                "so I'm not presenting remembered text as a fresh answer."
-            )
-        if source == "no_provider_available":
-            return (
-                "I couldn't get a live model response in this run, so I'm not going to recycle cached or remembered "
-                "text as if it were fresh."
-            )
-        return (
-            "I couldn't get a usable model response in this run, so I'm not going to recycle cached or remembered "
-            "text as if it were fresh."
+        return agent_memory_runtime.chat_surface_honest_degraded_response(
+            self,
+            model_execution,
+            user_input=user_input,
+            interpretation=interpretation,
         )
 
     _CREDIT_SEND_RE = re.compile(
@@ -4781,55 +4760,13 @@ class NullaAgent:
         return ResponseClass.GENERIC_CONVERSATION
 
     def _apply_interaction_transition(self, session_id: str, result: ChatTurnResult) -> None:
-        if not session_id:
-            return
-        state = session_hive_state(session_id)
-        payload = dict(state.get("interaction_payload") or {})
-        preserve_task_context = bool(
-            str(state.get("interaction_mode") or "") in {
-                "hive_nudge_shown",
-                "hive_task_selection_pending",
-                "hive_task_active",
-                "hive_task_status_pending",
-            }
-            and (
-                payload.get("active_topic_id")
-                or self._interaction_pending_topic_ids(state)
-                or list(state.get("pending_topic_ids") or [])
-            )
+        agent_orchestrator_runtime.apply_interaction_transition(
+            self,
+            session_id,
+            result,
+            session_hive_state_fn=session_hive_state,
+            set_hive_interaction_state_fn=set_hive_interaction_state,
         )
-        if result.response_class == ResponseClass.SMALLTALK:
-            if preserve_task_context:
-                return
-            set_hive_interaction_state(session_id, mode="smalltalk", payload={})
-            return
-        if result.response_class == ResponseClass.UTILITY_ANSWER:
-            if preserve_task_context:
-                return
-            if (
-                str(state.get("interaction_mode") or "").strip().lower() == "utility"
-                and str(payload.get("utility_kind") or "").strip().lower() == "time"
-                and "current time" in str(result.text or "").lower()
-            ):
-                return
-            set_hive_interaction_state(session_id, mode="utility", payload={})
-            return
-        if result.response_class == ResponseClass.GENERIC_CONVERSATION:
-            if preserve_task_context:
-                return
-            set_hive_interaction_state(session_id, mode="generic_conversation", payload={})
-            return
-        if result.response_class in {ResponseClass.SYSTEM_ERROR_USER_SAFE, ResponseClass.TASK_FAILED_USER_SAFE}:
-            set_hive_interaction_state(session_id, mode="error_recovery", payload={})
-            return
-        if result.response_class in {ResponseClass.TASK_LIST, ResponseClass.TASK_SELECTION_CLARIFICATION}:
-            set_hive_interaction_state(session_id, mode="hive_task_selection_pending", payload=payload)
-            return
-        if result.response_class == ResponseClass.TASK_STARTED:
-            set_hive_interaction_state(session_id, mode="hive_task_active", payload=payload)
-            return
-        if result.response_class == ResponseClass.TASK_STATUS:
-            set_hive_interaction_state(session_id, mode="hive_task_status_pending", payload=payload)
 
     def _maybe_handle_hive_runtime_command(
         self,
@@ -4921,25 +4858,14 @@ class NullaAgent:
         curiosity_result: dict[str, Any],
         gate_mode: str,
     ) -> str:
-        lines: list[str] = []
-        task_class = str(classification.get("task_class") or "unknown")
-        lines.append(f"- classified task as `{task_class}`")
-        try:
-            retrieval_conf = float(context_result.report.retrieval_confidence)
-            lines.append(f"- loaded memory/context with retrieval confidence {retrieval_conf:.2f}")
-        except Exception:
-            pass
-        provider = str((model_execution or {}).get("provider_id") or (model_execution or {}).get("source") or "none")
-        used_model = bool((model_execution or {}).get("used_model", True))
-        lines.append(f"- {'used' if used_model else 'skipped'} model path via `{provider}`")
-        media_reason = str((media_analysis or {}).get("reason") or "").strip()
-        if media_reason:
-            lines.append(f"- media/web evidence status: `{media_reason}`")
-        curiosity_mode = str((curiosity_result or {}).get("mode") or "").strip()
-        if curiosity_mode:
-            lines.append(f"- curiosity/research lane: `{curiosity_mode}`")
-        lines.append(f"- execution posture: `{gate_mode}`")
-        return "\n".join(lines)
+        return agent_orchestrator_runtime.task_workflow_summary(
+            classification=classification,
+            context_result=context_result,
+            model_execution=model_execution,
+            media_analysis=media_analysis,
+            curiosity_result=curiosity_result,
+            gate_mode=gate_mode,
+        )
 
     def _action_workflow_summary(
         self,
@@ -4948,15 +4874,11 @@ class NullaAgent:
         dispatch_status: str,
         details: dict[str, Any] | None,
     ) -> str:
-        lines = [f"- recognized operator action `{operator_kind}`", f"- action state: `{dispatch_status}`"]
-        info = dict(details or {})
-        action_id = str(info.get("action_id") or "").strip()
-        if action_id:
-            lines.append(f"- action id: `{action_id}`")
-        target_path = str(info.get("target_path") or "").strip()
-        if target_path:
-            lines.append(f"- target: `{target_path}`")
-        return "\n".join(lines)
+        return agent_orchestrator_runtime.action_workflow_summary(
+            operator_kind=operator_kind,
+            dispatch_status=dispatch_status,
+            details=details,
+        )
 
     def _tool_intent_workflow_summary(
         self,
@@ -5075,10 +4997,7 @@ class NullaAgent:
         return payload
 
     def _tool_history_observation_prompt(self, observation: dict[str, Any]) -> str:
-        return (
-            "Grounding observations for this turn. Use them as evidence, not as a template:\n"
-            f"{json.dumps(dict(observation or {}), indent=2, sort_keys=True, default=str)}"
-        )
+        return agent_orchestrator_runtime.tool_history_observation_prompt(observation)
 
     def _tool_history_observation_message(
         self,
@@ -5096,25 +5015,7 @@ class NullaAgent:
         }
 
     def _tool_loop_final_message(self, synthesis: Any, executed_steps: list[dict[str, Any]]) -> str:
-        structured = getattr(synthesis, "structured_output", None)
-        if isinstance(structured, dict):
-            summary = str(structured.get("summary") or structured.get("message") or "").strip()
-            bullet_source = structured.get("bullets") or structured.get("steps") or []
-            bullets = [str(item).strip() for item in list(bullet_source) if str(item).strip()]
-            if summary and bullets:
-                return summary + "\n" + "\n".join(f"- {item}" for item in bullets[:6])
-            if summary:
-                return summary
-        output_text = str(getattr(synthesis, "output_text", "") or "").strip()
-        if output_text:
-            return output_text
-        if executed_steps:
-            last_step = executed_steps[-1]
-            return (
-                f"Completed {len(executed_steps)} real tool step{'s' if len(executed_steps) != 1 else ''}. "
-                f"Last result: {str(last_step.get('summary') or 'tool execution finished').strip()}"
-            )
-        return "I ran the available tools, but I do not have a grounded final synthesis yet."
+        return agent_orchestrator_runtime.tool_loop_final_message(synthesis, executed_steps)
 
     def _render_tool_loop_response(
         self,
@@ -5123,17 +5024,11 @@ class NullaAgent:
         executed_steps: list[dict[str, Any]],
         include_step_summary: bool = True,
     ) -> str:
-        message = str(final_message or "").strip()
-        if not executed_steps or not include_step_summary:
-            return message
-        lines = ["Real steps completed:"]
-        for step in executed_steps:
-            tool_name = str(step.get("tool_name") or "tool").strip()
-            summary = str(step.get("summary") or step.get("status") or "completed").strip()
-            lines.append(f"- {tool_name}: {summary}")
-        if message:
-            lines.extend(["", message])
-        return "\n".join(lines).strip()
+        return agent_orchestrator_runtime.render_tool_loop_response(
+            final_message=final_message,
+            executed_steps=executed_steps,
+            include_step_summary=include_step_summary,
+        )
 
     def _tool_intent_loop_workflow_summary(
         self,
@@ -5142,34 +5037,17 @@ class NullaAgent:
         provider_id: str | None,
         validation_state: str,
     ) -> str:
-        lines = [f"- model-driven tool loop executed {len(executed_steps)} real step{'s' if len(executed_steps) != 1 else ''}"]
-        if executed_steps:
-            step_chain = " -> ".join(str(step.get("tool_name") or "tool").strip() for step in executed_steps[:6])
-            if step_chain:
-                lines.append(f"- tool chain: `{step_chain}`")
-        provider = str(provider_id or "").strip()
-        if provider:
-            lines.append(f"- tool intent provider: `{provider}`")
-        validation = str(validation_state or "").strip()
-        if validation:
-            lines.append(f"- tool intent validation: `{validation}`")
-        lines.append("- execution posture: `tool_executed`")
-        return "\n".join(lines)
+        return agent_orchestrator_runtime.tool_intent_loop_workflow_summary(
+            executed_steps=executed_steps,
+            provider_id=provider_id,
+            validation_state=validation_state,
+        )
 
     def _tool_step_summary(self, response_text: str, *, fallback: str) -> str:
-        for raw_line in str(response_text or "").splitlines():
-            line = " ".join(raw_line.split()).strip(" -")
-            if not line:
-                continue
-            return (line[:157] + "...") if len(line) > 160 else line
-        clean_fallback = " ".join(str(fallback or "").split()).strip()
-        return clean_fallback or "completed"
+        return agent_orchestrator_runtime.tool_step_summary(response_text, fallback=fallback)
 
     def _runtime_preview(self, text: str, *, limit: int = 220) -> str:
-        compact = " ".join(str(text or "").split()).strip()
-        if len(compact) <= limit:
-            return compact
-        return compact[: max(1, limit - 3)].rstrip() + "..."
+        return agent_orchestrator_runtime.runtime_preview(text, limit=limit)
 
     def _emit_runtime_event(
         self,
@@ -5179,18 +5057,17 @@ class NullaAgent:
         message: str,
         **details: Any,
     ) -> None:
-        checkpoint_id = self._runtime_checkpoint_id(source_context)
-        if checkpoint_id and "checkpoint_id" not in details:
-            details["checkpoint_id"] = checkpoint_id
-        emit_runtime_event(
+        agent_orchestrator_runtime.emit_runtime_event(
+            self,
             source_context,
             event_type=event_type,
             message=message,
-            details=details,
+            emit_runtime_event_fn=emit_runtime_event,
+            **details,
         )
 
     def _live_runtime_stream_enabled(self, source_context: dict[str, Any] | None) -> bool:
-        return bool(str((source_context or {}).get("runtime_event_stream_id") or "").strip())
+        return agent_orchestrator_runtime.live_runtime_stream_enabled(source_context)
 
     def _sync_public_presence(
         self,
