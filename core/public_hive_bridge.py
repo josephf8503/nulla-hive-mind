@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import os
-import re
 import ssl
 import subprocess
 import urllib.error
@@ -10,7 +9,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import quote
 
 from core import audit_logger
 from core.brain_hive_models import (

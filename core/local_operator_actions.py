@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import contextlib
 import csv
-import fnmatch
-import json
 import os
 import re
 import shutil
@@ -11,7 +8,7 @@ import subprocess
 import tempfile
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,13 +17,12 @@ from core.execution_gate import ExecutionGate
 from core.operator import approvals as operator_approvals
 from core.operator import calendar as operator_calendar
 from core.operator import handlers as operator_handlers
-from core.operator.models import OperatorActionIntent, OperatorActionResult
 from core.operator import parser as operator_parser
 from core.operator import registry as operator_registry
 from core.operator import storage as operator_storage
 from core.operator import system as operator_system
+from core.operator.models import OperatorActionIntent, OperatorActionResult
 from core.operator.parser import _extract_quoted_values
-from core.reasoning_engine import Plan
 from core.runtime_paths import data_path
 from storage.db import get_connection
 

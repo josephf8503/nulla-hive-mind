@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Pattern
+from re import Pattern
+from typing import Any
 
 _PATH_KEY_RE = re.compile(r"(?:^|_)(?:path|paths|root|roots|dir|directory|file|target|destination)$", re.IGNORECASE)
 

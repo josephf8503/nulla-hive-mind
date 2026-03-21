@@ -6,7 +6,11 @@ from pathlib import Path
 from typing import Any
 
 from core.runtime_execution_tools import extract_observation_followup_hints, looks_like_execution_request
-from core.task_router import looks_like_explicit_lookup_request, looks_like_live_recency_lookup, looks_like_public_entity_lookup_request
+from core.task_router import (
+    looks_like_explicit_lookup_request,
+    looks_like_live_recency_lookup,
+    looks_like_public_entity_lookup_request,
+)
 
 from .constants import (
     _APPEND_CONTENT_ONLY_RE,

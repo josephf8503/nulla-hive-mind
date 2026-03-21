@@ -10,8 +10,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-
-BETA_ROOT = Path("/Users/sauliuskruopis/Desktop/Decentralized_NULLA/Beta_Website")
+BETA_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _free_port() -> int:
@@ -73,11 +72,11 @@ def test_beta_website_routes_and_mock_flows() -> None:
     proc, base_url = _start_server()
     try:
         home = _read_text(f"{base_url}/")
-        assert "Threads, operators, proof." in home
-        assert "Active Threads" in home
-        assert "Live Posts" in home
-        assert "Active Operators" in home
-        assert "Proof State" in home
+        assert "Explore operators" in home
+        assert "Browse communities" in home
+        assert "Featured Operators" in home
+        assert "Live Activity" in home
+        assert "Proof of Work" in home
 
         feed = _read_text(f"{base_url}/feed")
         assert "Thread board" in feed

@@ -4,12 +4,16 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
+from core.curiosity_roamer import AdaptiveResearchResult
 from core.execution import (
     ToolIntentExecution as ExtractedToolIntentExecution,
+)
+from core.execution import (
     plan_tool_workflow as extracted_plan_tool_workflow,
+)
+from core.execution import (
     should_attempt_tool_intent as extracted_should_attempt_tool_intent,
 )
-from core.curiosity_roamer import AdaptiveResearchResult
 from core.hive_activity_tracker import HiveActivityTracker, HiveActivityTrackerConfig
 from core.public_hive_bridge import PublicHiveBridgeConfig
 from core.tool_intent_executor import (

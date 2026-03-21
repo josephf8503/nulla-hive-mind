@@ -16,9 +16,17 @@ from core.local_operator_actions import (
 )
 from core.operator import (
     OperatorActionIntent as ExtractedOperatorActionIntent,
+)
+from core.operator import (
     OperatorActionResult as ExtractedOperatorActionResult,
+)
+from core.operator import (
     list_operator_tools as extracted_list_operator_tools,
+)
+from core.operator import (
     operator_capability_ledger as extracted_operator_capability_ledger,
+)
+from core.operator import (
     parse_operator_action_intent as extracted_parse_operator_action_intent,
 )
 from core.persistent_memory import maybe_handle_memory_command

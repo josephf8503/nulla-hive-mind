@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from core.control_plane import metrics_views as control_plane_metrics_views
 import core.control_plane_workspace as control_plane_workspace
+from core.control_plane import metrics_views as control_plane_metrics_views
 from core.control_plane import policies as control_plane_policies
 from core.control_plane import queue_views as control_plane_queue_views
 from core.control_plane import runtime_views as control_plane_runtime_views
