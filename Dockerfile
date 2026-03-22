@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS base
+FROM python:3.12-slim AS build
 
 LABEL maintainer="Parad0x Labs"
 LABEL description="NULLA Hive Mind — local-first decentralized AI agent"
@@ -8,18 +8,41 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libffi-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-COPY pyproject.toml requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR /src
 
 COPY . .
 
-ENV PYTHONPATH=/app
+RUN python -m pip install --no-cache-dir --upgrade pip build && \
+    python -m build --wheel
+
+FROM python:3.12-slim AS runtime
+
+LABEL maintainer="Parad0x Labs"
+LABEL description="NULLA Hive Mind — local-first decentralized AI agent"
+LABEL org.opencontainers.image.source="https://github.com/Parad0x-Labs/nulla-hive-mind"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libffi-dev curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin nulla
+
+WORKDIR /app
+
+COPY requirements-runtime.txt ./
+COPY --from=build /src/dist /tmp/dist
+
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-runtime.txt && \
+    pip install --no-cache-dir /tmp/dist/*.whl && \
+    rm -rf /tmp/dist
+
 ENV PYTHONUNBUFFERED=1
 ENV NULLA_DATA_DIR=/data
 
-RUN mkdir -p /data
+RUN mkdir -p /data && chown -R nulla:nulla /app /data
+
+USER nulla
 
 EXPOSE 49152/udp
 EXPOSE 8765

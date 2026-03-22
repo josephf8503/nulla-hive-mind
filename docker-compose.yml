@@ -4,38 +4,65 @@ services:
   # ── Meet & Greet (peer discovery) ─────────────────────────────────────
   meet-eu:
     build: .
-    command: ["python3", "-m", "apps.meet_and_greet_server"]
+    command:
+      [
+        "python3",
+        "-m",
+        "apps.meet_and_greet_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8765",
+        "--auth-token",
+        "${NULLA_MEET_AUTH_TOKEN:?set NULLA_MEET_AUTH_TOKEN}",
+      ]
     environment:
       NULLA_HOME: /data
-      NULLA_MEET_HOST: "0.0.0.0"
-      NULLA_MEET_PORT: "8765"
-      NULLA_MEET_AUTH_TOKEN: "${NULLA_MEET_AUTH_TOKEN:?set NULLA_MEET_AUTH_TOKEN}"
       NULLA_MEET_REGION: "eu"
     ports:
       - "127.0.0.1:8765:8765"
     volumes:
       - meet-eu-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8765/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
   meet-us:
     build: .
-    command: ["python3", "-m", "apps.meet_and_greet_server"]
+    profiles: ["integration"]
+    command:
+      [
+        "python3",
+        "-m",
+        "apps.meet_and_greet_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8765",
+        "--auth-token",
+        "${NULLA_MEET_AUTH_TOKEN:?set NULLA_MEET_AUTH_TOKEN}",
+      ]
     environment:
       NULLA_HOME: /data
-      NULLA_MEET_HOST: "0.0.0.0"
-      NULLA_MEET_PORT: "8765"
-      NULLA_MEET_AUTH_TOKEN: "${NULLA_MEET_AUTH_TOKEN:?set NULLA_MEET_AUTH_TOKEN}"
       NULLA_MEET_REGION: "us"
     ports:
       - "127.0.0.1:8766:8765"
     volumes:
       - meet-us-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8765/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
-  # ── Agent Nodes ───────────────────────────────────────────────────────
+  # ── Agent API (includes embedded runtime + local daemon bootstrap) ───
   agent-1:
     build: .
-    command: ["python3", "-m", "apps.nulla_api_server"]
+    command: ["python3", "-m", "apps.nulla_api_server", "--bind", "0.0.0.0", "--port", "11435"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_URL: "http://meet-eu:8765"
@@ -46,11 +73,18 @@ services:
       - agent-1-data:/data
     depends_on:
       - meet-eu
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:11435/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
+  # ── CLI one-shot helper lane (not a daemon/service) ───────────────────
   agent-2:
     build: .
-    command: ["python3", "-m", "apps.nulla_agent"]
+    profiles: ["oneshot"]
+    command: ["python3", "-m", "apps.nulla_agent", "--input", "compose one-shot smoke"]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_URL: "http://meet-eu:8765"
@@ -58,12 +92,28 @@ services:
       - agent-2-data:/data
     depends_on:
       - meet-eu
-    restart: unless-stopped
+    restart: "no"
 
-  # ── Daemon (background swarm maintenance) ─────────────────────────────
+  # ── Standalone daemon lane for integration/mesh testing only ──────────
   daemon-1:
     build: .
-    command: ["python3", "-m", "apps.nulla_daemon"]
+    profiles: ["integration"]
+    command:
+      [
+        "python3",
+        "-m",
+        "apps.nulla_daemon",
+        "--bind-host",
+        "0.0.0.0",
+        "--bind-port",
+        "49152",
+        "--advertise-host",
+        "daemon-1",
+        "--health-host",
+        "127.0.0.1",
+        "--health-port",
+        "14915",
+      ]
     environment:
       NULLA_HOME: /data
       NULLA_MEET_URL: "http://meet-eu:8765"
@@ -73,12 +123,28 @@ services:
       - daemon-1-data:/data
     depends_on:
       - meet-eu
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:14915/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
   # ── Brain Hive Watch (read-only dashboard) ────────────────────────────
   brain-hive-watch:
     build: .
-    command: ["python3", "-m", "apps.brain_hive_watch_server"]
+    command:
+      [
+        "python3",
+        "-m",
+        "apps.brain_hive_watch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8788",
+        "--upstream-base-url",
+        "http://meet-eu:8765",
+      ]
     environment:
       NULLA_HOME: /data
       NULLA_WATCH_UPSTREAM: "http://meet-eu:8765"
@@ -88,6 +154,11 @@ services:
       - watch-data:/data
     depends_on:
       - meet-eu
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8788/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
 
 volumes:

@@ -16,6 +16,7 @@ from apps.brain_hive_watch_server import (
     fetch_dashboard_from_upstreams,
     fetch_topic_from_upstreams,
     fetch_topic_posts_from_upstreams,
+    main,
 )
 from core.brain_hive_dashboard import (
     _augment_dashboard_with_trading_scanner,
@@ -30,6 +31,50 @@ from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
 
 
 class BrainHiveWatchServerTests(unittest.TestCase):
+    def test_main_builds_runtime_config_from_env(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "NULLA_WATCH_HOST": "0.0.0.0",
+                "NULLA_WATCH_PORT": "9911",
+                "NULLA_WATCH_UPSTREAM": "http://meet-eu:8765,http://meet-us:8765",
+                "NULLA_WATCH_TIMEOUT_SECONDS": "9",
+                "NULLA_WATCH_AUTH_TOKEN": "watch-token",
+                "NULLA_WATCH_CACHE_TTL_SECONDS": "12.5",
+            },
+            clear=False,
+        ):
+            with patch("apps.brain_hive_watch_server.serve") as serve_mock, patch(
+                "argparse.ArgumentParser.parse_args",
+                return_value=type(
+                    "Args",
+                    (),
+                    {
+                        "host": "0.0.0.0",
+                        "port": 9911,
+                        "upstream_base_urls": ["http://meet-eu:8765", "http://meet-us:8765"],
+                        "timeout_seconds": 9,
+                        "auth_token": "watch-token",
+                        "tls_certfile": "",
+                        "tls_keyfile": "",
+                        "tls_ca_file": "",
+                        "tls_insecure_skip_verify": False,
+                        "cache_ttl_seconds": 12.5,
+                    },
+                )(),
+            ):
+                result = main()
+
+        self.assertEqual(result, 0)
+        serve_mock.assert_called_once()
+        cfg = serve_mock.call_args.args[0]
+        self.assertEqual(cfg.host, "0.0.0.0")
+        self.assertEqual(cfg.port, 9911)
+        self.assertEqual(cfg.upstream_base_urls, ("http://meet-eu:8765", "http://meet-us:8765"))
+        self.assertEqual(cfg.request_timeout_seconds, 9)
+        self.assertEqual(cfg.auth_token, "watch-token")
+        self.assertEqual(cfg.dashboard_cache_ttl_seconds, 12.5)
+
     def test_fetch_dashboard_falls_back_to_second_upstream(self) -> None:
         calls: list[tuple[str, str | None]] = []
 

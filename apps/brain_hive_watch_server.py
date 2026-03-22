@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import os
 import ssl
 from collections.abc import Callable
 from http.server import ThreadingHTTPServer
@@ -241,3 +243,110 @@ def _build_tls_context(cfg: BrainHiveWatchServerConfig) -> ssl.SSLContext | None
 
 def _validate_tls_config(cfg: BrainHiveWatchServerConfig) -> None:
     _core_validate_tls_config(cfg)
+
+
+def _env_text(name: str, default: str) -> str:
+    return str(os.environ.get(name, default) or default).strip() or str(default)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = str(os.environ.get(name, "") or "").strip()
+    if not raw:
+        return int(default)
+    try:
+        return int(raw)
+    except ValueError:
+        return int(default)
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = str(os.environ.get(name, "") or "").strip()
+    if not raw:
+        return float(default)
+    try:
+        return float(raw)
+    except ValueError:
+        return float(default)
+
+
+def _parse_upstream_base_urls(raw: str) -> tuple[str, ...]:
+    urls = tuple(part.strip() for part in str(raw or "").split(",") if str(part).strip())
+    if urls:
+        return urls
+    return BrainHiveWatchServerConfig.upstream_base_urls
+
+
+def _env_watch_config() -> BrainHiveWatchServerConfig:
+    upstream_raw = _env_text(
+        "NULLA_WATCH_UPSTREAM_BASE_URLS",
+        _env_text("NULLA_WATCH_UPSTREAM", ",".join(BrainHiveWatchServerConfig.upstream_base_urls)),
+    )
+    return BrainHiveWatchServerConfig(
+        host=_env_text("NULLA_WATCH_HOST", BrainHiveWatchServerConfig.host),
+        port=_env_int("NULLA_WATCH_PORT", BrainHiveWatchServerConfig.port),
+        upstream_base_urls=_parse_upstream_base_urls(upstream_raw),
+        request_timeout_seconds=_env_int(
+            "NULLA_WATCH_TIMEOUT_SECONDS",
+            BrainHiveWatchServerConfig.request_timeout_seconds,
+        ),
+        auth_token=str(os.environ.get("NULLA_WATCH_AUTH_TOKEN") or "").strip() or None,
+        tls_certfile=str(os.environ.get("NULLA_WATCH_TLS_CERTFILE") or "").strip() or None,
+        tls_keyfile=str(os.environ.get("NULLA_WATCH_TLS_KEYFILE") or "").strip() or None,
+        tls_ca_file=str(os.environ.get("NULLA_WATCH_TLS_CA_FILE") or "").strip() or None,
+        tls_insecure_skip_verify=bool(
+            str(os.environ.get("NULLA_WATCH_TLS_INSECURE_SKIP_VERIFY", "") or "").strip().lower()
+            in {"1", "true", "yes", "on"}
+        ),
+        dashboard_cache_ttl_seconds=_env_float(
+            "NULLA_WATCH_CACHE_TTL_SECONDS",
+            BrainHiveWatchServerConfig.dashboard_cache_ttl_seconds,
+        ),
+    )
+
+
+def main() -> int:
+    env_cfg = _env_watch_config()
+    parser = argparse.ArgumentParser(prog="nulla-watch")
+    parser.add_argument("--host", default=env_cfg.host)
+    parser.add_argument("--port", type=int, default=int(env_cfg.port))
+    parser.add_argument(
+        "--upstream-base-url",
+        action="append",
+        dest="upstream_base_urls",
+        default=list(env_cfg.upstream_base_urls),
+        help="Repeat to add multiple upstream meet/watch bases.",
+    )
+    parser.add_argument("--timeout-seconds", type=int, default=int(env_cfg.request_timeout_seconds))
+    parser.add_argument("--auth-token", default=env_cfg.auth_token or "")
+    parser.add_argument("--tls-certfile", default=env_cfg.tls_certfile or "")
+    parser.add_argument("--tls-keyfile", default=env_cfg.tls_keyfile or "")
+    parser.add_argument("--tls-ca-file", default=env_cfg.tls_ca_file or "")
+    parser.add_argument(
+        "--tls-insecure-skip-verify",
+        action="store_true",
+        default=bool(env_cfg.tls_insecure_skip_verify),
+    )
+    parser.add_argument("--cache-ttl-seconds", type=float, default=float(env_cfg.dashboard_cache_ttl_seconds))
+    args = parser.parse_args()
+    serve(
+        BrainHiveWatchServerConfig(
+            host=str(args.host),
+            port=int(args.port),
+            upstream_base_urls=tuple(
+                str(url).strip() for url in list(args.upstream_base_urls or ()) if str(url).strip()
+            )
+            or env_cfg.upstream_base_urls,
+            request_timeout_seconds=max(1, int(args.timeout_seconds)),
+            auth_token=str(args.auth_token or "").strip() or None,
+            tls_certfile=str(args.tls_certfile or "").strip() or None,
+            tls_keyfile=str(args.tls_keyfile or "").strip() or None,
+            tls_ca_file=str(args.tls_ca_file or "").strip() or None,
+            tls_insecure_skip_verify=bool(args.tls_insecure_skip_verify),
+            dashboard_cache_ttl_seconds=max(0.0, float(args.cache_ttl_seconds)),
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

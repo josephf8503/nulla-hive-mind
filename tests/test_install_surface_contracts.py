@@ -14,17 +14,26 @@ def _setuptools_include_patterns() -> list[str]:
     return ast.literal_eval(f"[{match.group(1)}]")
 
 
-def test_pyproject_package_discovery_lists_runtime_adapter_and_tool_roots() -> None:
+def test_pyproject_package_discovery_lists_runtime_package_roots() -> None:
     include = set(_setuptools_include_patterns())
     model_registry = (REPO_ROOT / "core" / "model_registry.py").read_text(encoding="utf-8")
     tool_executor = (REPO_ROOT / "core" / "tool_intent_executor.py").read_text(encoding="utf-8")
+    channel_actions = (REPO_ROOT / "core" / "channel_actions.py").read_text(encoding="utf-8")
+    onboarding = (REPO_ROOT / "core" / "onboarding.py").read_text(encoding="utf-8")
 
     assert "adapters*" in include
     assert "tools*" in include
+    assert "relay*" in include
+    assert "installer*" in include
     assert (REPO_ROOT / "adapters" / "__init__.py").exists()
     assert (REPO_ROOT / "tools" / "__init__.py").exists()
+    assert (REPO_ROOT / "relay" / "__init__.py").exists()
+    assert (REPO_ROOT / "relay" / "bridge_workers" / "__init__.py").exists()
+    assert (REPO_ROOT / "installer" / "__init__.py").exists()
     assert "from adapters." in model_registry
     assert "from tools.registry" in tool_executor
+    assert "from relay." in channel_actions
+    assert "from installer.register_openclaw_agent import register" in onboarding
 
 
 def test_container_and_docs_share_api_healthz_contract() -> None:
