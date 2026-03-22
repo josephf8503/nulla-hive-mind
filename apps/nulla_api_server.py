@@ -65,22 +65,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _runtime_services: RuntimeServices | None = None
 _agent = None
 _daemon = None
-_display_name: str = "NULLA"
-_runtime_model_tag: str = "qwen2.5:7b"
-_runtime_parameter_size: str = "7B"
-_runtime_started_at: str = ""
-_runtime_version_stamp: dict[str, Any] = {}
 
 
 def _sync_runtime_aliases(runtime: RuntimeServices) -> None:
-    global _agent, _daemon, _display_name, _runtime_model_tag, _runtime_parameter_size, _runtime_started_at, _runtime_version_stamp
+    global _agent, _daemon
     _agent = runtime.agent
     _daemon = runtime.daemon
-    _display_name = runtime.display_name
-    _runtime_model_tag = runtime.runtime_model_tag
-    _runtime_parameter_size = runtime.runtime_parameter_size
-    _runtime_started_at = runtime.runtime_started_at
-    _runtime_version_stamp = dict(runtime.runtime_version_stamp or {})
 
 
 def _compat_runtime_services() -> RuntimeServices:
@@ -88,11 +78,11 @@ def _compat_runtime_services() -> RuntimeServices:
     return RuntimeServices(
         agent=_agent if _agent is not None else runtime.agent,
         daemon=_daemon if _daemon is not None else runtime.daemon,
-        display_name=str(_display_name or runtime.display_name or "NULLA"),
-        runtime_model_tag=str(_runtime_model_tag or runtime.runtime_model_tag or "qwen2.5:7b"),
-        runtime_parameter_size=str(_runtime_parameter_size or runtime.runtime_parameter_size or "7B"),
-        runtime_started_at=str(_runtime_started_at or runtime.runtime_started_at or ""),
-        runtime_version_stamp=dict(_runtime_version_stamp or runtime.runtime_version_stamp or {}),
+        display_name=str(runtime.display_name or "NULLA"),
+        runtime_model_tag=str(runtime.runtime_model_tag or "qwen2.5:7b"),
+        runtime_parameter_size=str(runtime.runtime_parameter_size or "7B"),
+        runtime_started_at=str(runtime.runtime_started_at or ""),
+        runtime_version_stamp=dict(runtime.runtime_version_stamp or {}),
     )
 
 
