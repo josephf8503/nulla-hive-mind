@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import errno
 import os
 import secrets
 import socket
@@ -182,42 +183,18 @@ def _parse_frag_header(packet: bytes) -> tuple[str, int, int] | None:
     return transfer_id, index, total
 
 
-def _kill_stale_udp_holder(port: int) -> bool:
-    """Find and kill a stale process holding a UDP port (Windows + POSIX)."""
-    import subprocess
-    my_pid = os.getpid()
-    try:
-        result = subprocess.run(
-            ["netstat", "-ano", "-p", "UDP"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in (result.stdout or "").splitlines():
-            if "UDP" not in line or f":{port}" not in line:
-                continue
-            parts = line.split()
-            if len(parts) < 3:
-                continue
-            try:
-                holder_pid = int(parts[-1])
-            except ValueError:
-                continue
-            if holder_pid == my_pid or holder_pid == 0:
-                continue
-            audit_logger.log(
-                "killing_stale_port_holder",
-                target_id=f"pid={holder_pid}",
-                target_type="transport",
-                details={"port": port},
-            )
-            with contextlib.suppress(Exception):
-                subprocess.run(
-                    ["taskkill", "/F", "/PID", str(holder_pid)],
-                    capture_output=True, timeout=5,
-                )
-            return True
-    except Exception:
-        pass
-    return False
+def _is_address_in_use_error(exc: OSError) -> bool:
+    err_no = getattr(exc, "errno", None)
+    winerror = getattr(exc, "winerror", None)
+    return err_no == errno.EADDRINUSE or err_no == 10048 or winerror == 10048
+
+
+def _raise_udp_bind_conflict(host: str, port: int, exc: OSError) -> None:
+    raise OSError(
+        getattr(exc, "errno", None) or getattr(exc, "winerror", None) or errno.EADDRINUSE,
+        f"UDP transport cannot bind {host}:{port}: port already in use. "
+        "Stop the conflicting process or choose a different port.",
+    ) from exc
 
 
 def _configure_udp_socket_buffers(sock: socket.socket) -> None:
@@ -285,20 +262,10 @@ class UDPTransportServer:
         try:
             sock.bind((self.host, self.port))
         except OSError as bind_err:
-            if getattr(bind_err, "winerror", None) == 10048 or bind_err.errno == 10048:
-                killed = _kill_stale_udp_holder(self.port)
-                if killed:
-                    time.sleep(0.5)
-                    try:
-                        sock.bind((self.host, self.port))
-                    except OSError:
-                        sock.close()
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        sock.bind((self.host, self.port))
-                else:
-                    raise
-            else:
-                raise
+            sock.close()
+            if _is_address_in_use_error(bind_err):
+                _raise_udp_bind_conflict(self.host, self.port, bind_err)
+            raise
 
         bound_port = int(sock.getsockname()[1])
 

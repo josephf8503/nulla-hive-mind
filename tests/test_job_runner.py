@@ -39,6 +39,35 @@ class JobRunnerTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     runner.run(["python3", "-c", "print('safe')"])
 
+    @unittest.skipIf(sys.platform == "win32", "PosixPath cannot be instantiated on Windows")
+    def test_auto_network_isolation_now_fails_closed_without_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = JobRunner(
+                ExecutionPolicy(
+                    workspace_root=Path(tmpdir),
+                    network_isolation_mode="auto",
+                )
+            )
+            with patch("sandbox.job_runner.os.name", "posix"), patch("sandbox.job_runner.sys.platform", "darwin"), patch(
+                "sandbox.job_runner.shutil.which", return_value=None
+            ):
+                with self.assertRaises(ValueError):
+                    runner.run(["python3", "-c", "print('safe')"])
+
+    def test_heuristic_only_mode_remains_explicit_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runner = JobRunner(
+                ExecutionPolicy(
+                    workspace_root=Path(tmpdir),
+                    network_isolation_mode="heuristic_only",
+                )
+            )
+            with patch("sandbox.job_runner.os.name", "posix"), patch("sandbox.job_runner.sys.platform", "darwin"), patch(
+                "sandbox.job_runner.shutil.which", return_value=None
+            ):
+                argv = runner._with_network_isolation(["python3", "-c", "print('x')"])
+                self.assertEqual(argv, ["python3", "-c", "print('x')"])
+
     def test_linux_unshare_prefix_applied_when_available(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             runner = JobRunner(

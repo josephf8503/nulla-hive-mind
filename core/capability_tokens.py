@@ -218,7 +218,7 @@ def verify_assignment_capability(
     remembered = load_capability_token(token_id)
     if remembered is not None:
         status = str(remembered.get("status") or "active")
-        if status not in {"active", "used"}:
+        if status != "active":
             return CapabilityDecision(False, f"Capability token is {status}.")
         local_signature = str(remembered.get("signature") or "")
         if local_signature and local_signature != signature:

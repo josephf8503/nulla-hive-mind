@@ -179,7 +179,10 @@ def workspace_build_verification_payload(*, target: dict[str, str]) -> dict[str,
         return None
     return {
         "intent": "sandbox.run_command",
-        "arguments": {"command": f"python3 -m compileall -q {root_dir}/src"},
+        "arguments": {
+            "command": f"python3 -m compileall -q {root_dir}/src",
+            "_trusted_local_only": True,
+        },
     }
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,16 @@ from core.liquefy_bridge import apply_local_execution_safety
 from sandbox.job_runner import JobRunner
 from sandbox.network_guard import parse_command
 from sandbox.resource_limits import ExecutionPolicy
+
+
+def _network_isolation_mode_from_env() -> str:
+    raw = str(os.environ.get("NULLA_SANDBOX_NETWORK_MODE") or "").strip().lower()
+    if raw in {"os_enforced", "heuristic_only"}:
+        return raw
+    unsafe = str(os.environ.get("NULLA_SANDBOX_UNSAFE_EXPLICIT") or "").strip().lower()
+    if unsafe in {"1", "true", "yes", "on"}:
+        return "heuristic_only"
+    return "auto"
 
 
 class SandboxRunner:
@@ -29,7 +40,7 @@ class SandboxRunner:
 
     _PACKAGE_INSTALL_COMMANDS = {"pip", "pip3", "npm", "npx", "yarn", "pnpm", "cargo"}
 
-    def __init__(self, gate: ExecutionGate, workspace_path: str):
+    def __init__(self, gate: ExecutionGate, workspace_path: str, *, network_isolation_mode: str | None = None):
         self.gate = gate
         self.workspace = workspace_path
         self._workspace_path = Path(workspace_path).resolve()
@@ -40,6 +51,7 @@ class SandboxRunner:
                 max_seconds=120,
                 max_output_kb=256,
                 allow_network_egress=False,
+                network_isolation_mode=network_isolation_mode or _network_isolation_mode_from_env(),
             )
         )
 

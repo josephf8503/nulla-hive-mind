@@ -65,9 +65,11 @@ class JobRunner:
         isolated = self._kernel_network_isolation_prefix(argv)
         if isolated is not None:
             return isolated
-        if mode == "os_enforced":
+        if mode in {"auto", "os_enforced"}:
             raise ValueError(
-                "OS-level network isolation is required but unavailable (expected one of: bwrap, unshare, firejail)."
+                "OS-level network isolation is required but unavailable "
+                "(expected one of: bwrap, unshare, firejail). "
+                "Set network_isolation_mode='heuristic_only' only for an explicit unsafe local override."
             )
         return argv
 

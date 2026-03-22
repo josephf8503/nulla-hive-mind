@@ -11,6 +11,7 @@ from core import policy_engine
 from core.execution_gate import ExecutionGate
 from core.runtime_paths import resolve_workspace_root
 from core.runtime_tool_contracts import runtime_tool_contract_map, runtime_tool_contracts
+from sandbox.network_guard import parse_command
 from sandbox.sandbox_runner import SandboxRunner
 
 _EXECUTION_REQUEST_MARKERS = (
@@ -887,7 +888,11 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
     cwd = _resolve_workspace_path(raw_cwd, workspace_root=workspace_root) if raw_cwd else workspace_root
     if cwd.is_file():
         cwd = cwd.parent
-    runner = SandboxRunner(ExecutionGate(), str(workspace_root))
+    runner = SandboxRunner(
+        ExecutionGate(),
+        str(workspace_root),
+        network_isolation_mode=_trusted_local_network_mode(command, arguments=arguments),
+    )
     result = runner.run_command(command, cwd=str(cwd))
     relative_cwd = _relative_path(cwd, workspace_root=workspace_root)
     status = str(result.get("status") or "")
@@ -1012,3 +1017,16 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
             ),
         },
     )
+
+
+def _trusted_local_network_mode(command: str, *, arguments: dict[str, Any]) -> str | None:
+    if not bool(arguments.get("_trusted_local_only", False)):
+        return None
+    argv = parse_command(command)
+    if len(argv) < 4:
+        return None
+    if argv[0] not in {"python", "python3"}:
+        return None
+    if argv[1:4] != ["-m", "compileall", "-q"]:
+        return None
+    return "heuristic_only"

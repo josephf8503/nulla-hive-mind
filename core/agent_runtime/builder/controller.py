@@ -356,7 +356,7 @@ def workspace_build_verification(
         return {"status": "skipped", "ok": False, "response_text": "Verification skipped for non-Python scaffold."}
     execution = execute_runtime_tool_fn(
         "sandbox.run_command",
-        {"command": f"python3 -m compileall -q {root_dir}/src"},
+        {"command": f"python3 -m compileall -q {root_dir}/src", "_trusted_local_only": True},
         source_context=source_context,
     )
     if execution is None:

@@ -9,7 +9,11 @@ from unittest import mock
 
 import pytest
 
-from core.runtime_execution_tools import execute_runtime_tool, extract_observation_followup_hints
+from core.runtime_execution_tools import (
+    _trusted_local_network_mode,
+    execute_runtime_tool,
+    extract_observation_followup_hints,
+)
 
 _UNSHARE_AVAILABLE = os.system("unshare -r true >/dev/null 2>&1") == 0
 
@@ -231,6 +235,27 @@ class RuntimeExecutionToolsTests(unittest.TestCase):
             self.assertIn("Network egress is disabled", result.response_text)
             self.assertEqual(result.details["observation"]["tool_surface"], "sandbox")
             self.assertEqual(result.details["observation"]["status"], "blocked_by_policy")
+
+    def test_trusted_local_network_mode_only_applies_to_internal_compileall_verification(self) -> None:
+        self.assertEqual(
+            _trusted_local_network_mode(
+                "python3 -m compileall -q generated/telegram-bot/src",
+                arguments={"_trusted_local_only": True},
+            ),
+            "heuristic_only",
+        )
+        self.assertIsNone(
+            _trusted_local_network_mode(
+                "python3 app.py",
+                arguments={"_trusted_local_only": True},
+            )
+        )
+        self.assertIsNone(
+            _trusted_local_network_mode(
+                "python3 -m compileall -q generated/telegram-bot/src",
+                arguments={},
+            )
+        )
 
 
 if __name__ == "__main__":

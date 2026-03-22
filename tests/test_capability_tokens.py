@@ -11,6 +11,7 @@ from core.capability_tokens import (
     issue_assignment_capability,
     load_capability_token,
     mark_capability_token_used,
+    remember_capability_token,
     verify_assignment_capability,
 )
 from core.task_capsule import build_task_capsule
@@ -130,6 +131,42 @@ class CapabilityTokenTests(unittest.TestCase):
         self.assertEqual(expired, 1)
         remembered = load_capability_token(str(token["token_id"]))
         self.assertEqual(str((remembered or {}).get("status")), "expired")
+
+    def test_assignment_capability_rejects_previously_used_token(self) -> None:
+        task_id = f"task-{uuid.uuid4()}"
+        capsule = _capsule(task_id)
+        helper_peer_id = "helper-peer-used"
+
+        token = {
+            "token_id": str(uuid.uuid4()),
+            "capability_name": "EXECUTE_TASK_CAPSULE",
+            "task_id": task_id,
+            "granted_by": get_local_peer_id(),
+            "granted_to": helper_peer_id,
+            "scope": {
+                "task_id": task_id,
+                "capsule_hash": capsule.capsule_hash,
+                "allowed_operations": list(capsule.allowed_operations),
+                "max_response_bytes": int(capsule.max_response_bytes),
+                "assignment_mode": "single",
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
+            "signature": "sig-test",
+        }
+        remember_capability_token(token, status="used")
+
+        with unittest.mock.patch("core.capability_tokens.signer.verify", return_value=True):
+            decision = verify_assignment_capability(
+                token,
+                task_id=task_id,
+                parent_peer_id=get_local_peer_id(),
+                helper_peer_id=helper_peer_id,
+                capsule=capsule,
+            )
+
+        self.assertFalse(decision.ok)
+        self.assertIn("used", decision.reason)
 
 
 if __name__ == "__main__":
