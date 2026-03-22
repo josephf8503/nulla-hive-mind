@@ -4,8 +4,6 @@ import ast
 import re
 from pathlib import Path
 
-from setuptools import find_packages
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -16,12 +14,17 @@ def _setuptools_include_patterns() -> list[str]:
     return ast.literal_eval(f"[{match.group(1)}]")
 
 
-def test_packaged_runtime_includes_adapter_and_tool_roots() -> None:
-    discovered = find_packages(where=str(REPO_ROOT), include=_setuptools_include_patterns())
-    packaged_roots = {package.split(".")[0] for package in discovered}
+def test_pyproject_package_discovery_lists_runtime_adapter_and_tool_roots() -> None:
+    include = set(_setuptools_include_patterns())
+    model_registry = (REPO_ROOT / "core" / "model_registry.py").read_text(encoding="utf-8")
+    tool_executor = (REPO_ROOT / "core" / "tool_intent_executor.py").read_text(encoding="utf-8")
 
-    assert "adapters" in packaged_roots
-    assert "tools" in packaged_roots
+    assert "adapters*" in include
+    assert "tools*" in include
+    assert (REPO_ROOT / "adapters" / "__init__.py").exists()
+    assert (REPO_ROOT / "tools" / "__init__.py").exists()
+    assert "from adapters." in model_registry
+    assert "from tools.registry" in tool_executor
 
 
 def test_container_and_docs_share_api_healthz_contract() -> None:
