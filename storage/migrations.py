@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import contextlib
 import re
 from datetime import datetime, timezone
@@ -1368,3 +1369,19 @@ def _add_column_if_missing(conn, table: str, column: str, type_def: str) -> None
     columns = [row["name"] for row in cursor.fetchall()]
     if column not in columns:
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {type_def}")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run NULLA storage migrations.")
+    parser.add_argument("--db-path", default=None, help="Optional SQLite path override.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    run_migrations(db_path=args.db_path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

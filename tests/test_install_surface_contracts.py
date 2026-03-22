@@ -36,6 +36,23 @@ def test_pyproject_package_discovery_lists_runtime_package_roots() -> None:
     assert "from installer.register_openclaw_agent import register" in onboarding
 
 
+def test_pyproject_runtime_extra_covers_installer_runtime_surface() -> None:
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    for marker in (
+        "runtime = [",
+        '"openai>=1.0"',
+        '"anthropic>=0.18"',
+        '"sentence-transformers>=2.2"',
+        '"torch>=2.5"',
+        '"transformers>=4.48"',
+        '"playwright>=1.52,<2.0"',
+        '"zstandard>=0.22.0"',
+        '"xxhash>=3.4.0"',
+    ):
+        assert marker in pyproject
+
+
 def test_container_and_docs_share_api_healthz_contract() -> None:
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
     install_doc = (REPO_ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
@@ -46,3 +63,20 @@ def test_container_and_docs_share_api_healthz_contract() -> None:
     assert "http://127.0.0.1:11435/healthz" in install_doc
     assert "GET /healthz" in control_plane_doc
     assert '"/healthz"' in api_server
+
+
+def test_installers_use_module_entrypoints_and_runtime_extra_without_pythonpath_hacks() -> None:
+    sh_installer = (REPO_ROOT / "installer" / "install_nulla.sh").read_text(encoding="utf-8")
+    bat_installer = (REPO_ROOT / "installer" / "install_nulla.bat").read_text(encoding="utf-8")
+
+    assert 'pip install "${PROJECT_ROOT}[runtime]"' in sh_installer
+    assert 'pip install "%PROJECT_ROOT%[runtime]"' in bat_installer
+    assert "-m storage.migrations" in sh_installer
+    assert "-m storage.migrations" in bat_installer
+    assert "-m ops.ensure_public_hive_auth" in sh_installer
+    assert "-m ops.ensure_public_hive_auth" in bat_installer
+    assert "PYTHONPATH" not in sh_installer
+    assert "PYTHONPATH" not in bat_installer
+    assert "ops/ensure_public_hive_auth.py" not in sh_installer
+    assert "ops\\ensure_public_hive_auth.py" not in bat_installer
+    assert (REPO_ROOT / "ops" / "ensure_public_hive_auth.py").exists()

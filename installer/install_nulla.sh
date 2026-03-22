@@ -209,10 +209,14 @@ install_dependencies() {
     say "Using bundled wheelhouse from ${WHEELHOUSE_DIR}"
     if ! "${VENV_DIR}/bin/python" -m pip install --no-index --find-links "${WHEELHOUSE_DIR}" -r "${requirements_file}"; then
       say "WARNING: Bundled wheelhouse install failed. Falling back to online dependency install."
-      "${VENV_DIR}/bin/python" -m pip install -r "${requirements_file}"
+      "${VENV_DIR}/bin/python" -m pip install "${PROJECT_ROOT}[runtime]"
     fi
   else
-    "${VENV_DIR}/bin/python" -m pip install -r "${requirements_file}"
+    "${VENV_DIR}/bin/python" -m pip install "${PROJECT_ROOT}[runtime]"
+  fi
+
+  if dir_has_files "${WHEELHOUSE_DIR}"; then
+    "${VENV_DIR}/bin/python" -m pip install --no-deps "${PROJECT_ROOT}"
   fi
 
   local liquefy_dir=""
@@ -244,8 +248,7 @@ initialize_runtime() {
   local runtime_home="$1"
   say "Step 5/14: Initializing runtime home at ${runtime_home}"
   mkdir -p "${runtime_home}"
-  NULLA_HOME="${runtime_home}" PYTHONPATH="${PROJECT_ROOT}" \
-    "${VENV_DIR}/bin/python" -c "from storage.migrations import run_migrations; run_migrations()"
+  NULLA_HOME="${runtime_home}" "${VENV_DIR}/bin/python" -m storage.migrations
 }
 
 
@@ -253,8 +256,8 @@ bootstrap_public_hive_auth() {
   local runtime_home="$1"
   say "Step 5b/14: Ensuring public Hive auth/bootstrap..."
   local result_json=""
-  result_json="$(NULLA_HOME="${runtime_home}" PYTHONPATH="${PROJECT_ROOT}" \
-    "${VENV_DIR}/bin/python" "${PROJECT_ROOT}/ops/ensure_public_hive_auth.py" \
+  result_json="$(NULLA_HOME="${runtime_home}" \
+    "${VENV_DIR}/bin/python" -m ops.ensure_public_hive_auth \
       --project-root "${PROJECT_ROOT}" \
       --watch-host "${PUBLIC_HIVE_WATCH_HOST}" \
       --json 2>/tmp/nulla_public_hive_auth_stderr.log || true)"
@@ -278,8 +281,6 @@ detect_model_tag() {
     return
   fi
   "${VENV_DIR}/bin/python" -c "
-import sys
-sys.path.insert(0, '${PROJECT_ROOT}')
 from core.hardware_tier import probe_machine, select_qwen_tier, tier_summary
 summary = tier_summary()
 print(summary['ollama_model'])
@@ -290,8 +291,6 @@ print(summary['ollama_model'])
 detect_hardware_summary() {
   "${VENV_DIR}/bin/python" -c "
 import json
-import sys
-sys.path.insert(0, '${PROJECT_ROOT}')
 from core.hardware_tier import tier_summary
 print(json.dumps(tier_summary(), ensure_ascii=False))
 " 2>/dev/null || echo '{"selected_tier":"base","ollama_model":"qwen2.5:7b"}'
@@ -331,7 +330,7 @@ export WEB_SEARCH_PROVIDER_ORDER="${WEB_PROVIDER_ORDER}"
 export SEARXNG_URL="\${SEARXNG_URL:-${XSEARCH_URL}}"
 export NULLA_PUBLIC_HIVE_SSH_KEY_PATH="\${NULLA_PUBLIC_HIVE_SSH_KEY_PATH:-${PUBLIC_HIVE_SSH_KEY_PATH}}"
 export NULLA_PUBLIC_HIVE_WATCH_HOST="\${NULLA_PUBLIC_HIVE_WATCH_HOST:-${PUBLIC_HIVE_WATCH_HOST}}"
-"\${VENV_PY}" "\${PROJECT_ROOT}/ops/ensure_public_hive_auth.py" --project-root "\${PROJECT_ROOT}" --watch-host "\${NULLA_PUBLIC_HIVE_WATCH_HOST}" >/tmp/nulla_public_hive_auth.log 2>&1 || true
+"\${VENV_PY}" -m ops.ensure_public_hive_auth --project-root "\${PROJECT_ROOT}" --watch-host "\${NULLA_PUBLIC_HIVE_WATCH_HOST}" >/tmp/nulla_public_hive_auth.log 2>&1 || true
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   bash "${PROJECT_ROOT}/scripts/xsearch_up.sh" >/tmp/nulla_xsearch.log 2>&1 || true
 fi
@@ -350,7 +349,6 @@ PROJECT_ROOT="${SCRIPT_DIR}"
 VENV_PY="${SCRIPT_DIR}/.venv/bin/python"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
-export PYTHONPATH="\${PROJECT_ROOT}"
 export NULLA_HOME="${runtime_home}"
 $(web_runtime_exports)
 echo "Starting NULLA (API + mesh daemon)..."
@@ -372,7 +370,6 @@ PROJECT_ROOT="${SCRIPT_DIR}"
 VENV_PY="${SCRIPT_DIR}/.venv/bin/python"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
-export PYTHONPATH="\${PROJECT_ROOT}"
 export NULLA_HOME="${runtime_home}"
 $(web_runtime_exports)
 exec "\${VENV_PY}" -m apps.nulla_chat --platform openclaw --device openclaw
@@ -394,7 +391,6 @@ VENV_PY="${SCRIPT_DIR}/.venv/bin/python"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
 MODEL_TAG="${model_tag}"
-export PYTHONPATH="\${PROJECT_ROOT}"
 export NULLA_HOME="${runtime_home}"
 export NULLA_OLLAMA_MODEL="\${NULLA_OLLAMA_MODEL:-\${MODEL_TAG}}"
 $(web_runtime_exports)
@@ -677,7 +673,7 @@ seed_agent_identity() {
   local runtime_home="$1"
   local agent_name="$2"
   local resolved_name=""
-  resolved_name="$(NULLA_HOME="${runtime_home}" PYTHONPATH="${PROJECT_ROOT}" \
+  resolved_name="$(NULLA_HOME="${runtime_home}" \
     "${VENV_DIR}/bin/python" "${SCRIPT_DIR}/seed_identity.py" --agent-name "${agent_name}" 2>/dev/null || printf '%s' "${agent_name}")"
   printf '%s' "${resolved_name:-$agent_name}"
 }
@@ -872,7 +868,7 @@ main() {
     say "Desktop: ${DESKTOP_SHORTCUT_PATH}"
   fi
   say "Chat:    ${PROJECT_ROOT}/Talk_To_NULLA.sh"
-  say "Credits: PYTHONPATH='${PROJECT_ROOT}' ${VENV_DIR}/bin/python -m apps.nulla_cli credits"
+  say "Credits: ${VENV_DIR}/bin/python -m apps.nulla_cli credits"
   say
   say "NULLA is now wired for OpenClaw-friendly launch,"
   say "with Ollama checked, hardware-tier model selection applied,"

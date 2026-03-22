@@ -142,10 +142,13 @@ if exist "%WHEELHOUSE_DIR%\*" (
   "%VENV_DIR%\Scripts\python.exe" -m pip install --no-index --find-links "%WHEELHOUSE_DIR%" -r "%REQUIREMENTS_FILE%"
   if %errorlevel% neq 0 (
     echo WARNING: Bundled wheelhouse install failed. Falling back to online install...
-    "%VENV_DIR%\Scripts\python.exe" -m pip install -r "%REQUIREMENTS_FILE%"
+    "%VENV_DIR%\Scripts\python.exe" -m pip install "%PROJECT_ROOT%[runtime]"
   )
 ) else (
-  "%VENV_DIR%\Scripts\python.exe" -m pip install -r "%REQUIREMENTS_FILE%"
+  "%VENV_DIR%\Scripts\python.exe" -m pip install "%PROJECT_ROOT%[runtime]"
+)
+if exist "%WHEELHOUSE_DIR%\*" (
+  "%VENV_DIR%\Scripts\python.exe" -m pip install --no-deps "%PROJECT_ROOT%"
 )
 if %errorlevel% neq 0 (
   echo ERROR: Core dependency installation failed. Cannot continue.
@@ -213,12 +216,11 @@ if not "%LIQUEFY_DIR%"=="" (
 )
 
 echo Step 5/14: Initializing runtime...
-set "PYTHONPATH=%PROJECT_ROOT%"
 set "NULLA_HOME=%NULLA_HOME%"
-"%VENV_DIR%\Scripts\python.exe" -c "from storage.migrations import run_migrations; run_migrations()"
+"%VENV_DIR%\Scripts\python.exe" -m storage.migrations
 if %errorlevel% neq 0 exit /b 1
 echo Step 5b/14: Ensuring public Hive auth/bootstrap...
-"%VENV_DIR%\Scripts\python.exe" "%PROJECT_ROOT%\ops\ensure_public_hive_auth.py" --project-root "%PROJECT_ROOT%" --watch-host "%PUBLIC_HIVE_WATCH_HOST%" >"%TEMP%\nulla_public_hive_auth.json" 2>"%TEMP%\nulla_public_hive_auth.err"
+"%VENV_DIR%\Scripts\python.exe" -m ops.ensure_public_hive_auth --project-root "%PROJECT_ROOT%" --watch-host "%PUBLIC_HIVE_WATCH_HOST%" --json >"%TEMP%\nulla_public_hive_auth.json" 2>"%TEMP%\nulla_public_hive_auth.err"
 if %errorlevel% neq 0 (
   echo WARNING: Public Hive auth/bootstrap is incomplete. Public Hive writes and watcher presence/export will stay offline until auth is configured.
   if exist "%TEMP%\nulla_public_hive_auth.json" type "%TEMP%\nulla_public_hive_auth.json"
@@ -236,11 +238,11 @@ if exist "%TEMP%\nulla_agent_name.txt" (
 
 echo Step 6/14: Detecting hardware and recommended model...
 set "MODEL_TAG="
-"%VENV_DIR%\Scripts\python.exe" -c "import sys; sys.path.insert(0,'%PROJECT_ROOT%'); from core.hardware_tier import probe_machine, select_qwen_tier; print(select_qwen_tier(probe_machine()).ollama_tag)" 2>nul > "%TEMP%\nulla_model_tag.txt"
+"%VENV_DIR%\Scripts\python.exe" -c "from core.hardware_tier import probe_machine, select_qwen_tier; print(select_qwen_tier(probe_machine()).ollama_tag)" 2>nul > "%TEMP%\nulla_model_tag.txt"
 set /p MODEL_TAG=<"%TEMP%\nulla_model_tag.txt"
 del /f /q "%TEMP%\nulla_model_tag.txt" >nul 2>&1
 if "%MODEL_TAG%"=="" set "MODEL_TAG=qwen2.5:7b"
-"%VENV_DIR%\Scripts\python.exe" -c "import json, sys; sys.path.insert(0,'%PROJECT_ROOT%'); from core.hardware_tier import tier_summary; print(json.dumps(tier_summary(), ensure_ascii=False))" 2>nul > "%TEMP%\nulla_hw.txt"
+"%VENV_DIR%\Scripts\python.exe" -c "import json; from core.hardware_tier import tier_summary; print(json.dumps(tier_summary(), ensure_ascii=False))" 2>nul > "%TEMP%\nulla_hw.txt"
 set "HARDWARE_SUMMARY="
 set /p HARDWARE_SUMMARY=<"%TEMP%\nulla_hw.txt"
 del /f /q "%TEMP%\nulla_hw.txt" >nul 2>&1
@@ -250,14 +252,13 @@ echo Selected model: %MODEL_TAG%
 echo Step 7/14: Creating launchers...
 (
   echo @echo off
-  echo set "PYTHONPATH=%PROJECT_ROOT%"
   echo set "NULLA_HOME=%NULLA_HOME%"
   echo set "PLAYWRIGHT_ENABLED=1"
   echo set "ALLOW_BROWSER_FALLBACK=1"
   echo set "BROWSER_ENGINE=%DEFAULT_BROWSER_ENGINE%"
   echo set "WEB_SEARCH_PROVIDER_ORDER=%WEB_PROVIDER_ORDER%"
   echo if "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%"=="" set "NULLA_PUBLIC_HIVE_WATCH_HOST=%PUBLIC_HIVE_WATCH_HOST%"
-  echo "%VENV_DIR%\Scripts\python.exe" "%PROJECT_ROOT%\ops\ensure_public_hive_auth.py" --project-root "%PROJECT_ROOT%" --watch-host "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%" ^>nul 2^>^&1
+  echo "%VENV_DIR%\Scripts\python.exe" -m ops.ensure_public_hive_auth --project-root "%PROJECT_ROOT%" --watch-host "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%" ^>nul 2^>^&1
   echo if "%%SEARXNG_URL%%"=="" set "SEARXNG_URL=%XSEARCH_URL%"
   echo where docker ^>nul 2^>^&1
   echo if %%errorlevel%% equ 0 powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\scripts\xsearch_up.ps1" ^>nul 2^>^&1
@@ -268,14 +269,13 @@ echo Step 7/14: Creating launchers...
 ) > "%PROJECT_ROOT%\Start_NULLA.bat"
 (
   echo @echo off
-  echo set "PYTHONPATH=%PROJECT_ROOT%"
   echo set "NULLA_HOME=%NULLA_HOME%"
   echo set "PLAYWRIGHT_ENABLED=1"
   echo set "ALLOW_BROWSER_FALLBACK=1"
   echo set "BROWSER_ENGINE=%DEFAULT_BROWSER_ENGINE%"
   echo set "WEB_SEARCH_PROVIDER_ORDER=%WEB_PROVIDER_ORDER%"
   echo if "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%"=="" set "NULLA_PUBLIC_HIVE_WATCH_HOST=%PUBLIC_HIVE_WATCH_HOST%"
-  echo "%VENV_DIR%\Scripts\python.exe" "%PROJECT_ROOT%\ops\ensure_public_hive_auth.py" --project-root "%PROJECT_ROOT%" --watch-host "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%" ^>nul 2^>^&1
+  echo "%VENV_DIR%\Scripts\python.exe" -m ops.ensure_public_hive_auth --project-root "%PROJECT_ROOT%" --watch-host "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%" ^>nul 2^>^&1
   echo if "%%SEARXNG_URL%%"=="" set "SEARXNG_URL=%XSEARCH_URL%"
   echo where docker ^>nul 2^>^&1
   echo if %%errorlevel%% equ 0 powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\scripts\xsearch_up.ps1" ^>nul 2^>^&1
@@ -284,7 +284,6 @@ echo Step 7/14: Creating launchers...
 (
   echo @echo off
   echo setlocal enabledelayedexpansion
-  echo set "PYTHONPATH=%PROJECT_ROOT%"
   echo set "NULLA_HOME=%NULLA_HOME%"
   echo set "MODEL_TAG=%MODEL_TAG%"
   echo set "PLAYWRIGHT_ENABLED=1"
@@ -292,7 +291,7 @@ echo Step 7/14: Creating launchers...
   echo set "BROWSER_ENGINE=%DEFAULT_BROWSER_ENGINE%"
   echo set "WEB_SEARCH_PROVIDER_ORDER=%WEB_PROVIDER_ORDER%"
   echo if "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%"=="" set "NULLA_PUBLIC_HIVE_WATCH_HOST=%PUBLIC_HIVE_WATCH_HOST%"
-  echo "%VENV_DIR%\Scripts\python.exe" "%PROJECT_ROOT%\ops\ensure_public_hive_auth.py" --project-root "%PROJECT_ROOT%" --watch-host "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%" ^>nul 2^>^&1
+  echo "%VENV_DIR%\Scripts\python.exe" -m ops.ensure_public_hive_auth --project-root "%PROJECT_ROOT%" --watch-host "%%NULLA_PUBLIC_HIVE_WATCH_HOST%%" ^>nul 2^>^&1
   echo if "%%SEARXNG_URL%%"=="" set "SEARXNG_URL=%XSEARCH_URL%"
   echo where docker ^>nul 2^>^&1
   echo if %%errorlevel%% equ 0 powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%\scripts\xsearch_up.ps1" ^>nul 2^>^&1

@@ -130,7 +130,7 @@ git clone https://github.com/Parad0x-Labs/nulla-hive-mind.git
 cd nulla-hive-mind
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,runtime]"
 ```
 
 Useful entrypoints:
