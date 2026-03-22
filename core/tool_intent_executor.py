@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, is_dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -25,6 +24,14 @@ from core.execution.planner import (
     plan_tool_workflow,
     should_attempt_tool_intent,
 )
+from core.execution.receipts import (
+    execution_from_receipt as _execution_from_receipt_impl,
+)
+from core.execution.receipts import (
+    execution_to_receipt as _execution_to_receipt_impl,
+)
+from core.execution.receipts import inject_idempotency_key as _inject_idempotency_key_impl
+from core.execution.receipts import normalize_payload as _normalize_payload_impl
 from core.hive_activity_tracker import HiveActivityTracker, load_hive_activity_tracker_config
 from core.local_operator_actions import (
     OperatorActionIntent,
@@ -306,33 +313,11 @@ def execute_tool_intent(
 
 
 def _normalize_payload(payload: Any) -> dict[str, Any]:
-    if isinstance(payload, dict):
-        result = dict(payload)
-    elif is_dataclass(payload):
-        result = asdict(payload)
-    elif isinstance(payload, str):
-        try:
-            parsed = json.loads(payload)
-        except Exception:
-            return {}
-        result = dict(parsed) if isinstance(parsed, dict) else {}
-    else:
-        return {}
-    arguments = result.get("arguments")
-    if not isinstance(arguments, dict):
-        result["arguments"] = {}
-    return result
+    return _normalize_payload_impl(payload)
 
 
 def _inject_idempotency_key(intent: str, arguments: dict[str, Any], *, idempotency_key: str) -> dict[str, Any]:
-    if not idempotency_key:
-        return dict(arguments)
-    updated = dict(arguments)
-    if intent in _HIVE_TOOL_INTENTS:
-        updated["idempotency_key"] = idempotency_key
-    if intent in _MUTATING_OPERATOR_INTENTS:
-        updated.setdefault("action_id", idempotency_key)
-    return updated
+    return _inject_idempotency_key_impl(intent, arguments, idempotency_key=idempotency_key)
 
 
 def _maybe_store_tool_receipt(
@@ -359,38 +344,11 @@ def _maybe_store_tool_receipt(
 
 
 def _execution_to_receipt(execution: ToolIntentExecution) -> dict[str, Any]:
-    return {
-        "handled": bool(execution.handled),
-        "ok": bool(execution.ok),
-        "status": str(execution.status or ""),
-        "response_text": str(execution.response_text or ""),
-        "user_safe_response_text": str(execution.user_safe_response_text or ""),
-        "mode": str(execution.mode or ""),
-        "tool_name": str(execution.tool_name or ""),
-        "details": dict(execution.details or {}),
-        "learned_plan": None,
-    }
+    return _execution_to_receipt_impl(execution)
 
 
 def _execution_from_receipt(receipt: dict[str, Any]) -> ToolIntentExecution | None:
-    payload = dict(receipt.get("execution") or {})
-    if not payload:
-        return None
-    details = dict(payload.get("details") or {})
-    details["from_receipt"] = True
-    if receipt.get("idempotency_key"):
-        details["idempotency_key"] = str(receipt.get("idempotency_key"))
-    return ToolIntentExecution(
-        handled=bool(payload.get("handled")),
-        ok=bool(payload.get("ok")),
-        status=str(payload.get("status") or ""),
-        response_text=str(payload.get("response_text") or ""),
-        user_safe_response_text=str(payload.get("user_safe_response_text") or ""),
-        mode=str(payload.get("mode") or "tool_executed"),
-        tool_name=str(payload.get("tool_name") or ""),
-        details=details,
-        learned_plan=None,
-    )
+    return _execution_from_receipt_impl(receipt)
 
 
 def _execute_web_tool(
