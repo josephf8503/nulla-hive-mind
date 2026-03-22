@@ -28,6 +28,12 @@ from core.web.api.runtime import RuntimeServices
 
 
 class NullaAPIServerModelMetadataTests(unittest.TestCase):
+    @staticmethod
+    def _server_with_runtime(runtime: RuntimeServices | None = None) -> ThreadingHTTPServer:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), NullaAPIHandler)
+        server.nulla_runtime = runtime or RuntimeServices(display_name="NULLA")
+        return server
+
     def test_create_app_keeps_runtime_services_in_app_state(self) -> None:
         runtime = RuntimeServices(display_name="NULLA", runtime_version_stamp={"release_version": "0.4.0"})
 
@@ -240,23 +246,20 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
         self.assertEqual(source_context["workspace_root"], str(PROJECT_ROOT))
 
     def test_healthz_exposes_runtime_version_headers_and_payload(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), NullaAPIHandler)
+        stamp = {
+            "release_version": "0.4.0-closed-test",
+            "build_id": "0.4.0-closed-test+abc123def456.dirty",
+            "started_at": "2026-03-14T10:00:00.000000Z",
+            "commit": "abc123def456",
+            "dirty": True,
+            "branch": "feature/local-bootstrap",
+        }
+        server = self._server_with_runtime(RuntimeServices(display_name="NULLA", runtime_version_stamp=stamp))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             port = int(server.server_address[1])
-            stamp = {
-                "release_version": "0.4.0-closed-test",
-                "build_id": "0.4.0-closed-test+abc123def456.dirty",
-                "started_at": "2026-03-14T10:00:00.000000Z",
-                "commit": "abc123def456",
-                "dirty": True,
-                "branch": "feature/local-bootstrap",
-            }
-            with mock.patch("apps.nulla_api_server._runtime_version_stamp", stamp), mock.patch(
-                "apps.nulla_api_server._display_name",
-                "NULLA",
-            ), mock.patch(
+            with mock.patch(
                 "apps.nulla_api_server.runtime_capability_snapshot",
                 return_value={"feature_flags": {"public_hive_enabled": True}, "capabilities": [{"name": "local_runtime"}]},
             ), request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=5) as response:
@@ -275,23 +278,20 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
             thread.join(timeout=1)
 
     def test_runtime_version_route_returns_current_runtime_stamp(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), NullaAPIHandler)
+        stamp = {
+            "release_version": "0.4.0-closed-test",
+            "build_id": "0.4.0-closed-test+abc123def456",
+            "started_at": "2026-03-14T10:00:00.000000Z",
+            "commit": "abc123def456",
+            "dirty": False,
+            "branch": "feature/local-bootstrap",
+        }
+        server = self._server_with_runtime(RuntimeServices(display_name="NULLA", runtime_version_stamp=stamp))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
             port = int(server.server_address[1])
-            stamp = {
-                "release_version": "0.4.0-closed-test",
-                "build_id": "0.4.0-closed-test+abc123def456",
-                "started_at": "2026-03-14T10:00:00.000000Z",
-                "commit": "abc123def456",
-                "dirty": False,
-                "branch": "feature/local-bootstrap",
-            }
-            with mock.patch("apps.nulla_api_server._runtime_version_stamp", stamp), request.urlopen(
-                f"http://127.0.0.1:{port}/api/runtime/version",
-                timeout=5,
-            ) as response:
+            with request.urlopen(f"http://127.0.0.1:{port}/api/runtime/version", timeout=5) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(payload["release_version"], "0.4.0-closed-test")
                 self.assertEqual(payload["build_id"], "0.4.0-closed-test+abc123def456")
@@ -303,7 +303,7 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
             thread.join(timeout=1)
 
     def test_runtime_capabilities_route_returns_current_runtime_capability_snapshot(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), NullaAPIHandler)
+        server = self._server_with_runtime()
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -354,7 +354,7 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get("NULLA_LIVE_ROUTE_PROOF") == "1", "live route proof only")
     def test_live_trace_route_carries_workstation_deploy_proof(self) -> None:
-        server = ThreadingHTTPServer(("127.0.0.1", 0), NullaAPIHandler)
+        server = self._server_with_runtime()
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

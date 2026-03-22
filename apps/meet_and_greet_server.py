@@ -5,7 +5,7 @@ import os
 import ssl
 
 from core import policy_engine
-from core.brain_hive_service import BrainHiveService
+from core.brain_hive_service import BrainHiveService as _BrainHiveService
 from core.web.meet.app import create_meet_app
 from core.web.meet.routes import _allow_write as _allow_write_impl
 from core.web.meet.routes import _query_int as _query_int_impl
@@ -16,18 +16,11 @@ from core.web.meet.server import MeetAndGreetServerConfig
 from core.web.meet.server import MeetMetricsCollector as _MeetMetricsCollector
 from core.web.meet.server import build_server as _build_server_impl
 
-_HIVE_SERVICE: BrainHiveService | None = None
+BrainHiveService = _BrainHiveService
 MeetMetricsCollector = _MeetMetricsCollector
 build_server = _build_server_impl
 dispatch_request = _dispatch_request_impl
 resolve_static_route = _resolve_static_route_impl
-
-
-def _get_hive_service() -> BrainHiveService:
-    global _HIVE_SERVICE
-    if _HIVE_SERVICE is None:
-        _HIVE_SERVICE = BrainHiveService()
-    return _HIVE_SERVICE
 
 
 def _allow_write(bucket_key: str, max_requests_per_minute: int, windows, lock, *, max_clients: int = 4096) -> bool:

@@ -96,6 +96,15 @@ def _compat_runtime_services() -> RuntimeServices:
     )
 
 
+def _legacy_handler_runtime(server: object | None = None) -> RuntimeServices:
+    attached_runtime = getattr(server, "nulla_runtime", None) if server is not None else None
+    if isinstance(attached_runtime, RuntimeServices):
+        return attached_runtime
+    if isinstance(_runtime_services, RuntimeServices):
+        return _runtime_services
+    return RuntimeServices()
+
+
 def _bootstrap() -> RuntimeServices:
     global _runtime_services
     _runtime_services = bootstrap_runtime_services(
@@ -222,7 +231,7 @@ def _dispatch_post(
 
 def create_app(runtime: RuntimeServices | None = None):
     return create_api_app(
-        runtime=runtime or _compat_runtime_services(),
+        runtime=runtime or _legacy_handler_runtime(),
         model_name=MODEL_NAME,
         get_dispatcher=_dispatch_get,
         post_dispatcher=_dispatch_post,
@@ -233,30 +242,32 @@ def create_app(runtime: RuntimeServices | None = None):
 class NullaAPIHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        runtime = _legacy_handler_runtime(getattr(self, "server", None))
         response = _dispatch_get(
             path=parsed.path,
             query=parse_qs(parsed.query),
-            runtime=_compat_runtime_services(),
+            runtime=runtime,
             model_name=MODEL_NAME,
         )
         self._write_response(response)
 
     def do_POST(self) -> None:
+        runtime = _legacy_handler_runtime(getattr(self, "server", None))
         content_length = int(self.headers.get("Content-Length", 0))
         if content_length <= 0:
-            self._write_response(apply_runtime_headers(json_response(400, {"error": "empty body"}), _compat_runtime_services()))
+            self._write_response(apply_runtime_headers(json_response(400, {"error": "empty body"}), runtime))
             return
         raw = self.rfile.read(content_length)
         try:
             body = json.loads(raw)
         except json.JSONDecodeError:
-            self._write_response(apply_runtime_headers(json_response(400, {"error": "invalid JSON"}), _compat_runtime_services()))
+            self._write_response(apply_runtime_headers(json_response(400, {"error": "invalid JSON"}), runtime))
             return
         response = _dispatch_post(
             path=self.path,
             body=body,
             headers=dict(self.headers.items()),
-            runtime=_compat_runtime_services(),
+            runtime=runtime,
             model_name=MODEL_NAME,
             workspace_root_provider=_default_workspace_root,
         )
