@@ -60,7 +60,7 @@ def test_compose_default_avoids_cli_restart_loops_and_has_service_healthchecks()
     for service_name, expected_probe in {
         "meet-eu": "/v1/health",
         "agent-1": "/healthz",
-        "brain-hive-watch": "/health",
+        "brain-hive-watch": "/healthz",
     }.items():
         service = services[service_name]
         probe = " ".join((service.get("healthcheck") or {}).get("test") or [])

@@ -184,7 +184,7 @@ def build_watch_server(
                         content_length=len(body),
                     )
                     return
-            if clean_path == "/health":
+            if clean_path in {"/health", "/healthz"}:
                 body = json.dumps(
                     {
                         "ok": True,
@@ -402,7 +402,7 @@ def build_watch_server(
                 except Exception as exc:
                     self._write_json(502, {"ok": False, "result": None, "error": str(exc)})
                 return
-            if clean_path == "/health":
+            if clean_path in {"/health", "/healthz"}:
                 self._write_json(
                     200,
                     {
