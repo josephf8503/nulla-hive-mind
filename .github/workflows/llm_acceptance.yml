@@ -39,61 +39,26 @@ jobs:
       - name: Restore previous LLM eval baseline artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          python - <<'PY'
-          import io
-          import json
-          import os
-          import pathlib
-          import urllib.request
-          import zipfile
-
-          baseline_root = pathlib.Path("reports/llm_eval/baselines")
-          baseline_root.mkdir(parents=True, exist_ok=True)
-          api_url = os.environ["GITHUB_API_URL"].rstrip("/")
-          repo = os.environ["GITHUB_REPOSITORY"]
-          token = os.environ["GH_TOKEN"]
-          request_url = f"{api_url}/repos/{repo}/actions/artifacts?name=llm-eval-baseline&per_page=20"
-          req = urllib.request.Request(
-              request_url,
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-              },
-          )
-          try:
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  payload = json.load(response)
-          except Exception as exc:
-              print(f"No prior baseline artifact available: {exc}")
-              raise SystemExit(0)
-
-          artifacts = [item for item in payload.get("artifacts", []) if not item.get("expired")]
-          if not artifacts:
-              print("No non-expired prior baseline artifact found.")
-              raise SystemExit(0)
-
-          latest = sorted(artifacts, key=lambda item: item.get("created_at", ""), reverse=True)[0]
-          download_url = latest.get("archive_download_url")
-          if not download_url:
-              print("Latest baseline artifact has no download URL.")
-              raise SystemExit(0)
-
-          download_req = urllib.request.Request(
-              download_url,
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-              },
-          )
-          with urllib.request.urlopen(download_req, timeout=60) as response:
-              archive_bytes = response.read()
-          with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
-              archive.extractall(baseline_root)
-          print(f"Restored baseline artifact: {latest.get('id')}")
-          PY
+          mkdir -p reports/llm_eval/baselines
+          previous_run_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=llm-eval-baseline&per_page=20" \
+              --jq '.artifacts
+                | map(select(.expired | not))
+                | sort_by(.created_at)
+                | reverse
+                | .[0].workflow_run.id // empty'
+          )"
+          if [ -z "$previous_run_id" ]; then
+            echo "No non-expired prior baseline artifact found."
+            exit 0
+          fi
+          gh run download "$previous_run_id" \
+            -R "$GITHUB_REPOSITORY" \
+            -n llm-eval-baseline \
+            -D reports/llm_eval/baselines
+          find reports/llm_eval/baselines -maxdepth 2 -type f -print || true
 
       - name: Run fast LLM acceptance gate
         run: |
@@ -140,61 +105,26 @@ jobs:
       - name: Restore previous LLM eval baseline artifact
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_API_URL: ${{ github.api_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          python - <<'PY'
-          import io
-          import json
-          import os
-          import pathlib
-          import urllib.request
-          import zipfile
-
-          baseline_root = pathlib.Path("reports/llm_eval/baselines")
-          baseline_root.mkdir(parents=True, exist_ok=True)
-          api_url = os.environ["GITHUB_API_URL"].rstrip("/")
-          repo = os.environ["GITHUB_REPOSITORY"]
-          token = os.environ["GH_TOKEN"]
-          request_url = f"{api_url}/repos/{repo}/actions/artifacts?name=llm-eval-baseline&per_page=20"
-          req = urllib.request.Request(
-              request_url,
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-              },
-          )
-          try:
-              with urllib.request.urlopen(req, timeout=30) as response:
-                  payload = json.load(response)
-          except Exception as exc:
-              print(f"No prior baseline artifact available: {exc}")
-              raise SystemExit(0)
-
-          artifacts = [item for item in payload.get("artifacts", []) if not item.get("expired")]
-          if not artifacts:
-              print("No non-expired prior baseline artifact found.")
-              raise SystemExit(0)
-
-          latest = sorted(artifacts, key=lambda item: item.get("created_at", ""), reverse=True)[0]
-          download_url = latest.get("archive_download_url")
-          if not download_url:
-              print("Latest baseline artifact has no download URL.")
-              raise SystemExit(0)
-
-          download_req = urllib.request.Request(
-              download_url,
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-              },
-          )
-          with urllib.request.urlopen(download_req, timeout=60) as response:
-              archive_bytes = response.read()
-          with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
-              archive.extractall(baseline_root)
-          print(f"Restored baseline artifact: {latest.get('id')}")
-          PY
+          mkdir -p reports/llm_eval/baselines
+          previous_run_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=llm-eval-baseline&per_page=20" \
+              --jq '.artifacts
+                | map(select(.expired | not))
+                | sort_by(.created_at)
+                | reverse
+                | .[0].workflow_run.id // empty'
+          )"
+          if [ -z "$previous_run_id" ]; then
+            echo "No non-expired prior baseline artifact found."
+            exit 0
+          fi
+          gh run download "$previous_run_id" \
+            -R "$GITHUB_REPOSITORY" \
+            -n llm-eval-baseline \
+            -D reports/llm_eval/baselines
+          find reports/llm_eval/baselines -maxdepth 2 -type f -print || true
 
       - name: Run live LLM acceptance gate
         run: |
