@@ -28,6 +28,7 @@ from core.brain_hive_dashboard import (
     render_topic_detail_html,
 )
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
+from core.web.watch.app import create_watch_app
 
 
 class BrainHiveWatchServerTests(unittest.TestCase):
@@ -74,6 +75,61 @@ class BrainHiveWatchServerTests(unittest.TestCase):
         self.assertEqual(cfg.request_timeout_seconds, 9)
         self.assertEqual(cfg.auth_token, "watch-token")
         self.assertEqual(cfg.dashboard_cache_ttl_seconds, 12.5)
+
+    def test_create_watch_app_keeps_runtime_state_in_app(self) -> None:
+        cfg = BrainHiveWatchServerConfig(
+            host="127.0.0.1",
+            port=8788,
+            upstream_base_urls=("http://127.0.0.1:8766",),
+        )
+
+        app = create_watch_app(
+            config=cfg,
+            workstation_version="test-version",
+            validate_tls_config=lambda inner_cfg: None,
+            requires_public_tls=lambda host: False,
+            watch_tls_enabled=lambda inner_cfg: False,
+            fetch_dashboard_from_upstreams=lambda *args, **kwargs: {},
+            fetch_topic_from_upstreams=lambda *args, **kwargs: {},
+            fetch_topic_posts_from_upstreams=lambda *args, **kwargs: [],
+            proxy_nullabook_get=lambda *args, **kwargs: {},
+            http_get_json=lambda *args, **kwargs: {},
+            normalize_base_url=lambda url: url.rstrip("/"),
+            ssl_context_for_url=lambda *args, **kwargs: None,
+        )
+
+        self.assertIs(app.state.config, cfg)
+        self.assertEqual(app.state.workstation_version, "test-version")
+        self.assertIsInstance(app.state.dashboard_cache, dict)
+        self.assertIsInstance(app.state.dashboard_cache_lock, threading.Lock().__class__)
+
+    def test_serve_runs_uvicorn_with_factory_app_and_tls_settings(self) -> None:
+        cfg = BrainHiveWatchServerConfig(
+            host="0.0.0.0",
+            port=8788,
+            upstream_base_urls=("http://127.0.0.1:8766",),
+            tls_certfile="/tmp/watch-cert.pem",
+            tls_keyfile="/tmp/watch-key.pem",
+            tls_ca_file="/tmp/watch-ca.pem",
+        )
+
+        with patch("apps.brain_hive_watch_server.create_watch_app", return_value=object()) as create_app_mock, patch(
+            "uvicorn.Server"
+        ) as server_cls:
+            server = server_cls.return_value
+            from apps.brain_hive_watch_server import serve
+
+            serve(cfg)
+
+        create_app_mock.assert_called_once()
+        config = server_cls.call_args.args[0]
+        self.assertEqual(config.host, "0.0.0.0")
+        self.assertEqual(config.port, 8788)
+        self.assertFalse(config.access_log)
+        self.assertEqual(config.ssl_certfile, "/tmp/watch-cert.pem")
+        self.assertEqual(config.ssl_keyfile, "/tmp/watch-key.pem")
+        self.assertEqual(config.ssl_ca_certs, "/tmp/watch-ca.pem")
+        server.run.assert_called_once_with()
 
     def test_fetch_dashboard_falls_back_to_second_upstream(self) -> None:
         calls: list[tuple[str, str | None]] = []

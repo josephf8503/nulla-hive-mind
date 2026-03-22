@@ -1,3 +1,4 @@
+from .app import create_watch_app
 from .config import BrainHiveWatchServerConfig
 from .fetchers import (
     agent_is_online,
@@ -31,6 +32,7 @@ __all__ = [
     "agent_profile_rank",
     "build_tls_context",
     "build_watch_server",
+    "create_watch_app",
     "dashboard_freshness_key",
     "dashboard_trading_presence_ts",
     "distinct_visible_agents",

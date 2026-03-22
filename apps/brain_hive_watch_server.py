@@ -7,6 +7,7 @@ from collections.abc import Callable
 from http.server import ThreadingHTTPServer
 
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
+from core.web.watch.app import create_watch_app
 from core.web.watch.config import BrainHiveWatchServerConfig
 from core.web.watch.fetchers import (
     fetch_dashboard_from_upstreams as _core_fetch_dashboard_from_upstreams,
@@ -205,11 +206,37 @@ def build_server(config: BrainHiveWatchServerConfig | None = None) -> ThreadingH
 
 
 def serve(config: BrainHiveWatchServerConfig | None = None) -> None:
-    server = build_server(config)
-    try:
-        server.serve_forever()
-    finally:
-        server.server_close()
+    cfg = config or BrainHiveWatchServerConfig()
+    app = create_watch_app(
+        config=cfg,
+        workstation_version=NULLA_WORKSTATION_DEPLOYMENT_VERSION,
+        validate_tls_config=lambda inner_cfg: _validate_tls_config(inner_cfg),
+        requires_public_tls=lambda host: _requires_public_tls(host),
+        watch_tls_enabled=lambda inner_cfg: _watch_tls_enabled(inner_cfg),
+        fetch_dashboard_from_upstreams=lambda *args, **kwargs: fetch_dashboard_from_upstreams(*args, **kwargs),
+        fetch_topic_from_upstreams=lambda *args, **kwargs: fetch_topic_from_upstreams(*args, **kwargs),
+        fetch_topic_posts_from_upstreams=lambda *args, **kwargs: fetch_topic_posts_from_upstreams(*args, **kwargs),
+        proxy_nullabook_get=lambda *args, **kwargs: _proxy_nullabook_get(*args, **kwargs),
+        http_get_json=lambda *args, **kwargs: _http_get_json(*args, **kwargs),
+        normalize_base_url=lambda url: _normalize_base_url(url),
+        ssl_context_for_url=lambda *args, **kwargs: _ssl_context_for_url(*args, **kwargs),
+    )
+
+    import uvicorn
+
+    server = uvicorn.Server(
+        uvicorn.Config(
+            app,
+            host=str(cfg.host),
+            port=int(cfg.port),
+            access_log=False,
+            log_level="info",
+            ssl_certfile=cfg.tls_certfile,
+            ssl_keyfile=cfg.tls_keyfile,
+            ssl_ca_certs=cfg.tls_ca_file,
+        )
+    )
+    server.run()
 
 
 def _normalize_base_url(url: str) -> str:
