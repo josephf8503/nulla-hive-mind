@@ -73,6 +73,9 @@ def runtime_artifact_hints() -> list[str]:
     hints: list[str] = []
     if Path(PROJECT_ROOT / "storage" / "nulla_web0_v2.db").exists():
         hints.append("workspace_db_artifact")
-    if Path(PROJECT_ROOT / "data" / "keys" / "node_signing_key.b64").exists():
+    if any(
+        Path(PROJECT_ROOT / "data" / "keys" / name).exists()
+        for name in ("node_signing_key.b64", "node_signing_key.json")
+    ):
         hints.append("workspace_key_artifact")
     return hints

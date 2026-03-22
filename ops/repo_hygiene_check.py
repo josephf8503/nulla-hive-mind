@@ -50,13 +50,14 @@ def _license_placeholder_hints() -> list[str]:
 
 def _repo_key_artifacts() -> list[str]:
     matches: list[str] = []
-    for path in PROJECT_ROOT.rglob("node_signing_key.b64"):
-        if any(part in _IGNORED_DIRS for part in path.parts):
-            continue
-        relative = path.relative_to(PROJECT_ROOT)
-        if any(relative == root or root in relative.parents for root in _IGNORED_KEY_ARTIFACT_ROOTS):
-            continue
-        matches.append(str(relative))
+    for pattern in ("node_signing_key.b64", "node_signing_key.json"):
+        for path in PROJECT_ROOT.rglob(pattern):
+            if any(part in _IGNORED_DIRS for part in path.parts):
+                continue
+            relative = path.relative_to(PROJECT_ROOT)
+            if any(relative == root or root in relative.parents for root in _IGNORED_KEY_ARTIFACT_ROOTS):
+                continue
+            matches.append(str(relative))
     return sorted(matches)
 
 

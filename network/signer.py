@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from core.runtime_paths import data_path
 
@@ -20,7 +25,12 @@ except ImportError:
 
 
 _KEY_DIR = data_path("keys")
-_PRIV_KEY_PATH = _KEY_DIR / "node_signing_key.b64"
+_LEGACY_PRIV_KEY_PATH = _KEY_DIR / "node_signing_key.b64"
+_KEY_RECORD_PATH = _KEY_DIR / "node_signing_key.json"
+_KEY_ARCHIVE_DIR = _KEY_DIR / "archive"
+_KEY_RECORD_VERSION = 1
+_KEY_PASSPHRASE_ENV = "NULLA_KEY_PASSPHRASE"
+_PBKDF2_ITERATIONS = 390_000
 _LOCAL_KEYPAIR: LocalKeypair | None = None
 
 
@@ -40,11 +50,17 @@ class LocalKeypair:
         return raw.hex()
 
 
+@dataclass(frozen=True)
+class KeyStorageMetadata:
+    format: str
+    path: Path
+
+
 def _ensure_dir() -> None:
     _KEY_DIR.mkdir(parents=True, exist_ok=True)
-    (_KEY_DIR / "archive").mkdir(parents=True, exist_ok=True)
+    _KEY_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     _chmod_safe(_KEY_DIR, 0o700)
-    _chmod_safe(_KEY_DIR / "archive", 0o700)
+    _chmod_safe(_KEY_ARCHIVE_DIR, 0o700)
 
 
 def _chmod_safe(path: Path, mode: int) -> None:
@@ -94,6 +110,95 @@ def _verify_key(signing_key: object):
     return signing_key.public_key()
 
 
+def _key_passphrase() -> str | None:
+    raw = str(os.environ.get(_KEY_PASSPHRASE_ENV, "") or "").strip()
+    return raw or None
+
+
+def _derive_encryption_key(*, passphrase: str, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=_PBKDF2_ITERATIONS,
+    )
+    return kdf.derive(passphrase.encode("utf-8"))
+
+
+def _encrypted_record_payload(seed: bytes, *, passphrase: str) -> dict[str, object]:
+    salt = os.urandom(16)
+    nonce = os.urandom(12)
+    key = _derive_encryption_key(passphrase=passphrase, salt=salt)
+    ciphertext = AESGCM(key).encrypt(nonce, seed, b"nulla-node-signing-key")
+    return {
+        "version": _KEY_RECORD_VERSION,
+        "format": "encrypted_seed",
+        "kdf": "pbkdf2_sha256",
+        "iterations": _PBKDF2_ITERATIONS,
+        "salt_b64": base64.b64encode(salt).decode("utf-8"),
+        "nonce_b64": base64.b64encode(nonce).decode("utf-8"),
+        "ciphertext_b64": base64.b64encode(ciphertext).decode("utf-8"),
+    }
+
+
+def _write_encrypted_key_record(seed: bytes, *, passphrase: str) -> None:
+    _KEY_RECORD_PATH.write_text(
+        json.dumps(_encrypted_record_payload(seed, passphrase=passphrase), sort_keys=True),
+        encoding="utf-8",
+    )
+    _chmod_safe(_KEY_RECORD_PATH, 0o600)
+
+
+def _load_encrypted_seed(path: Path, *, passphrase: str) -> bytes:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if str(payload.get("format") or "") != "encrypted_seed":
+        raise ValueError(f"Unsupported signing key record format: {payload.get('format')!r}")
+    salt = base64.b64decode(str(payload.get("salt_b64") or ""))
+    nonce = base64.b64decode(str(payload.get("nonce_b64") or ""))
+    ciphertext = base64.b64decode(str(payload.get("ciphertext_b64") or ""))
+    key = _derive_encryption_key(passphrase=passphrase, salt=salt)
+    return AESGCM(key).decrypt(nonce, ciphertext, b"nulla-node-signing-key")
+
+
+def _storage_metadata() -> KeyStorageMetadata:
+    if _KEY_RECORD_PATH.exists():
+        return KeyStorageMetadata(format="encrypted_seed", path=_KEY_RECORD_PATH)
+    return KeyStorageMetadata(format="legacy_plaintext_seed", path=_LEGACY_PRIV_KEY_PATH)
+
+
+def _archive_current_key_material() -> Path:
+    _ensure_dir()
+    current_peer_id = get_local_peer_id()
+    metadata = _storage_metadata()
+    suffix = ".json" if metadata.format == "encrypted_seed" else ".b64"
+    archive_name = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{current_peer_id[:24]}{suffix}"
+    archived_path = _KEY_ARCHIVE_DIR / archive_name
+    archived_path.write_text(metadata.path.read_text(encoding="utf-8"), encoding="utf-8")
+    _chmod_safe(archived_path, 0o600)
+    return archived_path
+
+
+def _persist_seed(seed: bytes) -> KeyStorageMetadata:
+    _ensure_dir()
+    passphrase = _key_passphrase()
+    if passphrase:
+        _write_encrypted_key_record(seed, passphrase=passphrase)
+        if _LEGACY_PRIV_KEY_PATH.exists():
+            _LEGACY_PRIV_KEY_PATH.unlink()
+        return KeyStorageMetadata(format="encrypted_seed", path=_KEY_RECORD_PATH)
+    _LEGACY_PRIV_KEY_PATH.write_text(base64.b64encode(seed).decode("utf-8"), encoding="utf-8")
+    _chmod_safe(_LEGACY_PRIV_KEY_PATH, 0o600)
+    if _KEY_RECORD_PATH.exists():
+        _KEY_RECORD_PATH.unlink()
+    return KeyStorageMetadata(format="legacy_plaintext_seed", path=_LEGACY_PRIV_KEY_PATH)
+
+
+def key_storage_mode() -> str:
+    if _KEY_RECORD_PATH.exists():
+        return "encrypted_file"
+    return "legacy_plaintext_file"
+
+
 def load_or_create_local_keypair() -> LocalKeypair:
     global _LOCAL_KEYPAIR
     if _LOCAL_KEYPAIR is not None:
@@ -101,20 +206,30 @@ def load_or_create_local_keypair() -> LocalKeypair:
 
     _ensure_dir()
 
-    if _PRIV_KEY_PATH.exists():
-        _enforce_private_key_permissions(_PRIV_KEY_PATH)
-        raw = _PRIV_KEY_PATH.read_text(encoding="utf-8").strip()
+    if _KEY_RECORD_PATH.exists():
+        _enforce_private_key_permissions(_KEY_RECORD_PATH)
+        passphrase = _key_passphrase()
+        if not passphrase:
+            raise RuntimeError(
+                f"Encrypted signing key record exists at {_KEY_RECORD_PATH} but {_KEY_PASSPHRASE_ENV} is not set."
+            )
+        seed = _load_encrypted_seed(_KEY_RECORD_PATH, passphrase=passphrase)
+        sk = _signing_key_from_seed(seed)
+        _LOCAL_KEYPAIR = LocalKeypair(signing_key=sk, verify_key=_verify_key(sk))
+        return _LOCAL_KEYPAIR
+
+    if _LEGACY_PRIV_KEY_PATH.exists():
+        _enforce_private_key_permissions(_LEGACY_PRIV_KEY_PATH)
+        raw = _LEGACY_PRIV_KEY_PATH.read_text(encoding="utf-8").strip()
         seed = base64.b64decode(raw)
+        if _key_passphrase():
+            _persist_seed(seed)
         sk = _signing_key_from_seed(seed)
         _LOCAL_KEYPAIR = LocalKeypair(signing_key=sk, verify_key=_verify_key(sk))
         return _LOCAL_KEYPAIR
 
     sk = _generate_signing_key()
-    _PRIV_KEY_PATH.write_text(
-        base64.b64encode(_signing_key_bytes(sk)).decode("utf-8"),
-        encoding="utf-8",
-    )
-    _PRIV_KEY_PATH.chmod(0o600)
+    _persist_seed(_signing_key_bytes(sk))
     _LOCAL_KEYPAIR = LocalKeypair(signing_key=sk, verify_key=_verify_key(sk))
     return _LOCAL_KEYPAIR
 
@@ -150,24 +265,15 @@ def get_local_peer_id() -> str:
 
 def local_key_path() -> Path:
     _ensure_dir()
-    return _PRIV_KEY_PATH
+    return _storage_metadata().path
 
 
 def rotate_local_keypair() -> dict[str, object]:
     global _LOCAL_KEYPAIR
     existing_peer_id = get_local_peer_id()
-    existing_path = local_key_path()
-    archive_dir = _KEY_DIR / "archive"
-    archive_name = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{existing_peer_id[:24]}.b64"
-    archived_path = archive_dir / archive_name
-    archived_path.write_text(existing_path.read_text(encoding="utf-8"), encoding="utf-8")
-    _chmod_safe(archived_path, 0o600)
+    archived_path = _archive_current_key_material()
     sk = _generate_signing_key()
-    existing_path.write_text(
-        base64.b64encode(_signing_key_bytes(sk)).decode("utf-8"),
-        encoding="utf-8",
-    )
-    _enforce_private_key_permissions(existing_path)
+    _persist_seed(_signing_key_bytes(sk))
     _LOCAL_KEYPAIR = LocalKeypair(signing_key=sk, verify_key=_verify_key(sk))
     return {
         "old_peer_id": existing_peer_id,
