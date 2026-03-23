@@ -27,10 +27,14 @@ except ImportError:
 _KEY_DIR = data_path("keys")
 _LEGACY_PRIV_KEY_PATH = _KEY_DIR / "node_signing_key.b64"
 _KEY_RECORD_PATH = _KEY_DIR / "node_signing_key.json"
+_KEYRING_RECORD_PATH = _KEY_DIR / "node_signing_key.keyring.json"
 _KEY_ARCHIVE_DIR = _KEY_DIR / "archive"
 _KEY_RECORD_VERSION = 1
 _KEY_PASSPHRASE_ENV = "NULLA_KEY_PASSPHRASE"
+_KEY_STORAGE_MODE_ENV = "NULLA_KEY_STORAGE_MODE"
 _PBKDF2_ITERATIONS = 390_000
+_KEYRING_SERVICE = "nulla"
+_KEYRING_ACCOUNT = "node_signing_key"
 _LOCAL_KEYPAIR: LocalKeypair | None = None
 
 
@@ -115,6 +119,81 @@ def _key_passphrase() -> str | None:
     return raw or None
 
 
+def _key_storage_preference() -> str:
+    raw = str(os.environ.get(_KEY_STORAGE_MODE_ENV, "") or "").strip().lower()
+    if raw in {"auto", "file", "keyring"}:
+        return raw
+    return "auto"
+
+
+def _keyring_backend():
+    try:
+        import keyring  # type: ignore
+    except Exception:
+        return None
+    return keyring
+
+
+def _peer_id_for_seed(seed: bytes) -> str:
+    signing_key = _signing_key_from_seed(seed)
+    return LocalKeypair(signing_key=signing_key, verify_key=_verify_key(signing_key)).peer_id
+
+
+def _keyring_record_payload(*, service: str, account: str, peer_id: str) -> dict[str, object]:
+    return {
+        "version": _KEY_RECORD_VERSION,
+        "format": "keyring_seed",
+        "service": service,
+        "account": account,
+        "peer_id": peer_id,
+    }
+
+
+def _write_keyring_record(seed: bytes, *, service: str = _KEYRING_SERVICE, account: str = _KEYRING_ACCOUNT) -> None:
+    backend = _keyring_backend()
+    if backend is None:
+        raise RuntimeError("Keyring storage requested but no keyring backend is available.")
+    backend.set_password(service, account, base64.b64encode(seed).decode("utf-8"))
+    _KEYRING_RECORD_PATH.write_text(
+        json.dumps(
+            _keyring_record_payload(service=service, account=account, peer_id=_peer_id_for_seed(seed)),
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    _chmod_safe(_KEYRING_RECORD_PATH, 0o600)
+
+
+def _load_keyring_seed(path: Path) -> bytes:
+    backend = _keyring_backend()
+    if backend is None:
+        raise RuntimeError("Keyring signing key record exists but no keyring backend is available.")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if str(payload.get("format") or "") != "keyring_seed":
+        raise ValueError(f"Unsupported signing key record format: {payload.get('format')!r}")
+    service = str(payload.get("service") or _KEYRING_SERVICE).strip() or _KEYRING_SERVICE
+    account = str(payload.get("account") or _KEYRING_ACCOUNT).strip() or _KEYRING_ACCOUNT
+    encoded = backend.get_password(service, account)
+    if not encoded:
+        raise RuntimeError(f"Keyring signing key payload is missing for {service}:{account}.")
+    return base64.b64decode(encoded)
+
+
+def _delete_keyring_record(path: Path) -> None:
+    if not path.exists():
+        return
+    backend = _keyring_backend()
+    if backend is None:
+        return
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        service = str(payload.get("service") or _KEYRING_SERVICE).strip() or _KEYRING_SERVICE
+        account = str(payload.get("account") or _KEYRING_ACCOUNT).strip() or _KEYRING_ACCOUNT
+        backend.delete_password(service, account)
+    except Exception:
+        return
+
+
 def _derive_encryption_key(*, passphrase: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
@@ -161,15 +240,39 @@ def _load_encrypted_seed(path: Path, *, passphrase: str) -> bytes:
 
 
 def _storage_metadata() -> KeyStorageMetadata:
+    if _KEYRING_RECORD_PATH.exists():
+        return KeyStorageMetadata(format="keyring_seed", path=_KEYRING_RECORD_PATH)
     if _KEY_RECORD_PATH.exists():
         return KeyStorageMetadata(format="encrypted_seed", path=_KEY_RECORD_PATH)
     return KeyStorageMetadata(format="legacy_plaintext_seed", path=_LEGACY_PRIV_KEY_PATH)
+
+
+def _archive_keyring_seed(seed: bytes, *, current_peer_id: str) -> Path:
+    _ensure_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    archive_name = f"{timestamp}-{current_peer_id[:24]}.json"
+    archive_account = f"{_KEYRING_ACCOUNT}.archive.{timestamp}.{current_peer_id[:24]}"
+    archived_path = _KEY_ARCHIVE_DIR / archive_name
+    _write_keyring_record(seed, service=_KEYRING_SERVICE, account=archive_account)
+    archived_path.write_text(
+        json.dumps(
+            _keyring_record_payload(service=_KEYRING_SERVICE, account=archive_account, peer_id=current_peer_id),
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    _chmod_safe(archived_path, 0o600)
+    if _KEYRING_RECORD_PATH.exists():
+        _KEYRING_RECORD_PATH.unlink()
+    return archived_path
 
 
 def _archive_current_key_material() -> Path:
     _ensure_dir()
     current_peer_id = get_local_peer_id()
     metadata = _storage_metadata()
+    if metadata.format == "keyring_seed":
+        return _archive_keyring_seed(_load_keyring_seed(metadata.path), current_peer_id=current_peer_id)
     suffix = ".json" if metadata.format == "encrypted_seed" else ".b64"
     archive_name = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{current_peer_id[:24]}{suffix}"
     archived_path = _KEY_ARCHIVE_DIR / archive_name
@@ -180,20 +283,35 @@ def _archive_current_key_material() -> Path:
 
 def _persist_seed(seed: bytes) -> KeyStorageMetadata:
     _ensure_dir()
+    if _key_storage_preference() == "keyring":
+        _write_keyring_record(seed)
+        if _LEGACY_PRIV_KEY_PATH.exists():
+            _LEGACY_PRIV_KEY_PATH.unlink()
+        if _KEY_RECORD_PATH.exists():
+            _KEY_RECORD_PATH.unlink()
+        return KeyStorageMetadata(format="keyring_seed", path=_KEYRING_RECORD_PATH)
     passphrase = _key_passphrase()
     if passphrase:
         _write_encrypted_key_record(seed, passphrase=passphrase)
         if _LEGACY_PRIV_KEY_PATH.exists():
             _LEGACY_PRIV_KEY_PATH.unlink()
+        if _KEYRING_RECORD_PATH.exists():
+            _delete_keyring_record(_KEYRING_RECORD_PATH)
+            _KEYRING_RECORD_PATH.unlink()
         return KeyStorageMetadata(format="encrypted_seed", path=_KEY_RECORD_PATH)
     _LEGACY_PRIV_KEY_PATH.write_text(base64.b64encode(seed).decode("utf-8"), encoding="utf-8")
     _chmod_safe(_LEGACY_PRIV_KEY_PATH, 0o600)
     if _KEY_RECORD_PATH.exists():
         _KEY_RECORD_PATH.unlink()
+    if _KEYRING_RECORD_PATH.exists():
+        _delete_keyring_record(_KEYRING_RECORD_PATH)
+        _KEYRING_RECORD_PATH.unlink()
     return KeyStorageMetadata(format="legacy_plaintext_seed", path=_LEGACY_PRIV_KEY_PATH)
 
 
 def key_storage_mode() -> str:
+    if _KEYRING_RECORD_PATH.exists():
+        return "keyring"
     if _KEY_RECORD_PATH.exists():
         return "encrypted_file"
     return "legacy_plaintext_file"
@@ -205,6 +323,13 @@ def load_or_create_local_keypair() -> LocalKeypair:
         return _LOCAL_KEYPAIR
 
     _ensure_dir()
+
+    if _KEYRING_RECORD_PATH.exists():
+        _enforce_private_key_permissions(_KEYRING_RECORD_PATH)
+        seed = _load_keyring_seed(_KEYRING_RECORD_PATH)
+        sk = _signing_key_from_seed(seed)
+        _LOCAL_KEYPAIR = LocalKeypair(signing_key=sk, verify_key=_verify_key(sk))
+        return _LOCAL_KEYPAIR
 
     if _KEY_RECORD_PATH.exists():
         _enforce_private_key_permissions(_KEY_RECORD_PATH)

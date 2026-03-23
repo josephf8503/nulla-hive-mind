@@ -50,7 +50,7 @@ def _license_placeholder_hints() -> list[str]:
 
 def _repo_key_artifacts() -> list[str]:
     matches: list[str] = []
-    for pattern in ("node_signing_key.b64", "node_signing_key.json"):
+    for pattern in ("node_signing_key.b64", "node_signing_key.json", "node_signing_key.keyring.json"):
         for path in PROJECT_ROOT.rglob(pattern):
             if any(part in _IGNORED_DIRS for part in path.parts):
                 continue

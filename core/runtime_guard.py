@@ -75,7 +75,7 @@ def runtime_artifact_hints() -> list[str]:
         hints.append("workspace_db_artifact")
     if any(
         Path(PROJECT_ROOT / "data" / "keys" / name).exists()
-        for name in ("node_signing_key.b64", "node_signing_key.json")
+        for name in ("node_signing_key.b64", "node_signing_key.json", "node_signing_key.keyring.json")
     ):
         hints.append("workspace_key_artifact")
     return hints

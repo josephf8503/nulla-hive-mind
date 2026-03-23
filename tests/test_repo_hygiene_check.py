@@ -35,6 +35,16 @@ class RepoHygieneCheckTests(unittest.TestCase):
             with mock.patch.object(repo_hygiene_check, "PROJECT_ROOT", root):
                 self.assertEqual(repo_hygiene_check._repo_key_artifacts(), ["network/fixtures/node_signing_key.b64"])
 
+    def test_repo_key_artifacts_flag_keyring_metadata_records_too(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            key_dir = root / "network" / "fixtures"
+            key_dir.mkdir(parents=True)
+            (key_dir / "node_signing_key.keyring.json").write_text("{}", encoding="utf-8")
+
+            with mock.patch.object(repo_hygiene_check, "PROJECT_ROOT", root):
+                self.assertEqual(repo_hygiene_check._repo_key_artifacts(), ["network/fixtures/node_signing_key.keyring.json"])
+
     def test_public_docs_do_not_embed_absolute_local_paths(self) -> None:
         public_docs = [
             "README.md",

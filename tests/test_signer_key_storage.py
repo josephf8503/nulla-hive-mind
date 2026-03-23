@@ -11,6 +11,7 @@ def _configure_signer_paths(tmp_path) -> None:
     signer_mod._KEY_DIR = tmp_path / "keys"
     signer_mod._LEGACY_PRIV_KEY_PATH = signer_mod._KEY_DIR / "node_signing_key.b64"
     signer_mod._KEY_RECORD_PATH = signer_mod._KEY_DIR / "node_signing_key.json"
+    signer_mod._KEYRING_RECORD_PATH = signer_mod._KEY_DIR / "node_signing_key.keyring.json"
     signer_mod._KEY_ARCHIVE_DIR = signer_mod._KEY_DIR / "archive"
     signer_mod._LOCAL_KEYPAIR = None
 
@@ -96,3 +97,92 @@ def test_rotate_local_keypair_preserves_encrypted_storage_and_archives_old_recor
     assert archived_path.suffix == ".json"
     assert signer_mod._KEY_RECORD_PATH.exists()
     assert signer_mod.key_storage_mode() == "encrypted_file"
+
+
+def test_signer_uses_keyring_record_when_requested(monkeypatch, tmp_path) -> None:
+    importlib.reload(signer_mod)
+    _configure_signer_paths(tmp_path)
+
+    class FakeKeyring:
+        def __init__(self) -> None:
+            self.store: dict[tuple[str, str], str] = {}
+
+        def set_password(self, service: str, account: str, value: str) -> None:
+            self.store[(service, account)] = value
+
+        def get_password(self, service: str, account: str) -> str | None:
+            return self.store.get((service, account))
+
+        def delete_password(self, service: str, account: str) -> None:
+            self.store.pop((service, account), None)
+
+    fake_keyring = FakeKeyring()
+    monkeypatch.setenv("NULLA_KEY_STORAGE_MODE", "keyring")
+    monkeypatch.setattr(signer_mod, "_keyring_backend", lambda: fake_keyring)
+
+    peer_id = signer_mod.get_local_peer_id()
+
+    assert peer_id
+    assert signer_mod.key_storage_mode() == "keyring"
+    assert signer_mod.local_key_path() == signer_mod._KEYRING_RECORD_PATH
+    assert signer_mod._KEYRING_RECORD_PATH.exists()
+    assert not signer_mod._KEY_RECORD_PATH.exists()
+    assert not signer_mod._LEGACY_PRIV_KEY_PATH.exists()
+    payload = json.loads(signer_mod._KEYRING_RECORD_PATH.read_text(encoding="utf-8"))
+    assert payload["format"] == "keyring_seed"
+    assert fake_keyring.get_password(payload["service"], payload["account"])
+
+    signer_mod._LOCAL_KEYPAIR = None
+    assert signer_mod.get_local_peer_id() == peer_id
+
+
+def test_signer_rejects_keyring_mode_without_backend(monkeypatch, tmp_path) -> None:
+    importlib.reload(signer_mod)
+    _configure_signer_paths(tmp_path)
+    monkeypatch.setenv("NULLA_KEY_STORAGE_MODE", "keyring")
+    monkeypatch.setattr(signer_mod, "_keyring_backend", lambda: None)
+
+    try:
+        signer_mod.load_or_create_local_keypair()
+    except RuntimeError as exc:
+        assert "keyring backend" in str(exc).lower()
+    else:
+        raise AssertionError("expected explicit keyring mode to require a keyring backend")
+
+
+def test_rotate_local_keypair_preserves_keyring_storage_and_archives_old_record(monkeypatch, tmp_path) -> None:
+    importlib.reload(signer_mod)
+    _configure_signer_paths(tmp_path)
+
+    class FakeKeyring:
+        def __init__(self) -> None:
+            self.store: dict[tuple[str, str], str] = {}
+
+        def set_password(self, service: str, account: str, value: str) -> None:
+            self.store[(service, account)] = value
+
+        def get_password(self, service: str, account: str) -> str | None:
+            return self.store.get((service, account))
+
+        def delete_password(self, service: str, account: str) -> None:
+            self.store.pop((service, account), None)
+
+    fake_keyring = FakeKeyring()
+    monkeypatch.setenv("NULLA_KEY_STORAGE_MODE", "keyring")
+    monkeypatch.setattr(signer_mod, "_keyring_backend", lambda: fake_keyring)
+    old_peer = signer_mod.get_local_peer_id()
+    old_payload = json.loads(signer_mod._KEYRING_RECORD_PATH.read_text(encoding="utf-8"))
+    old_secret = fake_keyring.get_password(old_payload["service"], old_payload["account"])
+
+    result = signer_mod.rotate_local_keypair()
+
+    assert result["old_peer_id"] == old_peer
+    assert result["new_peer_id"] != old_peer
+    archived_path = result["archived_key_path"]
+    assert archived_path.exists()
+    assert archived_path.suffix == ".json"
+    archived_payload = json.loads(archived_path.read_text(encoding="utf-8"))
+    assert archived_payload["format"] == "keyring_seed"
+    assert fake_keyring.get_password(archived_payload["service"], archived_payload["account"]) == old_secret
+    assert signer_mod._KEYRING_RECORD_PATH.exists()
+    assert signer_mod.key_storage_mode() == "keyring"
