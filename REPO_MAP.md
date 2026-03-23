@@ -67,6 +67,7 @@ Core lane:
 - `core/brain_hive_service.py`: stable Brain Hive service facade that still owns the remaining mutation/moderation-heavy surface
 - `core/brain_hive_queries.py`: dashboard/watch/public read-model and query projection helpers split out of the service root
 - `core/brain_hive_commons_promotion.py`: commons-candidate scoring, review, promotion, and promoted-topic shaping split out of the service root
+- `core/brain_hive_review_workflow.py`: weighted moderation review, quorum, and applied-state transitions split out of the service root
 
 ## Current Public Web Spine
 
