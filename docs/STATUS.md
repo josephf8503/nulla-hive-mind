@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-23.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved ten areas:
+The current `main` checkpoint materially improved twelve areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -18,22 +18,24 @@ The current `main` checkpoint materially improved ten areas:
    Live web lookup, adaptive research, curiosity evidence, and the research tool loop are no longer welded into the `apps/nulla_agent.py` root. The runtime still has large hotspots, but this lane is now behind a clearer facade.
 6. **Chat-surface wording boundaries**
    Chat-surface wording, observation shaping, and Hive truth narration are no longer welded into the `apps/nulla_agent.py` root either. That lane now lives behind `core/agent_runtime/chat_surface.py`, which cuts the agent composition root down again and keeps user-surface wording changes more local.
-7. **Memory and public-Hive modularity**
+7. **Fast-command and action-result boundaries**
+   Credit commands, capability/help truth, credit status rendering, and fast/action result finalizers are no longer welded into the `apps/nulla_agent.py` root. That lane now lives behind `core/agent_runtime/fast_command_surface.py`, which cuts the agent composition root again and keeps command-surface changes more local.
+8. **Memory and public-Hive modularity**
    Persistent memory is now behind a thin facade over `core/memory/`, and public-Hive write workflows are split behind `core/public_hive/` instead of staying trapped in broad mixed modules.
-8. **Hive task lifecycle and public-write integrity**
+9. **Hive task lifecycle and public-write integrity**
    Long `Task:` / `Goal:` prompts, preview/confirm flow, moderation, review/reward, write grants, and public write protections have deeper regression coverage and less stale-state leakage.
-9. **Public web and proof-path clarity**
+10. **Public web and proof-path clarity**
    Public top-level routes now resolve as `Worklog`, `Tasks`, `Operators`, `Proof`, `Coordination`, and `Status`; stale public route language and placeholder plumbing were reduced; and the repo/docs now expose a clearer one-system proof path.
-10. **Security and key-storage posture**
+11. **Security and key-storage posture**
    The signer lane now supports keyring-backed storage with cleaner fallback/rotation hygiene, and the repo’s public/docs hygiene checks explicitly guard against path leaks and key artifact regressions.
-11. **Regression and acceptance gates**
+12. **Regression and acceptance gates**
    The repo now carries a sharded local full-suite path, clean-wheel smoke/install validation, GitHub CI, and the fast LLM acceptance gate as enforced truth surfaces instead of relying on a source checkout alone.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1245 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1249 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -52,13 +54,13 @@ Current test gate on this checkpoint:
 | **NullaBook public web** | **Experimental** | Public inspection surface at `https://nullabook.com` with worklog, tasks, operators, proof, coordination, and status routes. Operator profiles, posts, share-to-X, and public proof context exist, but the surface is still experimental and not beta. |
 | **Trace Rail (local viewer)** | **Works** | Browser UI showing your own agent's execution in real time. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
-| **Multi-model support** | **Works** | Ollama local, OpenAI-compatible, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. |
+| **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
 | **Proof-of-useful-work** | **Works** | Glory scores, receipts, evidence-based grading, and partial-result paths are present. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1245 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1249 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -92,12 +94,12 @@ Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1245 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1245 |
+| Full suite result | `1249 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1249 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |
-| Test files | 197 |
+| Test files | 199 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 
@@ -111,7 +113,7 @@ Research and reasoning quality scales directly with model size:
 | 7B (base) | Adequate | Good | Works for most tasks, occasional shallow research |
 | 14B (mid) | Good | Moderate | Solid research, reliable tool execution |
 | 32B+ (heavy/titan) | Excellent | Slow on consumer HW | Best results, needs workstation GPU |
-| Cloud fallback | Excellent | Network-dependent | OpenAI/Anthropic API for heavy lifting |
+| Cloud fallback | Excellent | Network-dependent | Remote API fallback for heavy lifting |
 
 If you're evaluating Nulla, use at least a 14B model or enable cloud fallback for a fair impression.
 
