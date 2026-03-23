@@ -86,6 +86,7 @@ This surface is meant to answer:
 These are real risks and should be split before wider expansion:
 
 - `apps/nulla_agent.py`
+- `core/dashboard/workstation_client.py`
 - `core/dashboard/workstation_render.py`
 - `core/agent_runtime/hive_topics.py`
 - `core/agent_runtime/fast_paths.py`
@@ -110,7 +111,7 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - keep builder workflow/scaffold wrappers behind `core/agent_runtime/builder_facade.py` and the real builder logic inside `core/agent_runtime/builder/`
 - keep research/live-web/tool-loop wrappers behind `core/agent_runtime/research_tool_loop_facade.py` and the real tool execution contracts behind `core/tool_intent_executor.py`
 - keep helper drone candidate fan-out behind `core/model_teacher_pipeline.py` so provider swarms stay bounded and policy-shaped instead of leaking into every caller
-- keep dashboard routing behind `core.brain_hive_dashboard` and `core/dashboard/render.py`, with workstation state/render isolated in `core/dashboard/workstation_state.py` and `core/dashboard/workstation_render.py`
+- keep dashboard routing behind `core.brain_hive_dashboard` and `core/dashboard/render.py`, with workstation state/render isolated in `core/dashboard/workstation_state.py`, `core/dashboard/workstation_render.py`, and `core/dashboard/workstation_client.py`
 - keep public-hive auth/bootstrap behind `core.public_hive_bridge` facades and `core/public_hive/auth.py` internals
 - keep feature/store/network-specific logic behind package boundaries
 - prefer adapters/facades over direct rewrites of giant mixed modules
@@ -120,5 +121,5 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - split the largest mixed-responsibility runtime and dashboard modules
 - reduce direct storage/bootstrap calls outside the canonical startup path
 - make orchestration/task lifecycle more explicit and shared across surfaces
-- keep the remaining agent orchestration and workstation rendering hotspots shrinking behind the new provider-role and runtime facades
+- keep the remaining agent orchestration and workstation browser/document hotspots shrinking behind the new provider-role and runtime facades
 - keep public/operator/web logic from bleeding into the runtime core

@@ -27,9 +27,10 @@ The biggest files on the current trunk are:
 
 | File | Lines | Current reality |
 |------|-------|-----------------|
-| `core/dashboard/workstation_render.py` | 4646 | the workstation dashboard document/rendering slab is now the biggest remaining hotspot |
 | `apps/nulla_agent.py` | 2710 | still the main runtime composition root, but materially thinner after the fast-command and chat-surface extractions |
+| `core/dashboard/workstation_client.py` | 2673 | the workstation browser runtime is now isolated, but it is still a large dashboard hotspot |
 | `core/agent_runtime/hive_topics.py` | 2038 | Hive topic creation/update/delete logic is still too concentrated |
+| `core/dashboard/workstation_render.py` | 1983 | the workstation document shell is much smaller, but still owns a broad HTML/panel composition slab |
 | `core/nullabook_feed_page.py` | 1627 | public worklog/feed surface is still too broad |
 | `core/brain_hive_service.py` | 1353 | service boundary exists, but it still owns too much dashboard-facing behavior |
 | `core/runtime_task_rail.py` | 1331 | runtime task/reporting rail is still a large mixed lane |
@@ -44,8 +45,8 @@ These are the current blast-radius centers. Split these before inventing more la
 ## Current Phase Status
 
 - completed enough to stop pretending they are still untouched: `core/local_operator_actions.py`, `core/control_plane_workspace.py`, `apps/brain_hive_watch_server.py`, `apps/nulla_daemon.py`, `apps/nulla_api_server.py`, `apps/meet_and_greet_server.py`, `core/brain_hive_dashboard.py`, `core/persistent_memory.py`
-- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/agent_runtime/hive_topics.py`, `core/agent_runtime/fast_paths.py`
-- still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/public_hive_bridge.py`, `core/agent_runtime/hive_topics.py`, `core/agent_runtime/fast_paths.py`
+- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/agent_runtime/hive_topics.py`, `core/agent_runtime/fast_paths.py`
+- still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, `core/public_hive_bridge.py`, `core/agent_runtime/hive_topics.py`, `core/agent_runtime/fast_paths.py`
 - startup/provider truth is now also centralized behind `core/runtime_backbone.py` so operator/chat surfaces stop rediscovering hardware tier and provider audit state independently
 - provider-role routing now also lives behind `core/provider_routing.py`, and both the helper/teacher lane and the main model execution router now honor bounded drone/queen provider roles without broad caller rewiring
 - chat-surface wording, observation shaping, and Hive truth narration now also live behind `core/agent_runtime/chat_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
@@ -64,6 +65,7 @@ Keep:
 Split next:
 
 - `apps/nulla_agent.py`
+- `core/dashboard/workstation_client.py`
 - `core/dashboard/workstation_render.py`
 - `core/agent_runtime/hive_topics.py`
 - `core/agent_runtime/fast_paths.py`
@@ -74,7 +76,8 @@ Rewrite selectively:
 
 - `apps/nulla_agent.py` into clearer orchestration and runtime service seams
 - `core/public_hive_bridge.py` into explicit public-hive workflow and policy services
-- `core/dashboard/workstation_render.py` into query/view-model/render slices instead of one presentation slab
+- `core/dashboard/workstation_client.py` into browser-runtime/view-model/render-helper slices instead of one browser slab
+- `core/dashboard/workstation_render.py` into document-shell/render-section slices instead of one presentation slab
 
 Quarantine in narrative and architecture priority:
 
@@ -325,11 +328,13 @@ Status on trunk:
 - `core/dashboard/render.py` is down to 346 lines and now routes public vs workstation rendering
 - `core/dashboard/workstation.py` is down to 30 lines and now only assembles workstation state + document helpers
 - `core/dashboard/workstation_state.py` is the extracted workstation initial-state builder at 48 lines
-- the real dashboard hotspot is now `core/dashboard/workstation_render.py` at 4646 lines
+- `core/dashboard/workstation_render.py` is down to 1983 lines and now owns the workstation document shell instead of the whole browser runtime
+- `core/dashboard/workstation_client.py` now owns the extracted workstation browser runtime at 2673 lines
 
 Split next:
 
-- `core/dashboard/workstation_render.py` -> `queries.py`, `view_models.py`, `templates.py`, `render_sections.py`
+- `core/dashboard/workstation_client.py` -> `browser_runtime.py`, `inspectors.py`, `overview_cards.py`, `nullabook_surface.py`
+- `core/dashboard/workstation_render.py` -> `templates.py`, `render_sections.py`
 - `apps/brain_hive_watch_server.py` -> `core/web/watch/routes_public.py`, `routes_topic.py`, `cache.py`, `tls.py`, `responses.py`
 - keep `apps/nulla_api_server.py` and `apps/meet_and_greet_server.py` thin; do not re-bloat the facades
 

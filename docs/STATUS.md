@@ -30,6 +30,8 @@ The current `main` checkpoint materially improved twelve areas:
    The signer lane now supports keyring-backed storage with cleaner fallback/rotation hygiene, and the repo’s public/docs hygiene checks explicitly guard against path leaks and key artifact regressions.
 12. **Regression and acceptance gates**
    The repo now carries a sharded local full-suite path, clean-wheel smoke/install validation, GitHub CI, and the fast LLM acceptance gate as enforced truth surfaces instead of relying on a source checkout alone.
+13. **Dashboard workstation split**
+   The workstation browser runtime is no longer welded into `core/dashboard/workstation_render.py`. The document shell and the browser runtime now live in separate modules, which cuts the dashboard blast radius again and makes workstation client changes more local.
 
 Current test gate on this checkpoint:
 
@@ -148,7 +150,7 @@ What doesn't work yet:
 
 The immediate priorities are:
 
-1. Finish the alpha-to-beta hardening on the biggest remaining hotspots: `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, and `core/public_hive_bridge.py`
+1. Finish the alpha-to-beta hardening on the biggest remaining hotspots: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, and `core/public_hive_bridge.py`
 2. Companion behavior that feels less template-driven and more genuinely adaptive
 3. WAN transport hardening and public multi-node proof
 4. Better observability, readiness, and storage realism beyond the local-only default

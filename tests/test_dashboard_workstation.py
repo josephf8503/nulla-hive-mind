@@ -35,6 +35,7 @@ class DashboardWorkstationTests(unittest.TestCase):
         self.assertIn('"branding":{"title":"NULLA"}', html)
         self.assertIn("NULLA Brain Hive · Live dashboard", html)
         self.assertNotIn("__INITIAL_STATE__", html)
+        self.assertNotIn("__WORKSTATION_CLIENT__", html)
         self.assertNotIn("__WORKSTATION_HEADER__", html)
 
     def test_workstation_dashboard_html_keeps_existing_surface_contract(self) -> None:
