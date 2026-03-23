@@ -9,6 +9,7 @@ from core import (
     brain_hive_queries,
     brain_hive_review_workflow,
     brain_hive_topic_lifecycle,
+    brain_hive_write_support,
 )
 from core.agent_name_registry import get_agent_name
 from core.brain_hive_guard import guard_post_submission, guard_topic_submission
@@ -41,7 +42,6 @@ from core.brain_hive_models import (
 )
 from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
 from core.privacy_guard import assert_public_value_safe
-from core.runtime_continuity import load_hive_idempotent_result, store_hive_idempotent_result
 from core.scoreboard_engine import get_peer_scoreboard
 from storage.brain_hive_moderation_store import (
     apply_post_moderation,
@@ -57,8 +57,6 @@ from storage.brain_hive_store import (
     upsert_claim_link,
 )
 from storage.db import get_connection
-
-_PUBLIC_HIVE_VISIBILITIES = {"agent_public", "read_public"}
 
 
 class BrainHiveService:
@@ -268,17 +266,13 @@ class BrainHiveService:
         return brain_hive_commons_state.require_commons_post(self, post_id)
 
     def _visibility_requires_public_guard(self, visibility: str | None) -> bool:
-        return str(visibility or "").strip().lower() in _PUBLIC_HIVE_VISIBILITIES
+        return brain_hive_write_support.visibility_requires_public_guard(visibility)
 
     def _topic_requires_public_guard(self, topic_id: str) -> bool:
-        topic = get_topic(topic_id, visible_only=False) or {}
-        return self._visibility_requires_public_guard(str(topic.get("visibility") or ""))
+        return brain_hive_write_support.topic_requires_public_guard(topic_id)
 
     def _post_requires_public_guard(self, post_row: dict[str, Any]) -> bool:
-        topic_id = str(post_row.get("topic_id") or "").strip()
-        if not topic_id:
-            return False
-        return self._topic_requires_public_guard(topic_id)
+        return brain_hive_write_support.post_requires_public_guard(post_row)
 
     def _is_commons_topic_row(self, topic: dict[str, Any]) -> bool:
         return brain_hive_commons_state.is_commons_topic_row(topic)
@@ -366,28 +360,7 @@ class BrainHiveService:
         return brain_hive_queries._known_agent_ids(limit=limit)
 
     def _post_row(self, post_id: str) -> dict[str, Any]:
-        conn = get_connection()
-        try:
-            row = conn.execute(
-                """
-                SELECT post_id, topic_id, author_agent_id, post_kind, stance, body,
-                       evidence_refs_json, created_at, moderation_state, moderation_score, moderation_reasons_json
-                FROM hive_posts
-                WHERE post_id = ?
-                LIMIT 1
-                """,
-                (post_id,),
-            ).fetchone()
-            if not row:
-                raise KeyError(post_id)
-            data = dict(row)
-            import json
-
-            data["evidence_refs"] = json.loads(data.pop("evidence_refs_json") or "[]")
-            data["moderation_reasons"] = json.loads(data.pop("moderation_reasons_json") or "[]")
-            return data
-        finally:
-            conn.close()
+        return brain_hive_write_support.load_post_row(post_id)
 
     def _count_rows(self, table: str) -> int:
         conn = get_connection()
@@ -401,17 +374,7 @@ class BrainHiveService:
         return brain_hive_queries._count_where(table, where_sql)
 
     def _forced_review_decision(self, moderation: ModerationDecision) -> ModerationDecision:
-        reasons = list(moderation.reasons or [])
-        if "scoped write grant forces review" not in reasons:
-            reasons.append("scoped write grant forces review")
-        metadata = dict(moderation.metadata or {})
-        metadata["forced_review_required"] = True
-        return ModerationDecision(
-            state="review_required",
-            score=max(float(moderation.score or 0.0), 0.35),
-            reasons=reasons,
-            metadata=metadata,
-        )
+        return brain_hive_write_support.forced_review_decision(moderation)
 
     def _reviewer_weight(self, reviewer_agent_id: str) -> float:
         board = get_peer_scoreboard(reviewer_agent_id)
@@ -446,17 +409,7 @@ class BrainHiveService:
         )
 
     def _cached_result(self, idempotency_key: str | None, model_cls: Any) -> Any | None:
-        cached = load_hive_idempotent_result(str(idempotency_key or "").strip())
-        if not cached:
-            return None
-        return model_cls.model_validate(cached)
+        return brain_hive_write_support.cached_result(idempotency_key, model_cls)
 
     def _store_idempotent_result(self, idempotency_key: str | None, operation_kind: str, model: Any) -> None:
-        clean_key = str(idempotency_key or "").strip()
-        if not clean_key:
-            return
-        store_hive_idempotent_result(
-            idempotency_key=clean_key,
-            operation_kind=operation_kind,
-            response_payload=model.model_dump(mode="json"),
-        )
+        brain_hive_write_support.store_idempotent_result(idempotency_key, operation_kind, model)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from core import brain_hive_commons_state, policy_engine
+from core import brain_hive_commons_state, brain_hive_write_support, policy_engine
 from core.brain_hive_models import (
     HiveCommonsPromotionActionRequest,
     HiveCommonsPromotionCandidateRecord,
@@ -32,7 +32,7 @@ def evaluate_promotion_candidate(
     service: BrainHiveService,
     request: HiveCommonsPromotionCandidateRequest,
 ) -> HiveCommonsPromotionCandidateRecord:
-    cached = service._cached_result(request.idempotency_key, HiveCommonsPromotionCandidateRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveCommonsPromotionCandidateRecord)
     if cached is not None:
         return cached
     record = _recompute_promotion_candidate(
@@ -40,7 +40,7 @@ def evaluate_promotion_candidate(
         post_id=request.post_id,
         requested_by_agent_id=request.requested_by_agent_id,
     )
-    service._store_idempotent_result(request.idempotency_key, "hive.commons.evaluate_candidate", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.commons.evaluate_candidate", record)
     return record
 
 
@@ -61,7 +61,7 @@ def review_promotion_candidate(
     request: HiveCommonsPromotionReviewRequest,
 ) -> HiveCommonsPromotionCandidateRecord:
     candidate = _promotion_candidate_record_by_id(service, request.candidate_id)
-    if service._topic_requires_public_guard(candidate.topic_id) and request.note is not None:
+    if brain_hive_write_support.topic_requires_public_guard(candidate.topic_id) and request.note is not None:
         assert_public_text_safe(request.note, field_name="Hive promotion review note")
     review_id = upsert_commons_promotion_review(
         candidate_id=candidate.candidate_id,
@@ -79,7 +79,7 @@ def promote_commons_candidate(
     service: BrainHiveService,
     request: HiveCommonsPromotionActionRequest,
 ) -> HiveTopicRecord:
-    cached = service._cached_result(request.idempotency_key, HiveTopicRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveTopicRecord)
     if cached is not None:
         return cached
     candidate = _promotion_candidate_record_by_id(service, request.candidate_id)
@@ -87,9 +87,9 @@ def promote_commons_candidate(
         raise ValueError("Commons candidate requires reviewer approval before promotion.")
     if candidate.promoted_topic_id:
         record = service.get_topic(candidate.promoted_topic_id, include_flagged=True)
-        service._store_idempotent_result(request.idempotency_key, "hive.commons.promote_candidate", record)
+        brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.commons.promote_candidate", record)
         return record
-    source_post = service._post_row(candidate.post_id)
+    source_post = brain_hive_write_support.load_post_row(candidate.post_id)
     source_topic = service.get_topic(candidate.topic_id, include_flagged=True)
     title = str(request.title or "").strip() or _promoted_topic_title(source_post, source_topic)
     summary = str(request.summary or "").strip() or _promoted_topic_summary(source_post, source_topic, candidate)
@@ -114,7 +114,7 @@ def promote_commons_candidate(
         archive_state_override="approved",
         promoted_topic_id=promoted.topic_id,
     )
-    service._store_idempotent_result(request.idempotency_key, "hive.commons.promote_candidate", promoted)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.commons.promote_candidate", promoted)
     return promoted
 
 
@@ -296,7 +296,7 @@ def _promotion_candidate_record(
     payload = dict(row)
     requested_by_display_name, requested_by_claim_label = service._display_fields(str(row["requested_by_agent_id"]))
     topic = service.get_topic(str(row.get("topic_id") or ""), include_flagged=True)
-    post = service._post_row(str(row.get("post_id") or ""))
+    post = brain_hive_write_support.load_post_row(str(row.get("post_id") or ""))
     review_summary = _candidate_review_summary(row)
     metadata = dict(payload.pop("metadata", {}) or {})
     return HiveCommonsPromotionCandidateRecord(

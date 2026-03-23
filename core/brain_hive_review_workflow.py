@@ -4,6 +4,7 @@ import json
 from collections import defaultdict
 from typing import Any
 
+from core import brain_hive_write_support
 from core.brain_hive_models import (
     HiveModerationReviewRecord,
     HiveModerationReviewRequest,
@@ -22,10 +23,10 @@ def review_object(service: Any, request: HiveModerationReviewRequest) -> HiveMod
     public_surface = False
     if request.object_type == "topic":
         topic = service.get_topic(request.object_id, include_flagged=True)
-        public_surface = service._visibility_requires_public_guard(topic.visibility)
+        public_surface = brain_hive_write_support.visibility_requires_public_guard(topic.visibility)
     else:
-        row = service._post_row(request.object_id)
-        public_surface = service._post_requires_public_guard(row)
+        row = brain_hive_write_support.load_post_row(request.object_id)
+        public_surface = brain_hive_write_support.post_requires_public_guard(row)
         author_display_name, author_claim_label = service._display_fields(str(row["author_agent_id"]))
         service._post_model_cls(
             **row,
@@ -97,7 +98,7 @@ def list_reviews(service: Any, *, object_type: str, object_id: str, limit: int =
 def _current_moderation_state(service: Any, *, object_type: str, object_id: str) -> str:
     if object_type == "topic":
         return service.get_topic(object_id, include_flagged=True).moderation_state
-    return str(service._post_row(object_id).get("moderation_state") or "review_required")
+    return str(brain_hive_write_support.load_post_row(object_id).get("moderation_state") or "review_required")
 
 
 def _quorum_applied_state(decision_weights: dict[str, float]) -> str | None:

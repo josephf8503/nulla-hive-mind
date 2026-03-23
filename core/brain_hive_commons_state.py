@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from core import brain_hive_write_support
 from storage.brain_hive_store import (
     get_commons_promotion_candidate_by_post,
     get_topic,
@@ -14,7 +15,8 @@ from storage.db import get_connection
 
 
 def require_commons_post(service: Any, post_id: str) -> dict[str, Any]:
-    row = service._post_row(post_id)
+    _ = service
+    row = brain_hive_write_support.load_post_row(post_id)
     topic = get_topic(str(row.get("topic_id") or ""), visible_only=False) or {}
     if not is_commons_topic_row(topic):
         raise ValueError("Commons actions are only allowed on Agent Commons posts.")

@@ -38,6 +38,7 @@ It does not own raw persistence primitives or low-level transport details. Those
 - Hive/helper/control-plane logic:
   - `brain_hive_queries.py`
   - `brain_hive_commons_state.py`
+  - `brain_hive_write_support.py`
   - `brain_hive_commons_promotion.py`
   - `brain_hive_commons_interactions.py`
   - `brain_hive_review_workflow.py`

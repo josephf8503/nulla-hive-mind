@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core import brain_hive_write_support
 from core.brain_hive_models import (
     HiveTopicClaimRecord,
     HiveTopicClaimRequest,
@@ -31,11 +32,11 @@ from storage.brain_hive_store import (
 
 
 def claim_topic(service: Any, request: HiveTopicClaimRequest) -> HiveTopicClaimRecord:
-    cached = service._cached_result(request.idempotency_key, HiveTopicClaimRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveTopicClaimRecord)
     if cached is not None:
         return cached
     topic = service.get_topic(request.topic_id, include_flagged=True)
-    if service._visibility_requires_public_guard(topic.visibility) and request.note is not None:
+    if brain_hive_write_support.visibility_requires_public_guard(topic.visibility) and request.note is not None:
         assert_public_text_safe(request.note, field_name="Hive claim note")
     claim_id = upsert_topic_claim(
         topic_id=request.topic_id,
@@ -48,7 +49,7 @@ def claim_topic(service: Any, request: HiveTopicClaimRequest) -> HiveTopicClaimR
     if request.status == "active" and str(topic_row.get("status") or "").strip().lower() == "open":
         store_update_topic_status(request.topic_id, status="researching")
     record = _topic_claim_record(service, claim_id)
-    service._store_idempotent_result(request.idempotency_key, "hive.claim_topic", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.claim_topic", record)
     return record
 
 
@@ -68,7 +69,7 @@ def list_claims(service: Any, topic_id: str, *, active_only: bool = False, limit
 
 
 def update_topic_status(service: Any, request: HiveTopicStatusUpdateRequest) -> HiveTopicRecord:
-    cached = service._cached_result(request.idempotency_key, HiveTopicRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveTopicRecord)
     if cached is not None:
         return cached
     topic = service.get_topic(request.topic_id, include_flagged=True)
@@ -95,7 +96,7 @@ def update_topic_status(service: Any, request: HiveTopicStatusUpdateRequest) -> 
 
     store_update_topic_status(request.topic_id, status=request.status)
     if claim is not None and status in {"solved", "closed"}:
-        if service._visibility_requires_public_guard(topic.visibility) and request.note is not None:
+        if brain_hive_write_support.visibility_requires_public_guard(topic.visibility) and request.note is not None:
             assert_public_text_safe(request.note, field_name="Hive claim note")
         upsert_topic_claim(
             topic_id=request.topic_id,
@@ -105,12 +106,12 @@ def update_topic_status(service: Any, request: HiveTopicStatusUpdateRequest) -> 
             capability_tags=list(claim.get("capability_tags") or []),
         )
     record = service.get_topic(topic.topic_id, include_flagged=True)
-    service._store_idempotent_result(request.idempotency_key, "hive.update_topic_status", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.update_topic_status", record)
     return record
 
 
 def update_topic(service: Any, request: HiveTopicUpdateRequest) -> HiveTopicRecord:
-    cached = service._cached_result(request.idempotency_key, HiveTopicRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveTopicRecord)
     if cached is not None:
         return cached
     topic = service.get_topic(request.topic_id, include_flagged=True)
@@ -124,7 +125,7 @@ def update_topic(service: Any, request: HiveTopicUpdateRequest) -> HiveTopicReco
     next_title = str(request.title or topic.title).strip()
     next_summary = str(request.summary or topic.summary).strip()
     next_tags = list(request.topic_tags) if request.topic_tags is not None else list(topic.topic_tags)
-    if service._visibility_requires_public_guard(topic.visibility) and text_privacy_risks(f"{next_title}\n{next_summary}"):
+    if brain_hive_write_support.visibility_requires_public_guard(topic.visibility) and text_privacy_risks(f"{next_title}\n{next_summary}"):
         raise ValueError("Updated Hive topic still looks private.")
     validation_request = HiveTopicCreateRequest(
         created_by_agent_id=request.updated_by_agent_id,
@@ -152,12 +153,12 @@ def update_topic(service: Any, request: HiveTopicUpdateRequest) -> HiveTopicReco
         metadata=moderation.metadata,
     )
     record = service.get_topic(topic.topic_id, include_flagged=True)
-    service._store_idempotent_result(request.idempotency_key, "hive.update_topic", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.update_topic", record)
     return record
 
 
 def delete_topic(service: Any, request: HiveTopicDeleteRequest) -> HiveTopicRecord:
-    cached = service._cached_result(request.idempotency_key, HiveTopicRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveTopicRecord)
     if cached is not None:
         return cached
     topic = service.get_topic(request.topic_id, include_flagged=True)
@@ -171,7 +172,7 @@ def delete_topic(service: Any, request: HiveTopicDeleteRequest) -> HiveTopicReco
         raise ValueError("This Hive topic already has work attached, so it can't be deleted now.")
     store_update_topic_status(topic.topic_id, status="closed")
     record = service.get_topic(topic.topic_id, include_flagged=True)
-    service._store_idempotent_result(request.idempotency_key, "hive.delete_topic", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.delete_topic", record)
     return record
 
 

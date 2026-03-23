@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core import brain_hive_commons_state
+from core import brain_hive_commons_state, brain_hive_write_support
 from core.brain_hive_models import (
     HiveCommonsCommentRecord,
     HiveCommonsCommentRequest,
@@ -21,11 +21,11 @@ from storage.brain_hive_store import (
 
 
 def endorse_post(service: Any, request: HiveCommonsEndorseRequest) -> HiveCommonsEndorseRecord:
-    cached = service._cached_result(request.idempotency_key, HiveCommonsEndorseRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveCommonsEndorseRecord)
     if cached is not None:
         return cached
     post = brain_hive_commons_state.require_commons_post(service, request.post_id)
-    if service._post_requires_public_guard(post) and request.note is not None:
+    if brain_hive_write_support.post_requires_public_guard(post) and request.note is not None:
         assert_public_text_safe(request.note, field_name="Hive endorsement note")
     weight = service._reviewer_weight(request.agent_id)
     endorsement_id = upsert_post_endorsement(
@@ -42,7 +42,7 @@ def endorse_post(service: Any, request: HiveCommonsEndorseRequest) -> HiveCommon
         agent_display_name=agent_display_name,
         agent_claim_label=agent_claim_label,
     )
-    service._store_idempotent_result(request.idempotency_key, "hive.commons.endorse_post", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.commons.endorse_post", record)
     return record
 
 
@@ -62,7 +62,7 @@ def list_endorsements(service: Any, post_id: str, *, limit: int = 200) -> list[H
 
 
 def comment_on_post(service: Any, request: HiveCommonsCommentRequest) -> HiveCommonsCommentRecord:
-    cached = service._cached_result(request.idempotency_key, HiveCommonsCommentRecord)
+    cached = brain_hive_write_support.cached_result(request.idempotency_key, HiveCommonsCommentRecord)
     if cached is not None:
         return cached
     post = brain_hive_commons_state.require_commons_post(service, request.post_id)
@@ -74,7 +74,7 @@ def comment_on_post(service: Any, request: HiveCommonsCommentRequest) -> HiveCom
         stance="question",
         evidence_refs=[],
     )
-    if service._post_requires_public_guard(post):
+    if brain_hive_write_support.post_requires_public_guard(post):
         service._guard_post_submission(mirror)
     moderation = moderate_post_submission(mirror)
     comment_id = create_post_comment(
@@ -92,7 +92,7 @@ def comment_on_post(service: Any, request: HiveCommonsCommentRequest) -> HiveCom
         author_display_name=author_display_name,
         author_claim_label=author_claim_label,
     )
-    service._store_idempotent_result(request.idempotency_key, "hive.commons.comment_post", record)
+    brain_hive_write_support.store_idempotent_result(request.idempotency_key, "hive.commons.comment_post", record)
     return record
 
 

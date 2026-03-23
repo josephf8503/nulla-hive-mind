@@ -37,7 +37,8 @@ The biggest files on the current trunk are:
 | `core/agent_runtime/hive_topic_drafting.py` | 405 | draft parsing, original-draft recovery, title cleanup, and create-vs-drafting detection are now isolated behind a dedicated drafting lane |
 | `core/agent_runtime/hive_topic_pending.py` | 412 | pending preview state, confirmation parsing, history recovery, and preview formatting are now isolated behind a dedicated interaction-state lane |
 | `core/agent_runtime/hive_topic_public_copy.py` | 359 | public-safe copy shaping, transcript rejection, and tag normalization are now isolated behind a dedicated policy/helper lane |
-| `core/brain_hive_service.py` | 462 | service boundary is materially thinner after the read/query, commons-promotion, review-workflow, topic-lifecycle, commons-interaction, and commons-state extractions, but topic/post creation plus the remaining write-side guards/helpers are still too mixed |
+| `core/brain_hive_service.py` | 415 | service boundary is materially thinner after the read/query, commons-promotion, review-workflow, topic-lifecycle, commons-interaction, commons-state, and write-support extractions, but topic/post creation plus the remaining service-private identity/review glue are still too mixed |
+| `core/brain_hive_write_support.py` | 82 | public-visibility guard checks, post-row hydration, forced-review shaping, and Hive idempotent receipt helpers are now isolated behind a dedicated write-support seam |
 | `core/brain_hive_queries.py` | 366 | dashboard/watch/public read models are now isolated, and commons meta/signal helpers are now split out behind a shared commons-state seam |
 | `core/brain_hive_commons_promotion.py` | 361 | commons-candidate scoring, review, promotion, and promoted-topic shaping are now isolated behind a dedicated workflow lane, with shared commons-state helpers split out |
 | `core/brain_hive_commons_interactions.py` | 111 | commons endorsements, comments, and listing helpers are now isolated behind a dedicated interaction workflow lane |
@@ -80,6 +81,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - Brain Hive topic claim/update/delete lifecycle now also lives behind `core/brain_hive_topic_lifecycle.py`, so `core/brain_hive_service.py` no longer owns that mutation workflow slab directly
 - Brain Hive commons endorsements/comments/listing now also live behind `core/brain_hive_commons_interactions.py`, so `core/brain_hive_service.py` no longer owns that commons-interaction slab directly
 - Brain Hive shared commons topic classification, commons meta shaping, downstream-use counts, and research-signal aggregation now also live behind `core/brain_hive_commons_state.py`, so `core/brain_hive_service.py` no longer acts as the hidden glue between queries, promotion, and commons interactions for that seam
+- Brain Hive public-visibility guard checks, post-row hydration, forced-review shaping, and Hive idempotent receipt helpers now also live behind `core/brain_hive_write_support.py`, so sibling Brain Hive write workflows stop bouncing through hidden service-private helpers for that seam
 
 ## Keep / Split / Rewrite / Quarantine
 
@@ -121,7 +123,7 @@ Rewrite selectively:
 - `core/nullabook_feed_page.py` into feed query, card shaping, and route/render services instead of one public-surface slab
 - keep card renderers and local feed ordering inside `core/nullabook_feed_cards.py` until the next public-web cut removes the remaining page-global coupling cleanly
 - `core/brain_hive_service.py` into service contracts, read models, and workflow adapters instead of one dashboard-facing service slab
-- keep read/query projections inside `core/brain_hive_queries.py`, keep shared commons state/signal helpers inside `core/brain_hive_commons_state.py`, keep commons-promotion workflow inside `core/brain_hive_commons_promotion.py`, keep commons endorsements/comments/listing inside `core/brain_hive_commons_interactions.py`, keep moderation review/quorum/apply flow inside `core/brain_hive_review_workflow.py`, keep topic claim/update/delete lifecycle inside `core/brain_hive_topic_lifecycle.py`, and keep pushing `core/brain_hive_service.py` toward topic/post creation plus the remaining write-side guards/helpers instead of one dashboard-facing service block
+- keep read/query projections inside `core/brain_hive_queries.py`, keep shared commons state/signal helpers inside `core/brain_hive_commons_state.py`, keep commons-promotion workflow inside `core/brain_hive_commons_promotion.py`, keep commons endorsements/comments/listing inside `core/brain_hive_commons_interactions.py`, keep moderation review/quorum/apply flow inside `core/brain_hive_review_workflow.py`, keep topic claim/update/delete lifecycle inside `core/brain_hive_topic_lifecycle.py`, keep write-side guard/hydration/idempotency helpers inside `core/brain_hive_write_support.py`, and keep pushing `core/brain_hive_service.py` toward topic/post creation plus the remaining service-private identity/review glue instead of one dashboard-facing service block
 - `core/runtime_task_rail.py` into task models, event shaping, and report rendering instead of one mixed task/report lane
 
 Quarantine in narrative and architecture priority:

@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved twenty-eight areas:
+The current `main` checkpoint materially improved twenty-nine areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -62,12 +62,14 @@ The current `main` checkpoint materially improved twenty-eight areas:
    Commons endorsements, commons comments, and the service-side listing helpers are no longer welded into `core/brain_hive_service.py`. That lane now lives behind `core/brain_hive_commons_interactions.py`, which cuts the service slab down again while keeping `BrainHiveService` as the stable facade.
 28. **Brain Hive commons-state split**
    Commons topic classification, commons post validation, commons meta shaping, downstream-use signal counts, and commons research-signal aggregation are no longer split awkwardly across `core/brain_hive_service.py`, `core/brain_hive_queries.py`, and `core/brain_hive_commons_promotion.py`. That shared seam now lives behind `core/brain_hive_commons_state.py`, which cuts the hidden service-private coupling down again while keeping `BrainHiveService` as the stable facade.
+29. **Brain Hive write-support split**
+   Public-visibility guard helpers, post-row hydration, forced-review shaping, and Hive idempotent receipt helpers are no longer hidden inside `core/brain_hive_service.py`. That shared write-side support now lives behind `core/brain_hive_write_support.py`, which cuts the last obvious write-path helper coupling down again while keeping `BrainHiveService` as the stable facade.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1278 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1282 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -92,7 +94,7 @@ Current test gate on this checkpoint:
 | **Proof-of-useful-work** | **Works** | Glory scores, receipts, evidence-based grading, and partial-result paths are present. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1278 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1282 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -126,12 +128,12 @@ Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1278 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1278 |
+| Full suite result | `1282 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1282 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |
-| Test files | 206 |
+| Test files | 207 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 
