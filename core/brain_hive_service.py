@@ -5,6 +5,7 @@ from typing import Any
 from core import (
     brain_hive_commons_interactions,
     brain_hive_commons_promotion,
+    brain_hive_commons_state,
     brain_hive_queries,
     brain_hive_review_workflow,
     brain_hive_topic_lifecycle,
@@ -264,13 +265,7 @@ class BrainHiveService:
         return brain_hive_queries.get_stats(self)
 
     def _require_commons_post(self, post_id: str) -> dict[str, Any]:
-        row = self._post_row(post_id)
-        topic = get_topic(str(row.get("topic_id") or ""), visible_only=False) or {}
-        if not self._is_commons_topic_row(topic):
-            raise ValueError("Commons actions are only allowed on Agent Commons posts.")
-        if str(row.get("moderation_state") or "approved").strip().lower() != "approved":
-            raise ValueError("Commons actions require an approved source post.")
-        return row
+        return brain_hive_commons_state.require_commons_post(self, post_id)
 
     def _visibility_requires_public_guard(self, visibility: str | None) -> bool:
         return str(visibility or "").strip().lower() in _PUBLIC_HIVE_VISIBILITIES
@@ -286,20 +281,10 @@ class BrainHiveService:
         return self._topic_requires_public_guard(topic_id)
 
     def _is_commons_topic_row(self, topic: dict[str, Any]) -> bool:
-        tags = {str(item or "").strip().lower() for item in list(topic.get("topic_tags") or []) if str(item or "").strip()}
-        combined = f"{topic.get('title') or ''!s} {topic.get('summary') or ''!s}".lower()
-        return (
-            "agent_commons" in tags
-            or "commons" in tags
-            or "brainstorm" in tags
-            or "curiosity" in tags
-            or "agent commons" in combined
-            or "brainstorm lane" in combined
-            or "idle curiosity" in combined
-        )
+        return brain_hive_commons_state.is_commons_topic_row(topic)
 
     def _post_commons_meta(self, post_id: str) -> dict[str, Any]:
-        return brain_hive_queries._post_commons_meta(self, post_id)
+        return brain_hive_commons_state.post_commons_meta(post_id)
 
     def _recompute_promotion_candidate(
         self,
@@ -325,7 +310,7 @@ class BrainHiveService:
         return brain_hive_commons_promotion._promotion_score_payload(self, post, topic)
 
     def _commons_downstream_signal_counts(self, post_id: str, topic_id: str) -> tuple[int, int]:
-        return brain_hive_commons_promotion._commons_downstream_signal_counts(post_id, topic_id)
+        return brain_hive_commons_state.commons_downstream_signal_counts(post_id, topic_id)
 
     def _candidate_review_summary(self, candidate_row: dict[str, Any] | None) -> dict[str, Any]:
         return brain_hive_commons_promotion._candidate_review_summary(candidate_row)
@@ -354,7 +339,7 @@ class BrainHiveService:
         return brain_hive_queries._build_agent_profile(self, agent_id, presence_row)
 
     def _commons_research_signal_map(self, *, limit: int) -> dict[str, dict[str, Any]]:
-        return brain_hive_queries._commons_research_signal_map(self, limit=limit)
+        return brain_hive_commons_state.commons_research_signal_map(limit=limit)
 
     def _region_stats(self, topic_counts: dict[str, int]) -> list[HiveRegionStat]:
         return brain_hive_queries._region_stats(self, topic_counts)

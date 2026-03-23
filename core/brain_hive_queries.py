@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 
+from core import brain_hive_commons_state
 from core.brain_hive_models import BrainHiveStatsResponse, HiveAgentProfile, HiveRegionStat, HiveTaskStat
 from core.scoreboard_engine import get_peer_scoreboard
 from storage.brain_hive_store import (
-    get_commons_promotion_candidate_by_post,
-    list_commons_promotion_candidates,
-    list_post_comments,
-    list_post_endorsements,
     list_recent_posts,
     list_recent_topic_claims,
     topic_counts_by_status,
@@ -164,7 +161,11 @@ def list_recent_posts_feed(
             str(row["topic_id"]),
             visible_only=False,
         ) or {}
-        commons_meta = _post_commons_meta(service, str(row.get("post_id") or "")) if service._is_commons_topic_row(topic) else None
+        commons_meta = (
+            _post_commons_meta(service, str(row.get("post_id") or ""))
+            if brain_hive_commons_state.is_commons_topic_row(topic)
+            else None
+        )
         out.append(
             {
                 **row,
@@ -227,41 +228,8 @@ def get_stats(service: BrainHiveService) -> BrainHiveStatsResponse:
 
 
 def _post_commons_meta(service: BrainHiveService, post_id: str) -> dict[str, Any]:
-    endorsements = list_post_endorsements(post_id, limit=200)
-    comments = list_post_comments(post_id, limit=200, visible_only=True)
-    candidate = get_commons_promotion_candidate_by_post(post_id)
-    support_weight = sum(
-        float(item.get("weight") or 0.0)
-        for item in endorsements
-        if str(item.get("endorsement_kind") or "") == "endorse"
-    )
-    challenge_weight = sum(
-        float(item.get("weight") or 0.0)
-        for item in endorsements
-        if str(item.get("endorsement_kind") or "") == "challenge"
-    )
-    cite_weight = sum(
-        float(item.get("weight") or 0.0)
-        for item in endorsements
-        if str(item.get("endorsement_kind") or "") == "cite"
-    )
-    data = {
-        "endorsement_count": len(endorsements),
-        "comment_count": len(comments),
-        "support_weight": round(support_weight, 3),
-        "challenge_weight": round(challenge_weight, 3),
-        "cite_weight": round(cite_weight, 3),
-    }
-    if candidate:
-        data["promotion_candidate"] = {
-            "candidate_id": str(candidate.get("candidate_id") or ""),
-            "score": round(float(candidate.get("score") or 0.0), 3),
-            "status": str(candidate.get("status") or "draft"),
-            "review_state": str(candidate.get("review_state") or "pending"),
-            "archive_state": str(candidate.get("archive_state") or "transient"),
-            "reasons": list(candidate.get("reasons") or []),
-        }
-    return data
+    _ = service
+    return brain_hive_commons_state.post_commons_meta(post_id)
 
 
 def _build_agent_profile(
@@ -328,52 +296,8 @@ def _commons_research_signal_map(
     *,
     limit: int,
 ) -> dict[str, dict[str, Any]]:
-    grouped: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in list_commons_promotion_candidates(limit=max(1, int(limit))):
-        topic_id = str(row.get("topic_id") or "").strip()
-        if not topic_id:
-            continue
-        grouped[topic_id].append(dict(row))
-
-    signal_map: dict[str, dict[str, Any]] = {}
-    for topic_id, rows in grouped.items():
-        candidate_count = len(rows)
-        review_required_count = sum(
-            1 for row in rows if str(row.get("status") or "").strip().lower() == "review_required"
-        )
-        approved_count = sum(1 for row in rows if str(row.get("review_state") or "").strip().lower() == "approved")
-        promoted_count = sum(1 for row in rows if str(row.get("status") or "").strip().lower() == "promoted")
-        top_score = max((float(row.get("score") or 0.0) for row in rows), default=0.0)
-        support_weight = sum(float(row.get("support_weight") or 0.0) for row in rows)
-        challenge_weight = sum(float(row.get("challenge_weight") or 0.0) for row in rows)
-        training_signal_count = sum(int(row.get("training_signal_count") or 0) for row in rows)
-        downstream_use_count = sum(int(row.get("downstream_use_count") or 0) for row in rows)
-        reasons: list[str] = []
-        if review_required_count > 0:
-            reasons.append("commons_review_pressure")
-        if approved_count > 0:
-            reasons.append("commons_approved_signal")
-        if promoted_count > 0:
-            reasons.append("commons_promoted_signal")
-        if support_weight > challenge_weight:
-            reasons.append("commons_endorsement_bias")
-        if training_signal_count > 0:
-            reasons.append("commons_training_signal")
-        if downstream_use_count > 0:
-            reasons.append("commons_downstream_use")
-        signal_map[topic_id] = {
-            "candidate_count": candidate_count,
-            "review_required_count": review_required_count,
-            "approved_count": approved_count,
-            "promoted_count": promoted_count,
-            "top_score": round(top_score, 4),
-            "support_weight": round(support_weight, 4),
-            "challenge_weight": round(challenge_weight, 4),
-            "training_signal_count": training_signal_count,
-            "downstream_use_count": downstream_use_count,
-            "reasons": reasons,
-        }
-    return signal_map
+    _ = service
+    return brain_hive_commons_state.commons_research_signal_map(limit=limit)
 
 
 def _region_stats(

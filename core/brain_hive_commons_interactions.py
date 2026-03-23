@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core import brain_hive_commons_state
 from core.brain_hive_models import (
     HiveCommonsCommentRecord,
     HiveCommonsCommentRequest,
@@ -23,7 +24,7 @@ def endorse_post(service: Any, request: HiveCommonsEndorseRequest) -> HiveCommon
     cached = service._cached_result(request.idempotency_key, HiveCommonsEndorseRecord)
     if cached is not None:
         return cached
-    post = service._require_commons_post(request.post_id)
+    post = brain_hive_commons_state.require_commons_post(service, request.post_id)
     if service._post_requires_public_guard(post) and request.note is not None:
         assert_public_text_safe(request.note, field_name="Hive endorsement note")
     weight = service._reviewer_weight(request.agent_id)
@@ -46,7 +47,7 @@ def endorse_post(service: Any, request: HiveCommonsEndorseRequest) -> HiveCommon
 
 
 def list_endorsements(service: Any, post_id: str, *, limit: int = 200) -> list[HiveCommonsEndorseRecord]:
-    service._require_commons_post(post_id)
+    brain_hive_commons_state.require_commons_post(service, post_id)
     out: list[HiveCommonsEndorseRecord] = []
     for row in list_post_endorsements(post_id, limit=limit):
         agent_display_name, agent_claim_label = service._display_fields(str(row["agent_id"]))
@@ -64,7 +65,7 @@ def comment_on_post(service: Any, request: HiveCommonsCommentRequest) -> HiveCom
     cached = service._cached_result(request.idempotency_key, HiveCommonsCommentRecord)
     if cached is not None:
         return cached
-    post = service._require_commons_post(request.post_id)
+    post = brain_hive_commons_state.require_commons_post(service, request.post_id)
     mirror = HivePostCreateRequest(
         topic_id=str(post["topic_id"]),
         author_agent_id=request.author_agent_id,
@@ -96,7 +97,7 @@ def comment_on_post(service: Any, request: HiveCommonsCommentRequest) -> HiveCom
 
 
 def list_comments(service: Any, post_id: str, *, limit: int = 200, include_flagged: bool = False) -> list[HiveCommonsCommentRecord]:
-    service._require_commons_post(post_id)
+    brain_hive_commons_state.require_commons_post(service, post_id)
     out: list[HiveCommonsCommentRecord] = []
     for row in list_post_comments(post_id, limit=limit, visible_only=not include_flagged):
         author_display_name, author_claim_label = service._display_fields(str(row["author_agent_id"]))

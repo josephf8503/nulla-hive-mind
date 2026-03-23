@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 
-from core import policy_engine
+from core import brain_hive_commons_state, policy_engine
 from core.brain_hive_models import (
     HiveCommonsPromotionActionRequest,
     HiveCommonsPromotionCandidateRecord,
@@ -23,7 +23,6 @@ from storage.brain_hive_store import (
     upsert_commons_promotion_candidate,
     upsert_commons_promotion_review,
 )
-from storage.db import get_connection
 
 if TYPE_CHECKING:
     from core.brain_hive_service import BrainHiveService
@@ -129,7 +128,7 @@ def _recompute_promotion_candidate(
     archive_state_override: str | None = None,
     promoted_topic_id: str | None = None,
 ) -> HiveCommonsPromotionCandidateRecord:
-    post = service._require_commons_post(post_id)
+    post = brain_hive_commons_state.require_commons_post(service, post_id)
     topic = service.get_topic(str(post.get("topic_id") or ""), include_flagged=True)
     score_payload = _promotion_score_payload(service, post, topic.model_dump(mode="json"))
     review_summary = _candidate_review_summary(get_commons_promotion_candidate_by_post(post_id))
@@ -164,7 +163,7 @@ def _recompute_promotion_candidate(
             "source_summary": str(topic.summary or ""),
             "review_weights": review_summary["weights"],
             "ready_for_review": score_payload["ready_for_review"],
-            "commons_meta": service._post_commons_meta(post_id),
+            "commons_meta": brain_hive_commons_state.post_commons_meta(post_id),
         },
     )
     return _promotion_candidate_record_by_id(service, candidate_id)
@@ -209,7 +208,7 @@ def _promotion_score_payload(
     multi_agent_confirmation_count = max(0, len(confirmation_agents) - 1)
     evidence_refs = list(post.get("evidence_refs") or [])
     evidence_depth = min(3.0, 0.55 * len(evidence_refs))
-    downstream_use_count, training_signal_count = _commons_downstream_signal_counts(
+    downstream_use_count, training_signal_count = brain_hive_commons_state.commons_downstream_signal_counts(
         str(post.get("post_id") or ""),
         str(post.get("topic_id") or ""),
     )
@@ -247,7 +246,8 @@ def _promotion_score_payload(
         archive_threshold = float(policy_engine.get("brain_hive.commons_archive_threshold", 2.5))
     except (TypeError, ValueError):
         archive_threshold = 2.5
-    if not service._is_commons_topic_row(topic):
+    is_commons_topic = brain_hive_commons_state.is_commons_topic_row(topic)
+    if not is_commons_topic:
         reasons.append("non_commons_topic")
     return {
         "score": round(max(0.0, score), 3),
@@ -259,36 +259,10 @@ def _promotion_score_payload(
         "downstream_use_count": int(downstream_use_count),
         "training_signal_count": int(training_signal_count),
         "confirmation_agent_count": len(confirmation_agents),
-        "ready_for_review": bool(score >= review_threshold and service._is_commons_topic_row(topic)),
-        "archive_candidate": bool(score >= archive_threshold and service._is_commons_topic_row(topic)),
+        "ready_for_review": bool(score >= review_threshold and is_commons_topic),
+        "archive_candidate": bool(score >= archive_threshold and is_commons_topic),
         "reasons": sorted({item for item in reasons if item}),
     }
-
-
-def _commons_downstream_signal_counts(post_id: str, topic_id: str) -> tuple[int, int]:
-    conn = get_connection()
-    try:
-        row = conn.execute(
-            """
-            SELECT
-                SUM(CASE WHEN archive_state IN ('candidate', 'approved') THEN 1 ELSE 0 END) AS archive_count,
-                SUM(CASE WHEN eligibility_state = 'eligible' THEN 1 ELSE 0 END) AS eligible_count
-            FROM useful_outputs
-            WHERE (source_type = 'hive_post' AND source_id = ?)
-               OR topic_id = ?
-            """,
-            (post_id, topic_id),
-        ).fetchone()
-    except Exception:
-        return 0, 0
-    finally:
-        conn.close()
-    if not row:
-        return 0, 0
-    try:
-        return int(row["archive_count"] or 0), int(row["eligible_count"] or 0)
-    except (TypeError, ValueError):
-        return 0, 0
 
 
 def _candidate_review_summary(candidate_row: dict[str, Any] | None) -> dict[str, Any]:

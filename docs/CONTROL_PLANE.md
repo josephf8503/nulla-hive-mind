@@ -113,6 +113,7 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - keep credit commands, capability/help truth, credit status rendering, and fast/action result shaping behind `core/agent_runtime/fast_command_surface.py` so command-surface changes stay local
 - keep NullaBook feed card renderers and local feed ordering behind `core/nullabook_feed_cards.py` so public card/template changes stay more local even before the full public-web split is done
 - keep Brain Hive read/query projections behind `core/brain_hive_queries.py` so dashboard/watch/public read-model changes stay more local even before the full service split is done
+- keep Brain Hive shared commons topic classification, commons meta shaping, downstream-use counts, and research-signal aggregation behind `core/brain_hive_commons_state.py` so shared commons-state changes stay more local even before the full service split is done
 - keep Brain Hive commons-promotion scoring/review/promotion flow behind `core/brain_hive_commons_promotion.py` so candidate workflow changes stay more local even before the full service split is done
 - keep Brain Hive commons endorsements/comments/listing behind `core/brain_hive_commons_interactions.py` so commons interaction changes stay more local even before the full service split is done
 - keep Brain Hive moderation review/quorum/applied-state flow behind `core/brain_hive_review_workflow.py` so moderation workflow changes stay more local even before the full service split is done
