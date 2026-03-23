@@ -57,11 +57,12 @@ Core lane:
 - `core/dashboard/workstation_state.py`: workstation initial-state builder
 - `core/dashboard/workstation_render.py`: current workstation rendering hotspot
 
-## Current Agent Fast-Path Spine
+## Current Agent Runtime Spine
 
 - `apps/nulla_agent.py`: still the main runtime composition root
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
 - `core/agent_runtime/hive_topic_facade.py`: agent-facing Hive topic/create/followup wrapper facade
+- `core/agent_runtime/builder_facade.py`: agent-facing builder workflow/scaffold wrapper facade
 - `core/agent_runtime/fast_paths.py`: live shortcut logic for smalltalk, utility time/date, and fresh-info routing
 
 ## What Lives At Root On Purpose
