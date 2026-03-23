@@ -63,6 +63,7 @@ Core lane:
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
 - `core/agent_runtime/hive_topic_facade.py`: agent-facing Hive topic/create/followup wrapper facade
 - `core/agent_runtime/builder_facade.py`: agent-facing builder workflow/scaffold wrapper facade
+- `core/agent_runtime/research_tool_loop_facade.py`: agent-facing research/live-web/tool-loop wrapper facade
 - `core/agent_runtime/fast_paths.py`: live shortcut logic for smalltalk, utility time/date, and fresh-info routing
 
 ## What Lives At Root On Purpose

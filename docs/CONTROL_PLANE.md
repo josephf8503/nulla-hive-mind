@@ -103,6 +103,7 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - keep chat/date/live-info fast-path wrappers behind `core/agent_runtime/fast_path_facade.py` and the real shortcut logic inside `core/agent_runtime/fast_paths.py`
 - keep Hive topic/create/followup wrappers behind `core/agent_runtime/hive_topic_facade.py` and the real topic workflow logic inside `core/agent_runtime/hive_topics.py` and `core/agent_runtime/hive_followups.py`
 - keep builder workflow/scaffold wrappers behind `core/agent_runtime/builder_facade.py` and the real builder logic inside `core/agent_runtime/builder/`
+- keep research/live-web/tool-loop wrappers behind `core/agent_runtime/research_tool_loop_facade.py` and the real tool execution contracts behind `core/tool_intent_executor.py`
 - keep dashboard routing behind `core.brain_hive_dashboard` and `core/dashboard/render.py`, with workstation state/render isolated in `core/dashboard/workstation_state.py` and `core/dashboard/workstation_render.py`
 - keep public-hive auth/bootstrap behind `core.public_hive_bridge` facades and `core/public_hive/auth.py` internals
 - keep feature/store/network-specific logic behind package boundaries

@@ -1,6 +1,6 @@
 # NULLA Platform Refactor Plan
 
-Verified against `main` on 2026-03-22.
+Verified against `main` on 2026-03-23.
 
 This is not a rewrite fantasy. It is the current extraction plan for turning the repo into a sharper platform without breaking the working alpha lanes.
 
@@ -28,7 +28,7 @@ The biggest files on the current trunk are:
 | File | Lines | Current reality |
 |------|-------|-----------------|
 | `core/dashboard/workstation_render.py` | 4646 | the workstation dashboard document/rendering slab is now the biggest remaining hotspot |
-| `apps/nulla_agent.py` | 4313 | still the main runtime composition root and a top remaining blast-radius center |
+| `apps/nulla_agent.py` | 3486 | still the main runtime composition root and a top remaining blast-radius center |
 | `core/agent_runtime/hive_topics.py` | 2038 | Hive topic creation/update/delete logic is still too concentrated |
 | `core/nullabook_feed_page.py` | 1627 | public worklog/feed surface is still too broad |
 | `core/brain_hive_service.py` | 1353 | service boundary exists, but it still owns too much dashboard-facing behavior |
@@ -253,11 +253,12 @@ pytest -q \
 Status on trunk:
 
 - this phase is actively in progress, not hypothetical
-- `apps/nulla_agent.py` is down to 4313 lines from the older 11k+ state
+- `apps/nulla_agent.py` is down to 3486 lines from the older 11k+ state
 - extracted runtime seams now include checkpoints, fast paths, response shaping, presence, builder support/controller, NullaBook, memory runtime, orchestrator helpers, Hive runtime/topics/followups, and turn dispatch/frontdoor/reasoning
 - fast-path wrapper glue now lives behind `core/agent_runtime/fast_path_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - Hive topic/create/followup wrapper glue now also lives behind `core/agent_runtime/hive_topic_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - builder workflow/scaffold wrapper glue now also lives behind `core/agent_runtime/builder_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
+- research/live-web/tool-loop wrapper glue now also lives behind `core/agent_runtime/research_tool_loop_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - the file is still too large, but the old doc numbers are no longer true
 
 Target packages:
