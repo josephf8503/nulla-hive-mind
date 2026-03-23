@@ -52,6 +52,7 @@ class RepoHygieneCheckTests(unittest.TestCase):
             "CONTRIBUTING.md",
             "AGENT_HANDOVER.md",
             "docs/README.md",
+            "docs/PLATFORM_REFACTOR_PLAN.md",
             "docs/STATUS.md",
             "docs/PROOF_PATH.md",
             "docs/SYSTEM_SPINE.md",

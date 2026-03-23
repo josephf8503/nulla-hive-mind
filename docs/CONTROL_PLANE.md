@@ -83,11 +83,11 @@ This surface is meant to answer:
 These are real risks and should be split before wider expansion:
 
 - `apps/nulla_agent.py`
-- `core/brain_hive_dashboard.py`
-- `core/tool_intent_executor.py`
+- `core/dashboard/render.py`
+- `core/agent_runtime/hive_topics.py`
+- `core/agent_runtime/fast_paths.py`
 - `core/public_hive_bridge.py`
-- `apps/nulla_daemon.py`
-- `apps/meet_and_greet_server.py`
+- `core/nullabook_feed_page.py`
 
 They currently mix too many responsibilities and force wide retest surfaces after relatively small changes.
 
@@ -96,12 +96,13 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - keep entrypoints thin
 - route startup through `RuntimeContext` + `bootstrap_runtime_mode(...)`
 - keep tool metadata behind explicit contracts
+- keep memory behind the `core.persistent_memory` facade and `core/memory/` internals
 - keep feature/store/network-specific logic behind package boundaries
 - prefer adapters/facades over direct rewrites of giant mixed modules
 
 ## What Still Needs Work
 
-- split the largest mixed-responsibility modules
+- split the largest mixed-responsibility runtime and dashboard modules
 - reduce direct storage/bootstrap calls outside the canonical startup path
 - make orchestration/task lifecycle more explicit and shared across surfaces
 - keep public/operator/web logic from bleeding into the runtime core

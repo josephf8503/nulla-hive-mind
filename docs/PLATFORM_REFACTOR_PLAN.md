@@ -27,24 +27,24 @@ The biggest files on the current trunk are:
 
 | File | Lines | Current reality |
 |------|-------|-----------------|
-| `core/brain_hive_dashboard.py` | 6262 | still the biggest unsplit public/runtime mixed surface |
-| `apps/nulla_agent.py` | 5632 | heavily reduced, still too large, still the main runtime monolith |
-| `core/tool_intent_executor.py` | 1654 | smaller, but still a hot execution choke point |
-| `apps/nulla_daemon.py` | 1589 | still unsplit and still high blast radius |
-| `core/public_hive_bridge.py` | 1490 | reduced, but still too mixed |
-| `apps/meet_and_greet_server.py` | 1449 | still mixes route/auth/write concerns |
-| `apps/nulla_api_server.py` | 970 | still broad for an entry surface |
-| `core/control_plane_workspace.py` | 558 | materially reduced, no longer top-tier risk |
-| `core/local_operator_actions.py` | 392 | materially reduced, mostly facade now |
-| `apps/brain_hive_watch_server.py` | 243 | already thin, no longer a real monolith |
+| `apps/nulla_agent.py` | 5632 | still the main runtime monolith and the largest remaining blast-radius center |
+| `core/dashboard/render.py` | 5012 | dashboard logic moved out of the old facade, but the rendering slab is now the real hotspot |
+| `core/agent_runtime/hive_topics.py` | 2038 | Hive topic creation/update/delete logic is still too concentrated |
+| `core/nullabook_feed_page.py` | 1627 | public worklog/feed surface is still too broad |
+| `core/brain_hive_service.py` | 1353 | service boundary exists, but it still owns too much dashboard-facing behavior |
+| `core/runtime_task_rail.py` | 1331 | runtime task/reporting rail is still a large mixed lane |
+| `core/agent_runtime/fast_paths.py` | 1314 | too many chat/runtime shortcuts still live together |
+| `core/public_hive_bridge.py` | 786 | much smaller, but still the main public-hive facade and still too mixed |
+| `core/persistent_memory.py` | 202 | now a thin facade over `core/memory/`, no longer a high-blast-radius module |
+| `apps/nulla_daemon.py` | 420 | now a thin facade over `core/daemon/`, no longer a top-tier monolith |
 
 These are the current blast-radius centers. Split these before inventing more layers.
 
 ## Current Phase Status
 
-- completed enough to stop pretending they are still untouched: `core/local_operator_actions.py`, `core/control_plane_workspace.py`, `apps/brain_hive_watch_server.py`
-- materially improved but still active: `core/tool_intent_executor.py`, `core/public_hive_bridge.py`, `apps/nulla_agent.py`
-- still the next serious targets: `core/brain_hive_dashboard.py`, `apps/nulla_daemon.py`, `apps/nulla_api_server.py`, `apps/meet_and_greet_server.py`
+- completed enough to stop pretending they are still untouched: `core/local_operator_actions.py`, `core/control_plane_workspace.py`, `apps/brain_hive_watch_server.py`, `apps/nulla_daemon.py`, `apps/nulla_api_server.py`, `apps/meet_and_greet_server.py`, `core/brain_hive_dashboard.py`, `core/persistent_memory.py`
+- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/render.py`, `core/agent_runtime/hive_topics.py`, `core/agent_runtime/fast_paths.py`
+- still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/render.py`, `core/public_hive_bridge.py`, `core/agent_runtime/hive_topics.py`, `core/agent_runtime/fast_paths.py`
 
 ## Keep / Split / Rewrite / Quarantine
 
@@ -60,16 +60,17 @@ Split next:
 
 - `core/brain_hive_dashboard.py`
 - `apps/nulla_agent.py`
-- `apps/nulla_daemon.py`
-- `apps/meet_and_greet_server.py`
-- `apps/nulla_api_server.py`
+- `core/dashboard/render.py`
+- `core/agent_runtime/hive_topics.py`
+- `core/agent_runtime/fast_paths.py`
 - `core/tool_intent_executor.py`
 - `core/public_hive_bridge.py`
 
 Rewrite selectively:
 
-- `apps/nulla_api_server.py` into route modules first, ASGI later
-- `apps/meet_and_greet_server.py` into route/auth/quota/TLS modules first
+- `apps/nulla_agent.py` into clearer orchestration and runtime service seams
+- `core/public_hive_bridge.py` into explicit public-hive workflow and policy services
+- `core/dashboard/render.py` into query/view-model/render slices instead of one presentation slab
 
 Quarantine in narrative and architecture priority:
 
@@ -82,9 +83,9 @@ Quarantine in narrative and architecture priority:
 
 Status on trunk:
 
-- `core/execution/__init__.py`, `constants.py`, `models.py`, and `planner.py` are already live
-- `core/tool_intent_executor.py` is down to 1654 lines
-- the split is not complete until dispatcher/render/policy boundaries are extracted or proven unnecessary
+- `core/execution/` is already live with planner, models, receipts, web tools, and Hive tools
+- `core/tool_intent_executor.py` is down to 446 lines
+- this is no longer a top-tier monolith; keep the facade thin and stop letting new execution concerns leak back in
 
 Create:
 
@@ -186,9 +187,10 @@ pytest -q \
 
 Status on trunk:
 
-- `core/public_hive/__init__.py`, `bootstrap.py`, `client.py`, `config.py`, and `truth.py` are already live
-- `core/public_hive_bridge.py` is down to 1490 lines
-- topic/profile/publish/privacy service extraction is still incomplete
+- `core/public_hive/__init__.py`, `bootstrap.py`, `client.py`, `config.py`, `truth.py`, `topic_writes.py`, `publication.py`, and `moderation.py` are already live
+- `core/public_hive_bridge.py` is down to 786 lines
+- `core/public_hive/writes.py` is down to a 37-line facade
+- topic/profile/read/bootstrap/privacy boundaries are still the remaining cleanup surface
 
 Create:
 
@@ -201,6 +203,9 @@ Create:
 - `core/public_hive/publish_service.py`
 - `core/public_hive/profile_service.py`
 - `core/public_hive/bootstrap.py`
+- `core/public_hive/topic_writes.py`
+- `core/public_hive/publication.py`
+- `core/public_hive/moderation.py`
 
 Move:
 
@@ -215,6 +220,7 @@ Hard boundary:
 - all outbound public writes must flow through `core/public_hive/privacy.py`
 
 Keep `core/public_hive_bridge.py` as the stable facade for one release.
+Keep `core/public_hive/writes.py` as the stable write-facade for one release.
 
 Targeted regression:
 
@@ -257,6 +263,12 @@ Target packages:
 - `core/execution/`
 - `core/public_hive/`
 
+What is already true on trunk:
+
+- `core/persistent_memory.py` is down to 202 lines and now acts as the stable facade over `core/memory/files.py`, `policies.py`, `entries.py`, and `learning.py`
+- API, meet, daemon, and watch entrypoints are already thin facades or ASGI-backed service roots
+- the remaining work is concentrated inside the agent runtime and the large dashboard/public-surface modules, not the old entry shells
+
 Move out of `apps/nulla_agent.py`:
 
 - bootstrap wiring into `core/runtime/bootstrap.py`
@@ -294,15 +306,16 @@ pytest -q \
 
 Status on trunk:
 
-- `apps/brain_hive_watch_server.py` is already thin at 243 lines and backed by `core/web/watch/`
-- `core/brain_hive_dashboard.py` remains the biggest unsplit public/runtime file
-- `apps/nulla_api_server.py` and `apps/meet_and_greet_server.py` are still open
+- `apps/brain_hive_watch_server.py` is already thin and backed by `core/web/watch/`
+- `apps/nulla_api_server.py` and `apps/meet_and_greet_server.py` are already thin facades
+- `core/brain_hive_dashboard.py` is down to 156 lines and now fronts `core/dashboard/`
+- the real dashboard hotspot is now `core/dashboard/render.py` at 5012 lines
 
 Split next:
 
-- `core/brain_hive_dashboard.py` -> `core/dashboard/queries.py`, `view_models.py`, `templates.py`, `render.py`
+- `core/dashboard/render.py` -> `queries.py`, `view_models.py`, `templates.py`, `render_sections.py`
 - `apps/brain_hive_watch_server.py` -> `core/web/watch/routes_public.py`, `routes_topic.py`, `cache.py`, `tls.py`, `responses.py`
-- `apps/nulla_api_server.py` -> `core/web/api/routes_runtime.py`, `routes_tools.py`, `routes_hive.py`, `routes_health.py`, `auth.py`, `streaming.py`, `responses.py`
+- keep `apps/nulla_api_server.py` and `apps/meet_and_greet_server.py` thin; do not re-bloat the facades
 
 Targeted regression:
 
