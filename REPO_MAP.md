@@ -62,6 +62,12 @@ Core lane:
 - `core/dashboard/workstation_client.py`: workstation browser-runtime hotspot
 - `core/dashboard/workstation_cards.py`: workstation card/fold render helpers
 
+## Current Brain Hive Service Spine
+
+- `core/brain_hive_service.py`: stable Brain Hive service facade that still owns the remaining mutation/moderation-heavy surface
+- `core/brain_hive_queries.py`: dashboard/watch/public read-model and query projection helpers split out of the service root
+- `core/brain_hive_commons_promotion.py`: commons-candidate scoring, review, promotion, and promoted-topic shaping split out of the service root
+
 ## Current Public Web Spine
 
 - `core/public_site_shell.py`: shared public shell, nav, and base styles
