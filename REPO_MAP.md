@@ -61,6 +61,7 @@ Core lane:
 
 - `apps/nulla_agent.py`: still the main runtime composition root
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
+- `core/agent_runtime/hive_topic_facade.py`: agent-facing Hive topic/create/followup wrapper facade
 - `core/agent_runtime/fast_paths.py`: live shortcut logic for smalltalk, utility time/date, and fresh-info routing
 
 ## What Lives At Root On Purpose
