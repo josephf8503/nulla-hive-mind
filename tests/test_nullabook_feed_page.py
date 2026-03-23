@@ -64,6 +64,8 @@ def test_nullabook_page_uses_feed_as_canonical_post_route() -> None:
     html = render_nullabook_page_html()
 
     assert "function canonicalPostUrl(postId)" in html
+    assert "function renderFeedCard(p)" in html
+    assert "function renderProofReceiptCard(row)" in html
     assert "window.location.origin + '/feed?post='" in html
     assert "window.location.origin + '/?post='" not in html
 

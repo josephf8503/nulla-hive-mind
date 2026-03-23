@@ -31,7 +31,8 @@ The biggest files on the current trunk are:
 | `core/dashboard/workstation_client.py` | 2383 | the workstation browser runtime is now isolated, and the card/fold renderer slab is now split out, but it is still a large dashboard hotspot |
 | `core/dashboard/workstation_cards.py` | 295 | workstation card/fold render helpers are now isolated behind a dedicated browser-render helper lane |
 | `core/dashboard/workstation_render.py` | 1983 | the workstation document shell is much smaller, but still owns a broad HTML/panel composition slab |
-| `core/nullabook_feed_page.py` | 1627 | public worklog/feed surface is still too broad |
+| `core/nullabook_feed_page.py` | 1341 | public worklog/feed route shell is smaller after the card-renderer extraction, but it still owns a broad template/query surface |
+| `core/nullabook_feed_cards.py` | 292 | feed/task/agent/proof card render helpers and feed ordering are now isolated, but still coupled to page globals |
 | `core/agent_runtime/hive_topic_create.py` | 477 | Hive topic create/publish workflow is now much smaller after the public-copy, pending-state, and drafting extractions; it is no longer a top-tier hotspot |
 | `core/agent_runtime/hive_topic_drafting.py` | 405 | draft parsing, original-draft recovery, title cleanup, and create-vs-drafting detection are now isolated behind a dedicated drafting lane |
 | `core/agent_runtime/hive_topic_pending.py` | 412 | pending preview state, confirmation parsing, history recovery, and preview formatting are now isolated behind a dedicated interaction-state lane |
@@ -52,7 +53,7 @@ These are the current blast-radius centers. Split these before inventing more la
 ## Current Phase Status
 
 - completed enough to stop pretending they are still untouched: `core/local_operator_actions.py`, `core/control_plane_workspace.py`, `apps/brain_hive_watch_server.py`, `apps/nulla_daemon.py`, `apps/nulla_api_server.py`, `apps/meet_and_greet_server.py`, `core/brain_hive_dashboard.py`, `core/persistent_memory.py`
-- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`, `core/agent_runtime/fast_live_info.py`
+- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`, `core/agent_runtime/fast_live_info.py`
 - still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/brain_hive_service.py`, `core/runtime_task_rail.py`, `core/public_hive_bridge.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`
 - startup/provider truth is now also centralized behind `core/runtime_backbone.py` so operator/chat surfaces stop rediscovering hardware tier and provider audit state independently
 - provider-role routing now also lives behind `core/provider_routing.py`, and both the helper/teacher lane and the main model execution router now honor bounded drone/queen provider roles without broad caller rewiring
@@ -66,6 +67,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - draft parsing, original-draft recovery, title cleanup, auto-start detection, and create-vs-drafting request detection now also live behind `core/agent_runtime/hive_topic_drafting.py`, so `core/agent_runtime/hive_topic_create.py` no longer owns that parsing slab directly
 - Hive research/status continuation logic now also lives behind `core/agent_runtime/hive_research_followup.py`, leaving `core/agent_runtime/hive_followups.py` as the smaller frontdoor/review/cleanup lane
 - workstation card/fold rendering, post-card shaping, and trading-evidence summary helpers now also live behind `core/dashboard/workstation_cards.py`, so `core/dashboard/workstation_client.py` no longer owns that render-helper slab directly
+- feed/task/agent/proof card render helpers and local feed ordering now also live behind `core/nullabook_feed_cards.py`, so `core/nullabook_feed_page.py` no longer owns that public-card slab directly
 
 ## Keep / Split / Rewrite / Quarantine
 
@@ -105,6 +107,7 @@ Rewrite selectively:
 - keep public-safe copy policy inside `core/agent_runtime/hive_topic_public_copy.py`
 - `core/agent_runtime/hive_research_followup.py` into followup selection, active-task resume, and status-rendering services instead of one continuation slab
 - `core/nullabook_feed_page.py` into feed query, card shaping, and route/render services instead of one public-surface slab
+- keep card renderers and local feed ordering inside `core/nullabook_feed_cards.py` until the next public-web cut removes the remaining page-global coupling cleanly
 - `core/brain_hive_service.py` into service contracts, read models, and workflow adapters instead of one dashboard-facing service slab
 - `core/runtime_task_rail.py` into task models, event shaping, and report rendering instead of one mixed task/report lane
 

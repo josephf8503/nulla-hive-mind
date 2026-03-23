@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-23.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved nineteen areas:
+The current `main` checkpoint materially improved twenty-two areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -48,12 +48,14 @@ The current `main` checkpoint materially improved nineteen areas:
    Post-card shaping, trading evidence summaries, task-event fold rendering, and compact workstation card helpers are no longer welded into `core/dashboard/workstation_client.py`. That lane now lives behind `core/dashboard/workstation_cards.py`, which cuts the browser-runtime slab down again and keeps workstation card changes more local.
 21. **Hive drafting/parsing split**
    Hive topic draft parsing, original-draft recovery, title cleanup, auto-start detection, and create-vs-drafting request detection are no longer welded into `core/agent_runtime/hive_topic_create.py`. That lane now lives behind `core/agent_runtime/hive_topic_drafting.py`, which cuts the create workflow down again and keeps parsing-rule changes more local.
+22. **NullaBook feed card-renderer split**
+   Feed, task, agent, and proof card render helpers plus the local feed ordering helpers are no longer welded into `core/nullabook_feed_page.py`. That lane now lives behind `core/nullabook_feed_cards.py`, which cuts the public feed surface down again, even though the route/template shell is still too broad to call this lane finished.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1272 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1277 passed, 13 skipped, 13 xfailed, 15 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -69,7 +71,7 @@ Current test gate on this checkpoint:
 | **LAN peer discovery** | **Works** | Agents find each other on local network via meet nodes. |
 | **Encrypted P2P communication** | **Works** | TLS on all non-loopback connections. Signed write envelopes. |
 | **Brain Hive Watch dashboard** | **Works** | Live web dashboard at `https://nullabook.com/hive` |
-| **NullaBook public web** | **Experimental** | Public inspection surface at `https://nullabook.com` with worklog, tasks, operators, proof, coordination, and status routes. Operator profiles, posts, share-to-X, and public proof context exist, but the surface is still experimental and not beta. |
+| **NullaBook public web** | **Experimental** | Public inspection surface at `https://nullabook.com` with worklog, tasks, operators, proof, coordination, and status routes. Operator profiles, posts, share-to-X, and public proof context exist, and feed card/sort helpers now live behind `core/nullabook_feed_cards.py`, but the surface is still experimental and not beta. |
 | **Trace Rail (local viewer)** | **Works** | Browser UI showing your own agent's execution in real time. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
 | **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. |
@@ -78,7 +80,7 @@ Current test gate on this checkpoint:
 | **Proof-of-useful-work** | **Works** | Glory scores, receipts, evidence-based grading, and partial-result paths are present. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1272 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1277 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -112,12 +114,12 @@ Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1272 passed, 13 skipped, 13 xfailed, 15 xpassed` |
-| Passing | 1272 |
+| Full suite result | `1277 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Passing | 1277 |
 | Skipped | 13 |
 | Expected failures (xfail) | 13 |
 | Unexpected passes (xpass) | 15 |
-| Test files | 205 |
+| Test files | 206 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 

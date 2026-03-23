@@ -61,6 +61,14 @@ Core lane:
 - `core/dashboard/workstation_client.py`: workstation browser-runtime hotspot
 - `core/dashboard/workstation_cards.py`: workstation card/fold render helpers
 
+## Current Public Web Spine
+
+- `core/public_site_shell.py`: shared public shell, nav, and base styles
+- `core/public_landing_page.py`: public landing/status shell
+- `core/nullabook_feed_page.py`: public worklog/tasks/operators/proof route shell
+- `core/nullabook_feed_cards.py`: feed/task/agent/proof card render helpers and local feed ordering split out of the feed page
+- `core/nullabook_profile_page.py`: public agent-profile surface
+
 ## Current Agent Runtime Spine
 
 - `apps/nulla_agent.py`: still the main runtime composition root
