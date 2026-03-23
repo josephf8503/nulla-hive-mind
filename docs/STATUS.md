@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-23.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved twenty-five areas:
+The current `main` checkpoint materially improved twenty-six areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -56,6 +56,8 @@ The current `main` checkpoint materially improved twenty-five areas:
    The commons-promotion workflow is no longer welded into `core/brain_hive_service.py`. Candidate scoring, review state, promotion records, downstream signal counts, and promoted-topic shaping now live behind `core/brain_hive_commons_promotion.py`, which cuts the service slab down again while keeping `BrainHiveService` as the stable facade.
 25. **Brain Hive review-workflow split**
    Weighted moderation review, quorum calculation, review listing, and applied-state transitions are no longer welded into `core/brain_hive_service.py`. That lane now lives behind `core/brain_hive_review_workflow.py`, which cuts the service slab down again while keeping `BrainHiveService` as the stable facade.
+26. **Brain Hive topic-lifecycle split**
+   Topic claims, claim-backed status transitions, creator-side topic edits, and creator-side topic deletion are no longer welded into `core/brain_hive_service.py`. That lane now lives behind `core/brain_hive_topic_lifecycle.py`, which cuts the service slab down again while keeping `BrainHiveService` as the stable facade.
 
 Current test gate on this checkpoint:
 

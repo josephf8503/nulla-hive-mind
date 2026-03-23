@@ -37,10 +37,11 @@ The biggest files on the current trunk are:
 | `core/agent_runtime/hive_topic_drafting.py` | 405 | draft parsing, original-draft recovery, title cleanup, and create-vs-drafting detection are now isolated behind a dedicated drafting lane |
 | `core/agent_runtime/hive_topic_pending.py` | 412 | pending preview state, confirmation parsing, history recovery, and preview formatting are now isolated behind a dedicated interaction-state lane |
 | `core/agent_runtime/hive_topic_public_copy.py` | 359 | public-safe copy shaping, transcript rejection, and tag normalization are now isolated behind a dedicated policy/helper lane |
-| `core/brain_hive_service.py` | 693 | service boundary is materially thinner after the read/query, commons-promotion, and review-workflow extractions, but topic/post mutation lifecycle logic is still too mixed |
+| `core/brain_hive_service.py` | 554 | service boundary is materially thinner after the read/query, commons-promotion, review-workflow, and topic-lifecycle extractions, but topic/post creation plus commons interaction logic are still too mixed |
 | `core/brain_hive_queries.py` | 442 | dashboard/watch/public read models and projection helpers are now isolated, but still coupled to the service facade |
 | `core/brain_hive_commons_promotion.py` | 387 | commons-candidate scoring, review, promotion, and promoted-topic shaping are now isolated behind a dedicated workflow lane |
 | `core/brain_hive_review_workflow.py` | 155 | weighted review, quorum, and applied-state transitions are now isolated behind a dedicated moderation workflow lane |
+| `core/brain_hive_topic_lifecycle.py` | 187 | topic claim, claim-backed status transition, creator edit, and creator delete logic are now isolated behind a dedicated lifecycle lane |
 | `core/runtime_task_rail.py` | 1331 | runtime task/reporting rail is still a large mixed lane |
 | `core/agent_runtime/fast_paths.py` | 785 | the utility/date/smalltalk shortcut lane is now much smaller after the live-info extraction, but it still owns mixed shortcut glue |
 | `core/public_hive_bridge.py` | 774 | much smaller, but still the main public-hive facade and still too mixed |
@@ -74,6 +75,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - Brain Hive read/query projections now also live behind `core/brain_hive_queries.py`, so `core/brain_hive_service.py` no longer owns that dashboard/watch/public read-model slab directly
 - Brain Hive commons-promotion workflow now also lives behind `core/brain_hive_commons_promotion.py`, so `core/brain_hive_service.py` no longer owns that candidate scoring/review/promotion slab directly
 - Brain Hive review/quorum/applied-state flow now also lives behind `core/brain_hive_review_workflow.py`, so `core/brain_hive_service.py` no longer owns that moderation workflow slab directly
+- Brain Hive topic claim/update/delete lifecycle now also lives behind `core/brain_hive_topic_lifecycle.py`, so `core/brain_hive_service.py` no longer owns that mutation workflow slab directly
 
 ## Keep / Split / Rewrite / Quarantine
 
@@ -115,7 +117,7 @@ Rewrite selectively:
 - `core/nullabook_feed_page.py` into feed query, card shaping, and route/render services instead of one public-surface slab
 - keep card renderers and local feed ordering inside `core/nullabook_feed_cards.py` until the next public-web cut removes the remaining page-global coupling cleanly
 - `core/brain_hive_service.py` into service contracts, read models, and workflow adapters instead of one dashboard-facing service slab
-- keep read/query projections inside `core/brain_hive_queries.py`, keep commons-promotion workflow inside `core/brain_hive_commons_promotion.py`, keep moderation review/quorum/apply flow inside `core/brain_hive_review_workflow.py`, and keep pushing `core/brain_hive_service.py` toward mutation/lifecycle-specific slabs instead of one dashboard-facing service block
+- keep read/query projections inside `core/brain_hive_queries.py`, keep commons-promotion workflow inside `core/brain_hive_commons_promotion.py`, keep moderation review/quorum/apply flow inside `core/brain_hive_review_workflow.py`, keep topic claim/update/delete lifecycle inside `core/brain_hive_topic_lifecycle.py`, and keep pushing `core/brain_hive_service.py` toward create/post/commons-specific slabs instead of one dashboard-facing service block
 - `core/runtime_task_rail.py` into task models, event shaping, and report rendering instead of one mixed task/report lane
 
 Quarantine in narrative and architecture priority:

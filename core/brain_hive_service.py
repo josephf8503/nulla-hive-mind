@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from core import brain_hive_commons_promotion, brain_hive_queries, brain_hive_review_workflow
+from core import (
+    brain_hive_commons_promotion,
+    brain_hive_queries,
+    brain_hive_review_workflow,
+    brain_hive_topic_lifecycle,
+)
 from core.agent_name_registry import get_agent_name
 from core.brain_hive_guard import guard_post_submission, guard_topic_submission
 from core.brain_hive_models import (
@@ -33,7 +38,7 @@ from core.brain_hive_models import (
     HiveTopicUpdateRequest,
 )
 from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
-from core.privacy_guard import assert_public_text_safe, assert_public_value_safe, text_privacy_risks
+from core.privacy_guard import assert_public_text_safe, assert_public_value_safe
 from core.runtime_continuity import load_hive_idempotent_result, store_hive_idempotent_result
 from core.scoreboard_engine import get_peer_scoreboard
 from storage.brain_hive_moderation_store import (
@@ -41,28 +46,17 @@ from storage.brain_hive_moderation_store import (
     apply_topic_moderation,
 )
 from storage.brain_hive_store import (
-    count_active_topic_claims,
-    count_topic_posts,
     create_post,
     create_post_comment,
     create_topic,
     get_topic,
-    get_topic_claim,
     list_claim_links,
     list_post_comments,
     list_post_endorsements,
     list_posts,
-    list_topic_claims,
     list_topics,
     upsert_claim_link,
     upsert_post_endorsement,
-    upsert_topic_claim,
-)
-from storage.brain_hive_store import (
-    update_topic as store_update_topic,
-)
-from storage.brain_hive_store import (
-    update_topic_status as store_update_topic_status,
 )
 from storage.db import get_connection
 
@@ -273,147 +267,22 @@ class BrainHiveService:
         return brain_hive_commons_promotion.promote_commons_candidate(self, request)
 
     def claim_topic(self, request: HiveTopicClaimRequest) -> HiveTopicClaimRecord:
-        cached = self._cached_result(request.idempotency_key, HiveTopicClaimRecord)
-        if cached is not None:
-            return cached
-        topic = self.get_topic(request.topic_id, include_flagged=True)
-        if self._visibility_requires_public_guard(topic.visibility) and request.note is not None:
-            assert_public_text_safe(request.note, field_name="Hive claim note")
-        claim_id = upsert_topic_claim(
-            topic_id=request.topic_id,
-            agent_id=request.agent_id,
-            status=request.status,
-            note=request.note,
-            capability_tags=list(request.capability_tags),
-        )
-        topic = get_topic(request.topic_id, visible_only=False) or {}
-        if request.status == "active" and str(topic.get("status") or "").strip().lower() == "open":
-            store_update_topic_status(request.topic_id, status="researching")
-        record = self._topic_claim_record(claim_id)
-        self._store_idempotent_result(request.idempotency_key, "hive.claim_topic", record)
-        return record
+        return brain_hive_topic_lifecycle.claim_topic(self, request)
 
     def list_topic_claims(self, topic_id: str, *, active_only: bool = False, limit: int = 200) -> list[HiveTopicClaimRecord]:
-        rows = list_topic_claims(topic_id, active_only=active_only, limit=limit)
-        out: list[HiveTopicClaimRecord] = []
-        for row in rows:
-            agent_display_name, agent_claim_label = self._display_fields(str(row["agent_id"]))
-            out.append(
-                HiveTopicClaimRecord(
-                    **row,
-                    agent_display_name=agent_display_name,
-                    agent_claim_label=agent_claim_label,
-                )
-            )
-        return out
+        return brain_hive_topic_lifecycle.list_claims(self, topic_id, active_only=active_only, limit=limit)
 
     def list_recent_topic_claims_feed(self, *, limit: int = 50) -> list[dict[str, Any]]:
         return brain_hive_queries.list_recent_topic_claims_feed(self, limit=limit, topic_lookup=get_topic)
 
     def update_topic_status(self, request: HiveTopicStatusUpdateRequest) -> HiveTopicRecord:
-        cached = self._cached_result(request.idempotency_key, HiveTopicRecord)
-        if cached is not None:
-            return cached
-        topic = self.get_topic(request.topic_id, include_flagged=True)
-        status = str(request.status or "").strip().lower()
-        active_claim_count = count_active_topic_claims(topic.topic_id)
-        claim: dict[str, Any] | None = None
-        if request.claim_id:
-            claim = get_topic_claim(str(request.claim_id))
-            if not claim:
-                raise KeyError(f"Unknown topic claim: {request.claim_id}")
-            if str(claim.get("topic_id") or "") != request.topic_id:
-                raise ValueError("Topic claim does not belong to the requested topic.")
-            if str(claim.get("agent_id") or "") != request.updated_by_agent_id:
-                raise ValueError("Only the claiming agent can finalize the claim via topic status update.")
-            if str(claim.get("status") or "").strip().lower() != "active":
-                raise ValueError("Only active claims can drive Hive topic status updates.")
-            if status not in {"partial", "solved", "closed"}:
-                raise ValueError("Claim-backed Hive topic status updates only support partial, solved, or closed.")
-        else:
-            if topic.created_by_agent_id != request.updated_by_agent_id:
-                raise ValueError("Only the creating agent can update this Hive topic.")
-            if active_claim_count > 0:
-                raise ValueError("This Hive topic is already claimed, so it can't be updated now.")
-
-        store_update_topic_status(request.topic_id, status=request.status)
-        if claim is not None and status in {"solved", "closed"}:
-            if self._visibility_requires_public_guard(topic.visibility) and request.note is not None:
-                assert_public_text_safe(request.note, field_name="Hive claim note")
-            upsert_topic_claim(
-                topic_id=request.topic_id,
-                agent_id=request.updated_by_agent_id,
-                status="completed",
-                note=request.note,
-                capability_tags=list(claim.get("capability_tags") or []),
-            )
-        record = self.get_topic(topic.topic_id, include_flagged=True)
-        self._store_idempotent_result(request.idempotency_key, "hive.update_topic_status", record)
-        return record
+        return brain_hive_topic_lifecycle.update_topic_status(self, request)
 
     def update_topic(self, request: HiveTopicUpdateRequest) -> HiveTopicRecord:
-        cached = self._cached_result(request.idempotency_key, HiveTopicRecord)
-        if cached is not None:
-            return cached
-        topic = self.get_topic(request.topic_id, include_flagged=True)
-        if topic.created_by_agent_id != request.updated_by_agent_id:
-            raise ValueError("Only the creating agent can edit this Hive topic.")
-        if count_active_topic_claims(topic.topic_id) > 0:
-            raise ValueError("This Hive topic is already claimed, so it can't be edited now.")
-        if str(topic.status or "").strip().lower() != "open":
-            raise ValueError("Only open, unclaimed Hive topics can be edited.")
-
-        next_title = str(request.title or topic.title).strip()
-        next_summary = str(request.summary or topic.summary).strip()
-        next_tags = list(request.topic_tags) if request.topic_tags is not None else list(topic.topic_tags)
-        if self._visibility_requires_public_guard(topic.visibility) and text_privacy_risks(f"{next_title}\n{next_summary}"):
-            raise ValueError("Updated Hive topic still looks private.")
-        validation_request = HiveTopicCreateRequest(
-            created_by_agent_id=request.updated_by_agent_id,
-            title=next_title,
-            summary=next_summary,
-            topic_tags=next_tags,
-            status=topic.status,
-            visibility=topic.visibility,
-            evidence_mode=topic.evidence_mode,
-            linked_task_id=topic.linked_task_id,
-        )
-        moderation = moderate_topic_submission(validation_request)
-        store_update_topic(
-            topic.topic_id,
-            title=next_title,
-            summary=next_summary,
-            topic_tags=next_tags,
-        )
-        apply_topic_moderation(
-            topic_id=topic.topic_id,
-            agent_id=request.updated_by_agent_id,
-            moderation_state=moderation.state,
-            moderation_score=moderation.score,
-            reasons=moderation.reasons,
-            metadata=moderation.metadata,
-        )
-        record = self.get_topic(topic.topic_id, include_flagged=True)
-        self._store_idempotent_result(request.idempotency_key, "hive.update_topic", record)
-        return record
+        return brain_hive_topic_lifecycle.update_topic(self, request)
 
     def delete_topic(self, request: HiveTopicDeleteRequest) -> HiveTopicRecord:
-        cached = self._cached_result(request.idempotency_key, HiveTopicRecord)
-        if cached is not None:
-            return cached
-        topic = self.get_topic(request.topic_id, include_flagged=True)
-        if topic.created_by_agent_id != request.deleted_by_agent_id:
-            raise ValueError("Only the creating agent can delete this Hive topic.")
-        if count_active_topic_claims(topic.topic_id) > 0:
-            raise ValueError("This Hive topic is already claimed, so it can't be deleted now.")
-        if str(topic.status or "").strip().lower() != "open":
-            raise ValueError("Only open, unclaimed Hive topics can be deleted.")
-        if count_topic_posts(topic.topic_id) > 0:
-            raise ValueError("This Hive topic already has work attached, so it can't be deleted now.")
-        store_update_topic_status(topic.topic_id, status="closed")
-        record = self.get_topic(topic.topic_id, include_flagged=True)
-        self._store_idempotent_result(request.idempotency_key, "hive.delete_topic", record)
-        return record
+        return brain_hive_topic_lifecycle.delete_topic(self, request)
 
     def list_posts(self, topic_id: str, *, limit: int = 200, include_flagged: bool = False) -> list[HivePostRecord]:
         rows = list_posts(topic_id, limit=limit, visible_only=not include_flagged)
@@ -583,15 +452,7 @@ class BrainHiveService:
         return display_name, None
 
     def _topic_claim_record(self, claim_id: str) -> HiveTopicClaimRecord:
-        row = get_topic_claim(claim_id)
-        if not row:
-            raise KeyError(f"Unknown topic claim: {claim_id}")
-        agent_display_name, agent_claim_label = self._display_fields(str(row["agent_id"]))
-        return HiveTopicClaimRecord(
-            **row,
-            agent_display_name=agent_display_name,
-            agent_claim_label=agent_claim_label,
-        )
+        return brain_hive_topic_lifecycle._topic_claim_record(self, claim_id)
 
     def _known_agent_ids(self, *, limit: int) -> list[str]:
         return brain_hive_queries._known_agent_ids(limit=limit)
