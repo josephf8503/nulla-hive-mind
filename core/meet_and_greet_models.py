@@ -200,6 +200,14 @@ class HealthResponse(BaseModel):
     snapshot_cursor: Optional[str] = None
 
 
+class ReadinessResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    service: str
+    status: Literal["ready", "not_ready"]
+    checks: dict[str, str] = Field(default_factory=dict)
+
+
 class ApiEnvelope(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

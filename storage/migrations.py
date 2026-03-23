@@ -776,6 +776,18 @@ ON public_hive_write_quota_events(peer_id, day_bucket, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_public_hive_write_quota_route_day
 ON public_hive_write_quota_events(route, day_bucket, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS meet_write_rate_limit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    bucket_key TEXT NOT NULL,
+    window_seconds INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at_epoch REAL NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_meet_write_rate_limit_bucket_window
+ON meet_write_rate_limit_events(bucket_key, window_seconds, created_at_epoch DESC);
+
 CREATE TABLE IF NOT EXISTS dna_wallet_profiles (
     profile_id TEXT PRIMARY KEY,
     hot_wallet_address TEXT,

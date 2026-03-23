@@ -58,7 +58,7 @@ def test_compose_default_avoids_cli_restart_loops_and_has_service_healthchecks()
     assert "--input" in list(agent_two["command"])
 
     for service_name, expected_probe in {
-        "meet-eu": "/v1/health",
+        "meet-eu": "/v1/readyz",
         "agent-1": "/healthz",
         "brain-hive-watch": "/healthz",
     }.items():

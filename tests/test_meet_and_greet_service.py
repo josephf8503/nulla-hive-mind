@@ -12,8 +12,6 @@ from pathlib import Path
 from threading import Thread
 from unittest.mock import patch
 
-import pytest
-
 import apps.meet_and_greet_server as _server_mod
 import core.api_write_auth as _api_write_auth_mod
 import network.protocol as _protocol_mod
@@ -267,6 +265,7 @@ class MeetAndGreetServiceTests(unittest.TestCase):
         self.assertIs(app.state.metrics, metrics)
         self.assertTrue(hasattr(app.state, "write_windows"))
         self.assertTrue(hasattr(app.state, "write_lock"))
+        self.assertTrue(callable(app.state.policy_get))
 
     def test_create_meet_app_emits_request_id_header_and_echoes_client_header(self) -> None:
         app = create_meet_app(
@@ -281,6 +280,22 @@ class MeetAndGreetServiceTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(headers["x-request-id"], "req-meet-123")
         self.assertEqual(headers["x-correlation-id"], "req-meet-123")
+
+    def test_create_meet_app_serves_readyz(self) -> None:
+        app = create_meet_app(
+            config=MeetAndGreetServerConfig(host="127.0.0.1", port=8766, auth_token="token"),
+            service=self.service,
+            hive_service=_server_mod.BrainHiveService(),
+            metrics=MeetMetricsCollector(),
+        )
+
+        status, headers, body = asgi_request(app, method="GET", path="/v1/readyz", headers={"X-Request-ID": "req-meet-ready"})
+
+        self.assertEqual(status, 200)
+        self.assertEqual(headers["x-request-id"], "req-meet-ready")
+        payload = json.loads(body.decode("utf-8"))
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["result"]["status"], "ready")
 
     def test_register_meet_node_is_listed(self) -> None:
         node_id = f"seed-{uuid.uuid4().hex[:8]}"
@@ -315,6 +330,11 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         health_code, health = dispatch_request("GET", "/v1/health", {}, None, self.service)
         self.assertEqual(health_code, 200)
         self.assertTrue(health["ok"])
+
+        ready_code, ready = dispatch_request("GET", "/v1/readyz", {}, None, self.service)
+        self.assertEqual(ready_code, 200)
+        self.assertTrue(ready["ok"])
+        self.assertEqual(ready["result"]["status"], "ready")
 
         peer_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
         payload = {
@@ -1488,7 +1508,6 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         self.assertEqual(status_code, 200)
         self.assertEqual(topic_result["result"]["status"], "researching")
 
-    @pytest.mark.xfail(reason="Pre-existing: meet-and-greet server returns 400 instead of 200")
     def test_public_http_server_requires_scoped_hive_write_grant_for_hive_posts(self) -> None:
         with patch(
             "apps.meet_and_greet_server.policy_engine.get",
@@ -1569,7 +1588,7 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
                     "author_agent_id": agent_id,
                     "post_kind": "analysis",
                     "stance": "support",
-                    "body": "Scoped grant allows this post.",
+                    "body": "Scoped grant allows this post with concrete analysis attached.",
                     "evidence_refs": [],
                     "write_grant": build_hive_write_grant(
                         granted_to=agent_id,
@@ -1596,7 +1615,6 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2.0)
 
-    @pytest.mark.xfail(reason="Pre-existing: meet-and-greet server returns 400 instead of 200")
     def test_public_http_server_enforces_daily_hive_write_quota(self) -> None:
         with patch("core.public_hive_quotas.policy_engine.get") as get_policy:
             try:
@@ -1768,7 +1786,7 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
         thread.start()
         try:
             host, port = server.server_address
-            for path in ("/v1/health", "/", "/feed", "/tasks", "/agents", "/proof", "/hive", "/brain-hive"):
+            for path in ("/v1/health", "/v1/readyz", "/", "/feed", "/tasks", "/agents", "/proof", "/hive", "/brain-hive"):
                 with self.subTest(path=path):
                     conn = http.client.HTTPConnection(host, port, timeout=5)
                     conn.request("HEAD", path)
@@ -1782,6 +1800,67 @@ class MeetAndGreetServerDispatchTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2.0)
+
+    def test_create_meet_app_persists_write_rate_limit_across_restart(self) -> None:
+        def policy_get(path, default=None):
+            if path == "economics.authenticated_write_requests_per_minute":
+                return 1
+            return default
+
+        headers = {"Content-Type": "application/json", "X-Nulla-Meet-Token": "token"}
+        app_one = create_meet_app(
+            config=MeetAndGreetServerConfig(host="0.0.0.0", port=8766, auth_token="token"),
+            service=self.service,
+            hive_service=_server_mod.BrainHiveService(),
+            metrics=MeetMetricsCollector(),
+            policy_get=policy_get,
+        )
+        first_payload = _api_write_auth_mod.build_signed_write_envelope(
+            target_path="/v1/payments/status",
+            payload={
+                "task_or_transfer_id": f"pay-{uuid.uuid4().hex}",
+                "payer_peer_id": _signer_mod.get_local_peer_id(),
+                "payee_peer_id": "peer-target-1234567890abcdef",
+                "status": "reserved",
+                "metadata": {"source": "first"},
+            },
+        )
+        first_status, _, first_body = asgi_request(
+            app_one,
+            method="POST",
+            path="/v1/payments/status",
+            headers=headers,
+            body=json.dumps(first_payload).encode("utf-8"),
+        )
+        self.assertEqual(first_status, 200, first_body.decode("utf-8"))
+
+        app_two = create_meet_app(
+            config=MeetAndGreetServerConfig(host="0.0.0.0", port=8766, auth_token="token"),
+            service=self.service,
+            hive_service=_server_mod.BrainHiveService(),
+            metrics=MeetMetricsCollector(),
+            policy_get=policy_get,
+        )
+        second_payload = _api_write_auth_mod.build_signed_write_envelope(
+            target_path="/v1/payments/status",
+            payload={
+                "task_or_transfer_id": f"pay-{uuid.uuid4().hex}",
+                "payer_peer_id": _signer_mod.get_local_peer_id(),
+                "payee_peer_id": "peer-target-1234567890abcdef",
+                "status": "reserved",
+                "metadata": {"source": "second"},
+            },
+        )
+        second_status, _, second_body = asgi_request(
+            app_two,
+            method="POST",
+            path="/v1/payments/status",
+            headers=headers,
+            body=json.dumps(second_payload).encode("utf-8"),
+        )
+        self.assertEqual(second_status, 429, second_body.decode("utf-8"))
+        second_envelope = json.loads(second_body.decode("utf-8"))
+        self.assertIn("rate limit", str(second_envelope.get("error") or "").lower())
 
     def test_public_http_server_blocks_metrics_for_get_and_head(self) -> None:
         try:

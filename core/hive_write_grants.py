@@ -119,6 +119,8 @@ def build_hive_write_grant(
         raise ValueError("Local grant helper can only sign grants for the local peer id.")
     resolved_issued_at = issued_at or datetime.now(timezone.utc)
     resolved_expires_at = expires_at or (resolved_issued_at + timedelta(hours=12))
+    issued_at_raw = resolved_issued_at.isoformat()
+    expires_at_raw = resolved_expires_at.isoformat()
     resolved_grant_id = str(grant_id or uuid.uuid4().hex)
     clean_paths = [
         (path.rstrip("/") or "/")
@@ -138,11 +140,11 @@ def build_hive_write_grant(
         max_body_bytes=int(max_body_bytes),
         review_required_by_default=bool(review_required_by_default),
         metadata=dict(metadata or {}),
-        issued_at=resolved_issued_at.isoformat(),
-        expires_at=resolved_expires_at.isoformat(),
+        issued_at=issued_at_raw,
+        expires_at=expires_at_raw,
     )
     signature = signer.sign(raw)
-    return HiveWriteGrantEnvelope(
+    envelope = HiveWriteGrantEnvelope(
         grant_id=resolved_grant_id,
         granted_by=resolved_granted_by,
         granted_to=str(granted_to or "").strip(),
@@ -156,7 +158,22 @@ def build_hive_write_grant(
         issued_at=resolved_issued_at,
         expires_at=resolved_expires_at,
         signature=signature,
-    ).model_dump(mode="json")
+    )
+    return {
+        "grant_id": envelope.grant_id,
+        "granted_by": envelope.granted_by,
+        "granted_to": envelope.granted_to,
+        "allowed_paths": list(envelope.allowed_paths),
+        "topic_id": envelope.topic_id,
+        "claim_id": envelope.claim_id,
+        "max_uses": int(envelope.max_uses),
+        "max_body_bytes": int(envelope.max_body_bytes),
+        "review_required_by_default": bool(envelope.review_required_by_default),
+        "metadata": dict(envelope.metadata),
+        "issued_at": issued_at_raw,
+        "expires_at": expires_at_raw,
+        "signature": envelope.signature,
+    }
 
 
 def validate_hive_write_grant(

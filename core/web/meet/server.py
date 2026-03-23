@@ -10,15 +10,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from core import audit_logger
+from core import audit_logger, policy_engine
 from core.api_write_auth import unwrap_signed_write_with_meta
 from core.brain_hive_service import BrainHiveService
 from core.hive_write_grants import consume_hive_write_grant
 from core.meet_and_greet_service import MeetAndGreetConfig, MeetAndGreetService
 from core.public_hive_quotas import reserve_public_hive_write_quota
 
+from .readiness import build_meet_readiness
 from .routes import (
-    _allow_write,
     _enforce_nullabook_request_identity,
     _error_envelope,
     _format_public_hive_quota_error,
@@ -36,6 +36,7 @@ from .routes import (
     dispatch_request,
     resolve_static_route,
 )
+from .write_limits import reserve_meet_write_rate_limit
 
 
 @dataclass
@@ -125,6 +126,7 @@ def build_server(
     write_lock = threading.Lock()
     hive_service = BrainHiveService()
     metrics = MeetMetricsCollector()
+    policy_get = policy_engine.get
     try:
         from storage.nullabook_store import ensure_upvote_columns
 
@@ -174,6 +176,20 @@ def build_server(
                     content_length=len(body),
                 )
                 return
+            if parsed.path in {"/v1/readyz", "/readyz"}:
+                readiness = build_meet_readiness(svc)
+                body = json.dumps(
+                    {"ok": readiness.status == "ready", "result": readiness.model_dump(mode="json")},
+                    sort_keys=True,
+                ).encode("utf-8")
+                self._write_bytes_response(
+                    200 if readiness.status == "ready" else 503,
+                    "application/json",
+                    b"",
+                    write_body=False,
+                    content_length=len(body),
+                )
+                return
             self._write_bytes_response(404, "text/plain; charset=utf-8", b"", write_body=False)
 
         def do_GET(self) -> None:
@@ -197,7 +213,16 @@ def build_server(
                 return
             query = parse_qs(parsed.query)
             started = time.perf_counter()
-            status_code, envelope = dispatch_request("GET", parsed.path, query, None, svc, hive_service, metrics)
+            status_code, envelope = dispatch_request(
+                "GET",
+                parsed.path,
+                query,
+                None,
+                svc,
+                hive_service,
+                metrics,
+                policy_get=policy_get,
+            )
             latency_ms = (time.perf_counter() - started) * 1000.0
             metrics.record(method="GET", path=parsed.path, status_code=status_code, latency_ms=latency_ms)
             self._write_response(status_code, envelope)
@@ -240,17 +265,19 @@ def build_server(
                 client_host=self.client_address[0],
                 request_meta=request_meta,
                 default_limit=cfg.write_requests_per_minute,
+                policy_get=policy_get,
             )
-            if not _allow_write(
+            limit_reservation = reserve_meet_write_rate_limit(
                 limit_key,
                 limit_per_minute,
-                write_windows,
-                write_lock,
-                max_clients=cfg.write_rate_limit_max_clients,
-            ):
+                metadata={"host": cfg.host, "path": parsed.path},
+            )
+            if not limit_reservation.allowed:
                 latency_ms = (time.perf_counter() - started) * 1000.0
-                metrics.record(method="POST", path=parsed.path, status_code=429, latency_ms=latency_ms)
-                self._write_response(429, _error_envelope("Write rate limit exceeded."))
+                status_code = 429 if limit_reservation.reason == "rate_limit_exceeded" else 503
+                metrics.record(method="POST", path=parsed.path, status_code=status_code, latency_ms=latency_ms)
+                error_message = "Write rate limit exceeded." if status_code == 429 else "Meet write limiter is not ready."
+                self._write_response(status_code, _error_envelope(error_message))
                 return
             try:
                 if _requires_public_hive_quota(cfg.host, parsed.path):
@@ -279,7 +306,7 @@ def build_server(
                         metrics.record(method="POST", path=parsed.path, status_code=status_code, latency_ms=latency_ms)
                         self._write_response(status_code, _error_envelope(_format_public_hive_quota_error(quota)))
                         return
-                if _requires_scoped_hive_grant(cfg.host, parsed.path):
+                if _requires_scoped_hive_grant(cfg.host, parsed.path, policy_get=policy_get):
                     raw_grant = dict(request_meta.get("write_grant") or {})
                     if not raw_grant:
                         raise ValueError("Scoped Hive write grant is required for this route.")
@@ -340,7 +367,16 @@ def build_server(
                 )
                 return
             query = parse_qs(parsed.query)
-            status_code, envelope = dispatch_request("POST", parsed.path, query, payload, svc, hive_service, metrics)
+            status_code, envelope = dispatch_request(
+                "POST",
+                parsed.path,
+                query,
+                payload,
+                svc,
+                hive_service,
+                metrics,
+                policy_get=policy_get,
+            )
             if status_code < 300 and nb_peer_id and parsed.path in {"/v1/hive/posts"}:
                 _nullabook_post_hook(nb_peer_id)
             latency_ms = (time.perf_counter() - started) * 1000.0
@@ -386,6 +422,9 @@ def build_server(
                 self.wfile.write(body)
 
     server = ThreadingHTTPServer((cfg.host, cfg.port), Handler)
+    server.write_windows = write_windows  # type: ignore[attr-defined]
+    server.write_lock = write_lock  # type: ignore[attr-defined]
+    server.policy_get = policy_get  # type: ignore[attr-defined]
     _wrap_server_tls(server, cfg)
     return server
 

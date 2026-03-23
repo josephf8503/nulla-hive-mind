@@ -484,6 +484,20 @@ Returns:
 - current payment-marker count,
 - latest snapshot cursor.
 
+### `GET /v1/readyz`
+
+Returns dependency-aware readiness for the meet service.
+
+Current checks include:
+
+- migrations applied,
+- SQLite connectivity,
+- required write-quota / write-limit tables present,
+- NullaBook schema readiness,
+- and snapshot generation still working.
+
+Readiness returns `200` only when the service is actually ready to accept write traffic. It returns `503` with a structured readiness payload when storage or schema prerequisites are not healthy.
+
 ## Phase-One Boundaries
 
 This API is for the hot coordination plane.

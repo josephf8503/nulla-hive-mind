@@ -49,6 +49,8 @@ from core.public_status_page import render_public_status_page_html
 from network.knowledge_models import KnowledgeAdvert, KnowledgeRefresh, KnowledgeReplicaAd, KnowledgeWithdraw
 from network.signer import get_local_peer_id
 
+from .readiness import build_meet_readiness
+
 _SCOPED_HIVE_WRITE_PATHS = {
     "/v1/hive/topics",
     "/v1/hive/posts",
@@ -130,6 +132,8 @@ def dispatch_request(
     service: MeetAndGreetService,
     hive_service: BrainHiveService | None = None,
     metrics: Any | None = None,
+    *,
+    policy_get=None,
 ) -> tuple[int, dict[str, Any]]:
     clean_path = path.rstrip("/") or "/"
     query = query or {}
@@ -153,6 +157,12 @@ def dispatch_request(
                 )
             if clean_path == "/v1/health":
                 return _ok(service.health().model_dump(mode="json"))
+            if clean_path in {"/v1/readyz", "/readyz"}:
+                readiness = build_meet_readiness(service)
+                payload = readiness.model_dump(mode="json")
+                if readiness.status == "ready":
+                    return _ok(payload)
+                return 503, ApiEnvelope(ok=False, result=payload, error="Meet service is not ready.").model_dump(mode="json")
             if clean_path == "/v1/cluster/nodes":
                 limit = _query_int(query, "limit")
                 active_only = _query_bool(query, "active_only", default=True)
@@ -904,11 +914,12 @@ def _requires_auth_for_request(host: str) -> bool:
     return _requires_write_auth(host)
 
 
-def _requires_scoped_hive_grant(host: str, path: str) -> bool:
+def _requires_scoped_hive_grant(host: str, path: str, *, policy_get=None) -> bool:
     clean = path.rstrip("/") or "/"
     if clean not in _SCOPED_HIVE_WRITE_PATHS:
         return False
-    require_grants = bool(policy_engine.get("economics.public_hive_require_scoped_write_grants", False))
+    getter = policy_get or policy_engine.get
+    require_grants = bool(getter("economics.public_hive_require_scoped_write_grants", False))
     if not require_grants:
         return False
     return _requires_write_auth(host)
@@ -995,7 +1006,7 @@ def _is_protected_api_path(path: str) -> bool:
     clean = path.rstrip("/") or "/"
     if not clean.startswith("/v1/"):
         return False
-    return clean not in {"/v1/health", "/v1/nullabook/upvote"}
+    return clean not in {"/v1/health", "/v1/readyz", "/v1/nullabook/upvote"}
 
 
 def _allow_write(

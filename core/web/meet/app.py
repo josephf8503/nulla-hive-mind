@@ -13,7 +13,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Route
 
-from core import audit_logger
+from core import audit_logger, policy_engine
 from core.api_write_auth import unwrap_signed_write_with_meta
 from core.brain_hive_service import BrainHiveService
 from core.hive_write_grants import consume_hive_write_grant
@@ -21,8 +21,8 @@ from core.meet_and_greet_service import MeetAndGreetConfig, MeetAndGreetService
 from core.public_hive_quotas import reserve_public_hive_write_quota
 
 from ..request_ids import log_http_request, resolve_request_id, response_headers_with_request_id
+from .readiness import build_meet_readiness
 from .routes import (
-    _allow_write,
     _enforce_nullabook_request_identity,
     _error_envelope,
     _format_public_hive_quota_error,
@@ -41,6 +41,7 @@ from .routes import (
     resolve_static_route,
 )
 from .server import MeetAndGreetServerConfig, MeetMetricsCollector
+from .write_limits import reserve_meet_write_rate_limit
 
 logger = logging.getLogger("nulla.meet.http")
 
@@ -87,8 +88,7 @@ async def _dispatch(request: Request) -> Response:
     svc: MeetAndGreetService = request.app.state.service
     hive_service: BrainHiveService = request.app.state.hive_service
     metrics: MeetMetricsCollector = request.app.state.metrics
-    write_windows = request.app.state.write_windows
-    write_lock: threading.Lock = request.app.state.write_lock
+    policy_get = request.app.state.policy_get
 
     parsed_path = request.url.path
     query = parse_qs(request.url.query)
@@ -131,6 +131,11 @@ async def _dispatch(request: Request) -> Response:
         if parsed_path == "/v1/health":
             body = json.dumps({"ok": True, "result": {"status": "ok"}}, sort_keys=True).encode("utf-8")
             return _finish(_bytes_response(cfg, 200, "application/json", b"", write_body=False, content_length=len(body)))
+        if parsed_path in {"/v1/readyz", "/readyz"}:
+            readiness = build_meet_readiness(svc)
+            body = json.dumps({"ok": readiness.status == "ready", "result": readiness.model_dump(mode="json")}, sort_keys=True).encode("utf-8")
+            status_code = 200 if readiness.status == "ready" else 503
+            return _finish(_bytes_response(cfg, status_code, "application/json", b"", write_body=False, content_length=len(body)))
         return _finish(_bytes_response(cfg, 404, "text/plain; charset=utf-8", b"", write_body=False))
 
     if request.method == "GET":
@@ -148,7 +153,7 @@ async def _dispatch(request: Request) -> Response:
             status_code, content_type, body = static_response
             return _finish(_bytes_response(cfg, status_code, content_type, body))
         dispatch_started = time.perf_counter()
-        status_code, envelope = dispatch_request("GET", parsed_path, query, None, svc, hive_service, metrics)
+        status_code, envelope = dispatch_request("GET", parsed_path, query, None, svc, hive_service, metrics, policy_get=policy_get)
         metrics.record(method="GET", path=parsed_path, status_code=status_code, latency_ms=(time.perf_counter() - dispatch_started) * 1000.0)
         return _finish(_json_response(cfg, status_code, envelope))
 
@@ -196,17 +201,19 @@ async def _dispatch(request: Request) -> Response:
         client_host=(request.client.host if request.client else ""),
         request_meta=request_meta,
         default_limit=cfg.write_requests_per_minute,
+        policy_get=policy_get,
     )
-    if not _allow_write(
+    limit_reservation = reserve_meet_write_rate_limit(
         limit_key,
         limit_per_minute,
-        write_windows,
-        write_lock,
-        max_clients=cfg.write_rate_limit_max_clients,
-    ):
+        metadata={"host": cfg.host, "path": parsed_path},
+    )
+    if not limit_reservation.allowed:
         latency_ms = (time.perf_counter() - write_started) * 1000.0
-        metrics.record(method="POST", path=parsed_path, status_code=429, latency_ms=latency_ms)
-        return _finish(_json_response(cfg, 429, _error_envelope("Write rate limit exceeded.")))
+        status_code = 429 if limit_reservation.reason == "rate_limit_exceeded" else 503
+        metrics.record(method="POST", path=parsed_path, status_code=status_code, latency_ms=latency_ms)
+        error_message = "Write rate limit exceeded." if status_code == 429 else "Meet write limiter is not ready."
+        return _finish(_json_response(cfg, status_code, _error_envelope(error_message)))
 
     try:
         if _requires_public_hive_quota(cfg.host, parsed_path):
@@ -234,7 +241,7 @@ async def _dispatch(request: Request) -> Response:
                 latency_ms = (time.perf_counter() - write_started) * 1000.0
                 metrics.record(method="POST", path=parsed_path, status_code=status_code, latency_ms=latency_ms)
                 return _finish(_json_response(cfg, status_code, _error_envelope(_format_public_hive_quota_error(quota))))
-        if _requires_scoped_hive_grant(cfg.host, parsed_path):
+        if _requires_scoped_hive_grant(cfg.host, parsed_path, policy_get=policy_get):
             raw_grant = dict(request_meta.get("write_grant") or {})
             if not raw_grant:
                 raise ValueError("Scoped Hive write grant is required for this route.")
@@ -307,6 +314,7 @@ def create_meet_app(
     service: MeetAndGreetService | None = None,
     hive_service: BrainHiveService | None = None,
     metrics: MeetMetricsCollector | None = None,
+    policy_get=None,
 ) -> Starlette:
     cfg = config or MeetAndGreetServerConfig()
     app = Starlette(
@@ -322,4 +330,5 @@ def create_meet_app(
     app.state.metrics = metrics or MeetMetricsCollector()
     app.state.write_windows = defaultdict(deque)
     app.state.write_lock = threading.Lock()
+    app.state.policy_get = policy_get or policy_engine.get
     return app
