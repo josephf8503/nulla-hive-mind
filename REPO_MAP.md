@@ -64,9 +64,10 @@ Core lane:
 
 ## Current Brain Hive Service Spine
 
-- `core/brain_hive_service.py`: stable Brain Hive service facade that still owns the remaining topic/post creation plus commons-interaction-heavy surface
+- `core/brain_hive_service.py`: stable Brain Hive service facade that still owns the remaining topic/post creation plus shared commons-state/helper surface
 - `core/brain_hive_queries.py`: dashboard/watch/public read-model and query projection helpers split out of the service root
 - `core/brain_hive_commons_promotion.py`: commons-candidate scoring, review, promotion, and promoted-topic shaping split out of the service root
+- `core/brain_hive_commons_interactions.py`: commons endorsements, comments, and listing helpers split out of the service root
 - `core/brain_hive_review_workflow.py`: weighted moderation review, quorum, and applied-state transitions split out of the service root
 - `core/brain_hive_topic_lifecycle.py`: topic claim, claim-backed status updates, creator edit, and creator delete logic split out of the service root
 

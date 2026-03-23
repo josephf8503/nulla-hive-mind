@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from core import (
+    brain_hive_commons_interactions,
     brain_hive_commons_promotion,
     brain_hive_queries,
     brain_hive_review_workflow,
@@ -38,7 +39,7 @@ from core.brain_hive_models import (
     HiveTopicUpdateRequest,
 )
 from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
-from core.privacy_guard import assert_public_text_safe, assert_public_value_safe
+from core.privacy_guard import assert_public_value_safe
 from core.runtime_continuity import load_hive_idempotent_result, store_hive_idempotent_result
 from core.scoreboard_engine import get_peer_scoreboard
 from storage.brain_hive_moderation_store import (
@@ -47,16 +48,12 @@ from storage.brain_hive_moderation_store import (
 )
 from storage.brain_hive_store import (
     create_post,
-    create_post_comment,
     create_topic,
     get_topic,
     list_claim_links,
-    list_post_comments,
-    list_post_endorsements,
     list_posts,
     list_topics,
     upsert_claim_link,
-    upsert_post_endorsement,
 )
 from storage.db import get_connection
 
@@ -64,6 +61,7 @@ _PUBLIC_HIVE_VISIBILITIES = {"agent_public", "read_public"}
 
 
 class BrainHiveService:
+    _guard_post_submission = staticmethod(guard_post_submission)
     _post_model_cls = HivePostRecord
 
     def create_topic(self, request: HiveTopicCreateRequest) -> HiveTopicRecord:
@@ -168,91 +166,16 @@ class BrainHiveService:
         return record
 
     def endorse_post(self, request: HiveCommonsEndorseRequest) -> HiveCommonsEndorseRecord:
-        cached = self._cached_result(request.idempotency_key, HiveCommonsEndorseRecord)
-        if cached is not None:
-            return cached
-        post = self._require_commons_post(request.post_id)
-        if self._post_requires_public_guard(post) and request.note is not None:
-            assert_public_text_safe(request.note, field_name="Hive endorsement note")
-        weight = self._reviewer_weight(request.agent_id)
-        endorsement_id = upsert_post_endorsement(
-            post_id=post["post_id"],
-            agent_id=request.agent_id,
-            endorsement_kind=request.endorsement_kind,
-            note=request.note,
-            weight=weight,
-        )
-        row = next(item for item in list_post_endorsements(post["post_id"], limit=200) if item["endorsement_id"] == endorsement_id)
-        agent_display_name, agent_claim_label = self._display_fields(request.agent_id)
-        record = HiveCommonsEndorseRecord(
-            **row,
-            agent_display_name=agent_display_name,
-            agent_claim_label=agent_claim_label,
-        )
-        self._store_idempotent_result(request.idempotency_key, "hive.commons.endorse_post", record)
-        return record
+        return brain_hive_commons_interactions.endorse_post(self, request)
 
     def list_post_endorsements(self, post_id: str, *, limit: int = 200) -> list[HiveCommonsEndorseRecord]:
-        self._require_commons_post(post_id)
-        out: list[HiveCommonsEndorseRecord] = []
-        for row in list_post_endorsements(post_id, limit=limit):
-            agent_display_name, agent_claim_label = self._display_fields(str(row["agent_id"]))
-            out.append(
-                HiveCommonsEndorseRecord(
-                    **row,
-                    agent_display_name=agent_display_name,
-                    agent_claim_label=agent_claim_label,
-                )
-            )
-        return out
+        return brain_hive_commons_interactions.list_endorsements(self, post_id, limit=limit)
 
     def comment_on_post(self, request: HiveCommonsCommentRequest) -> HiveCommonsCommentRecord:
-        cached = self._cached_result(request.idempotency_key, HiveCommonsCommentRecord)
-        if cached is not None:
-            return cached
-        post = self._require_commons_post(request.post_id)
-        mirror = HivePostCreateRequest(
-            topic_id=str(post["topic_id"]),
-            author_agent_id=request.author_agent_id,
-            body=request.body,
-            post_kind="analysis",
-            stance="question",
-            evidence_refs=[],
-        )
-        if self._post_requires_public_guard(post):
-            guard_post_submission(mirror)
-        moderation = moderate_post_submission(mirror)
-        comment_id = create_post_comment(
-            post_id=post["post_id"],
-            author_agent_id=request.author_agent_id,
-            body=request.body,
-            moderation_state=moderation.state,
-            moderation_score=moderation.score,
-            moderation_reasons=moderation.reasons,
-        )
-        row = next(item for item in list_post_comments(post["post_id"], limit=200, visible_only=False) if item["comment_id"] == comment_id)
-        author_display_name, author_claim_label = self._display_fields(request.author_agent_id)
-        record = HiveCommonsCommentRecord(
-            **row,
-            author_display_name=author_display_name,
-            author_claim_label=author_claim_label,
-        )
-        self._store_idempotent_result(request.idempotency_key, "hive.commons.comment_post", record)
-        return record
+        return brain_hive_commons_interactions.comment_on_post(self, request)
 
     def list_post_comments(self, post_id: str, *, limit: int = 200, include_flagged: bool = False) -> list[HiveCommonsCommentRecord]:
-        self._require_commons_post(post_id)
-        out: list[HiveCommonsCommentRecord] = []
-        for row in list_post_comments(post_id, limit=limit, visible_only=not include_flagged):
-            author_display_name, author_claim_label = self._display_fields(str(row["author_agent_id"]))
-            out.append(
-                HiveCommonsCommentRecord(
-                    **row,
-                    author_display_name=author_display_name,
-                    author_claim_label=author_claim_label,
-                )
-            )
-        return out
+        return brain_hive_commons_interactions.list_comments(self, post_id, limit=limit, include_flagged=include_flagged)
 
     def evaluate_promotion_candidate(self, request: HiveCommonsPromotionCandidateRequest) -> HiveCommonsPromotionCandidateRecord:
         return brain_hive_commons_promotion.evaluate_promotion_candidate(self, request)
