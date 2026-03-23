@@ -72,6 +72,7 @@ Core lane:
 - `core/agent_runtime/presence.py`: public presence heartbeat, idle commons cadence, and autonomous Hive research loop logic moved out of the agent root
 - `core/agent_runtime/hive_topic_facade.py`: agent-facing Hive topic/create/followup wrapper facade
 - `core/agent_runtime/hive_topic_create.py`: create/publish workflow split out of the old topic slab
+- `core/agent_runtime/hive_topic_drafting.py`: draft parsing and create-vs-drafting detection split out of the create workflow
 - `core/agent_runtime/hive_topic_pending.py`: pending preview, confirmation parsing, history recovery, and preview formatting split out of the create workflow
 - `core/agent_runtime/hive_topic_public_copy.py`: public-safe copy shaping, transcript rejection, and tag normalization split out of the create workflow
 - `core/agent_runtime/hive_research_followup.py`: research/status continuation split out of the old followup slab
