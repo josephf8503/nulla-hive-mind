@@ -27,7 +27,8 @@ The biggest files on the current trunk are:
 
 | File | Lines | Current reality |
 |------|-------|-----------------|
-| `apps/nulla_agent.py` | 2614 | still the main runtime composition root, but materially thinner after the fast-command, chat-surface, live-info, and presence/autonomy extractions |
+| `apps/nulla_agent.py` | 2450 | still the main runtime composition root, but materially thinner after the fast-command, chat-surface, live-info, presence/autonomy, and response-policy extractions |
+| `core/agent_runtime/response_policy.py` | 303 | response classification, workflow/footer visibility policy, and tool-history observation shaping are now isolated behind a dedicated runtime policy seam |
 | `core/dashboard/workstation_client.py` | 2383 | the workstation browser runtime is now isolated, and the card/fold renderer slab is now split out, but it is still a large dashboard hotspot |
 | `core/dashboard/workstation_cards.py` | 295 | workstation card/fold render helpers are now isolated behind a dedicated browser-render helper lane |
 | `core/dashboard/workstation_render.py` | 1983 | the workstation document shell is much smaller, but still owns a broad HTML/panel composition slab |
@@ -73,6 +74,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - provider-role routing now also lives behind `core/provider_routing.py`, and both the helper/teacher lane and the main model execution router now honor bounded drone/queen provider roles without broad caller rewiring
 - chat-surface wording, observation shaping, and Hive truth narration now also live behind `core/agent_runtime/chat_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - credit commands, capability/help truth, credit status rendering, and fast/action result shaping now also live behind `core/agent_runtime/fast_command_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
+- response classification, workflow/footer visibility policy, and tool-history observation shaping now also live behind `core/agent_runtime/response_policy.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - live-info, weather, news, and price lookup routing now also live behind `core/agent_runtime/fast_live_info.py`, leaving `core/agent_runtime/fast_paths.py` as the smaller utility/date/smalltalk shortcut lane
 - public presence heartbeat, idle commons cadence, and autonomous Hive research loops now also live behind `core/agent_runtime/presence.py`, so `apps/nulla_agent.py` no longer owns those background-runtime slabs directly
 - trace-rail browser runtime, session/event polling, and session-summary/event rendering now also live behind `core/runtime_task_rail_client.py`, so `core/runtime_task_rail.py` no longer owns that browser-runtime slab directly
@@ -330,7 +332,7 @@ pytest -q \
 Status on trunk:
 
 - this phase is actively in progress, not hypothetical
-- `apps/nulla_agent.py` is down to 2614 lines from the older 11k+ state
+- `apps/nulla_agent.py` is down to 2450 lines from the older 11k+ state
 - extracted runtime seams now include checkpoints, fast paths, response shaping, presence, builder support/controller, NullaBook, memory runtime, orchestrator helpers, Hive runtime/topics/create/followups, and turn dispatch/frontdoor/reasoning
 - fast-path wrapper glue now lives behind `core/agent_runtime/fast_path_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - Hive topic/create/followup wrapper glue now also lives behind `core/agent_runtime/hive_topic_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
@@ -338,6 +340,7 @@ Status on trunk:
 - research/live-web/tool-loop wrapper glue now also lives behind `core/agent_runtime/research_tool_loop_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - chat-surface wording/observation/Hive truth glue now also lives behind `core/agent_runtime/chat_surface.py`, so `apps/nulla_agent.py` no longer carries that 800-line surface-shaping slab locally
 - credit commands, capability/help truth, credit status rendering, and fast/action result glue now also live behind `core/agent_runtime/fast_command_surface.py`, so `apps/nulla_agent.py` no longer carries that command-surface slab locally
+- response classification, workflow/footer visibility policy, and tool-history observation shaping now also live behind `core/agent_runtime/response_policy.py`, so `apps/nulla_agent.py` no longer carries that response-policy slab locally
 - provider swarm/routing glue for the helper lane now also lives behind `core/provider_routing.py` and `core/model_teacher_pipeline.py`, so provider-role decisions stop leaking into callers
 - the file is still too large, but the old doc numbers are no longer true
 
@@ -367,6 +370,7 @@ Targeted regression:
 
 ```bash
 pytest -q \
+  tests/test_agent_runtime_response_policy.py \
   tests/test_nulla_runtime_contracts.py \
   tests/test_nulla_router_and_state_machine.py \
   tests/test_runtime_continuity.py \
@@ -381,6 +385,7 @@ pytest -q \
   tests/test_runtime_context.py \
   tests/test_runtime_bootstrap.py \
   tests/test_startup_control_plane.py \
+  tests/test_agent_runtime_response_policy.py \
   tests/test_nulla_runtime_contracts.py \
   tests/test_nulla_router_and_state_machine.py \
   tests/test_runtime_continuity.py \

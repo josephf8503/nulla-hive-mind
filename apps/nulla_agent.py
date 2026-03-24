@@ -25,6 +25,7 @@ from core.agent_runtime import nullabook as agent_nullabook_runtime
 from core.agent_runtime import orchestrator as agent_orchestrator_runtime
 from core.agent_runtime import presence as agent_presence_runtime
 from core.agent_runtime import response as agent_response_runtime
+from core.agent_runtime import response_policy as agent_response_policy
 from core.agent_runtime import turn_dispatch as agent_turn_dispatch
 from core.agent_runtime import turn_frontdoor as agent_turn_frontdoor
 from core.agent_runtime import turn_reasoning as agent_turn_reasoning
@@ -1469,19 +1470,12 @@ class NullaAgent(
         *,
         source_context: dict[str, object] | None = None,
     ) -> str:
-        prefs = load_preferences()
-        if not getattr(prefs, "show_workflow", False):
-            return str(response or "")
-        summary = str(workflow_summary or "").strip()
-        if not summary:
-            return str(response or "")
-        if not self._should_show_workflow_summary(
-            response=response,
-            workflow_summary=summary,
+        return agent_response_policy.maybe_attach_workflow(
+            self,
+            response,
+            workflow_summary,
             source_context=source_context,
-        ):
-            return str(response or "")
-        return f"Workflow:\n{summary}\n\n{str(response or '').strip()}".strip()
+        )
 
     def _turn_result(
         self,
@@ -1566,81 +1560,17 @@ class NullaAgent(
         *,
         source_context: dict[str, object] | None,
     ) -> bool:
-        surface = str((source_context or {}).get("surface", "") or "").strip().lower()
-        if surface not in {"channel", "openclaw", "api"}:
-            return False
-        if result.response_class == ResponseClass.TASK_SELECTION_CLARIFICATION:
-            return True
-        if result.response_class != ResponseClass.APPROVAL_REQUIRED:
-            return False
-        lowered = str(result.text or "").strip().lower()
-        if "ready to post this to the public hive" in lowered or "confirm? (yes / no)" in lowered:
-            return False
-        return not ("reply with:" in lowered and "approve " in lowered)
+        return agent_response_policy.should_attach_hive_footer(
+            self,
+            result,
+            source_context=source_context,
+        )
 
     def _fast_path_response_class(self, *, reason: str, response: str) -> ResponseClass:
-        if reason in {"smalltalk_fast_path", "startup_sequence_fast_path"}:
-            return ResponseClass.SMALLTALK
-        if reason in {
-            "date_time_fast_path",
-            "direct_math_fast_path",
-            "ui_command_fast_path",
-            "credit_status_fast_path",
-            "memory_command",
-            "user_preference_command",
-            "live_info_fast_path",
-            "capability_truth_query",
-            "builder_capability_gap",
-            "builder_controller_direct_response",
-        }:
-            return ResponseClass.UTILITY_ANSWER
-        if reason == "help_fast_path":
-            return ResponseClass.TASK_SELECTION_CLARIFICATION
-        if reason == "evaluative_conversation_fast_path":
-            return ResponseClass.GENERIC_CONVERSATION
-        if reason == "runtime_resume_missing":
-            return ResponseClass.SYSTEM_ERROR_USER_SAFE
-        if reason == "hive_activity_command":
-            return self._classify_hive_text_response(response)
-        if reason == "hive_research_followup":
-            lowered = str(response or "").lower()
-            if lowered.startswith("started hive research on") or lowered.startswith("autonomous research on"):
-                return ResponseClass.TASK_STARTED
-            if lowered.startswith("research follow-up:") or lowered.startswith("research result:"):
-                return ResponseClass.RESEARCH_PROGRESS
-            if "multiple real hive tasks open" in lowered or "pick one by name" in lowered:
-                return ResponseClass.TASK_SELECTION_CLARIFICATION
-            if "couldn't map that follow-up" in lowered or "couldn't find an open hive task" in lowered:
-                return ResponseClass.TASK_SELECTION_CLARIFICATION
-            return ResponseClass.TASK_FAILED_USER_SAFE
-        if reason == "hive_status_followup":
-            return ResponseClass.TASK_STATUS
-        return ResponseClass.GENERIC_CONVERSATION
+        return agent_response_policy.fast_path_response_class(self, reason=reason, response=response)
 
     def _classify_hive_text_response(self, response: str) -> ResponseClass:
-        lowered = str(response or "").strip().lower()
-        if (
-            lowered.startswith("hive watcher is not configured")
-            or lowered.startswith("i couldn't reach the hive watcher")
-            or lowered.startswith("i couldn't reach hive")
-            or lowered.startswith("public hive is not enabled")
-        ):
-            return ResponseClass.TASK_FAILED_USER_SAFE
-        if lowered.startswith("available hive tasks right now"):
-            return ResponseClass.TASK_LIST
-        if lowered.startswith("i couldn't reach the live hive watcher just now, but these are the real hive tasks i already had in session"):
-            return ResponseClass.TASK_LIST
-        if lowered.startswith("i couldn't reach the live hive watcher, but i can still pull public hive tasks"):
-            return ResponseClass.TASK_LIST
-        if lowered.startswith("live hive watcher is not configured here, but i can still pull public hive tasks"):
-            return ResponseClass.TASK_LIST
-        if lowered.startswith("online now:"):
-            return ResponseClass.TASK_LIST
-        if "pick one by name" in lowered or "point at the task name" in lowered:
-            return ResponseClass.TASK_SELECTION_CLARIFICATION
-        if lowered.startswith("no open hive tasks"):
-            return ResponseClass.TASK_STATUS
-        return ResponseClass.TASK_STATUS
+        return agent_response_policy.classify_hive_text_response(self, response)
 
     def _action_response_class(
         self,
@@ -1650,23 +1580,16 @@ class NullaAgent(
         task_outcome: str | None,
         response: str,
     ) -> ResponseClass:
-        lowered = str(response or "").lower()
-        if task_outcome == "pending_approval":
-            return ResponseClass.APPROVAL_REQUIRED
-        if not success:
-            return ResponseClass.TASK_FAILED_USER_SAFE
-        if "started hive research on" in lowered or lowered.startswith("autonomous research on"):
-            return ResponseClass.TASK_STARTED
-        if reason.startswith("model_tool_intent_"):
-            return ResponseClass.RESEARCH_PROGRESS
-        if reason.startswith("hive_topic_create_"):
-            return ResponseClass.TASK_STATUS
-        return ResponseClass.GENERIC_CONVERSATION
+        return agent_response_policy.action_response_class(
+            self,
+            reason=reason,
+            success=success,
+            task_outcome=task_outcome,
+            response=response,
+        )
 
     def _grounded_response_class(self, *, gate: GateDecision, classification: dict[str, Any]) -> ResponseClass:
-        if bool(getattr(gate, "requires_user_approval", False)) or str(getattr(gate, "mode", "") or "").lower() in {"approval_required", "tool_preview"}:
-            return ResponseClass.APPROVAL_REQUIRED
-        return ResponseClass.GENERIC_CONVERSATION
+        return agent_response_policy.grounded_response_class(self, gate=gate)
 
     def _apply_interaction_transition(self, session_id: str, result: ChatTurnResult) -> None:
         agent_orchestrator_runtime.apply_interaction_transition(
@@ -1751,27 +1674,11 @@ class NullaAgent(
         workflow_summary: str,
         source_context: dict[str, object] | None,
     ) -> bool:
-        surface = str((source_context or {}).get("surface", "") or "").strip().lower()
-        response_text = str(response or "").strip()
-        if surface not in {"channel", "openclaw", "api"}:
-            return True
-        if "recognized operator action" in workflow_summary:
-            return True
-        if "classified task as `research`" in workflow_summary:
-            return True
-        if "classified task as `integration_orchestration`" in workflow_summary:
-            return True
-        if "classified task as `system_design`" in workflow_summary:
-            return True
-        if "classified task as `debugging`" in workflow_summary:
-            return True
-        if "classified task as `code_" in workflow_summary:
-            return True
-        if "curiosity/research lane: `executed`" in workflow_summary:
-            return True
-        if "execution posture: `tool_" in workflow_summary:
-            return True
-        return len(response_text) >= 280
+        return agent_response_policy.should_show_workflow_summary(
+            response=response,
+            workflow_summary=workflow_summary,
+            source_context=source_context,
+        )
 
     def _task_workflow_summary(
         self,
@@ -1826,16 +1733,7 @@ class NullaAgent(
         return "\n".join(lines)
 
     def _tool_intent_direct_message(self, structured_output: Any) -> str | None:
-        if not isinstance(structured_output, dict):
-            return None
-        intent = str(structured_output.get("intent") or "").strip().lower()
-        if intent not in {"respond.direct", "none", "no_tool"}:
-            return None
-        arguments = structured_output.get("arguments") or {}
-        if not isinstance(arguments, dict):
-            return None
-        message = str(arguments.get("message") or arguments.get("response") or "").strip()
-        return message or None
+        return agent_response_policy.tool_intent_direct_message(structured_output)
 
     def _append_tool_result_to_source_context(
         self,
@@ -1844,55 +1742,18 @@ class NullaAgent(
         execution: Any,
         tool_name: str,
     ) -> dict[str, Any]:
-        updated = dict(source_context or {})
-        history = list(updated.get("conversation_history") or [])
-        observation_message = self._tool_history_observation_message(
+        return agent_response_policy.append_tool_result_to_source_context(
+            self,
+            source_context,
             execution=execution,
             tool_name=tool_name,
         )
-        if history and history[-1] == observation_message:
-            updated["conversation_history"] = history[-12:]
-            return updated
-        history.append(observation_message)
-        updated["conversation_history"] = history[-12:]
-        return updated
 
     def _normalize_tool_history_message(self, item: dict[str, Any]) -> dict[str, str]:
-        role = str(item.get("role") or "").strip().lower()
-        content = str(item.get("content") or "").strip()
-        if role != "assistant" or not content.startswith("Real tool result from `"):
-            return {"role": role, "content": content}
-        match = re.match(r"^Real tool result from `([^`]+)`:\s*(.*)$", content, re.DOTALL)
-        if not match:
-            return {"role": role, "content": content}
-        tool_name = str(match.group(1) or "").strip() or "tool"
-        response_text = str(match.group(2) or "").strip()
-        observation = {
-            "schema": "tool_observation_v1",
-            "intent": tool_name,
-            "tool_surface": self._tool_surface_for_history(tool_name),
-            "ok": True,
-            "status": "executed",
-            "response_preview": response_text[:1800] if response_text else "No tool output returned.",
-        }
-        return {
-            "role": "user",
-            "content": self._tool_history_observation_prompt(observation),
-        }
+        return agent_response_policy.normalize_tool_history_message(self, item)
 
     def _tool_surface_for_history(self, tool_name: str) -> str:
-        lowered = str(tool_name or "").strip().lower()
-        if lowered.startswith("web.") or lowered.startswith("browser."):
-            return "web"
-        if lowered.startswith("workspace."):
-            return "workspace"
-        if lowered.startswith("sandbox."):
-            return "sandbox"
-        if lowered.startswith("operator."):
-            return "local_operator"
-        if lowered.startswith("hive."):
-            return "hive"
-        return "runtime_tool"
+        return agent_response_policy.tool_surface_for_history(tool_name)
 
     def _tool_history_observation_payload(
         self,
@@ -1900,26 +1761,10 @@ class NullaAgent(
         execution: Any,
         tool_name: str,
     ) -> dict[str, Any]:
-        details = dict(getattr(execution, "details", {}) or {})
-        observation = details.get("observation")
-        if isinstance(observation, dict) and observation:
-            payload = dict(observation)
-        else:
-            response_text = str(getattr(execution, "response_text", "") or "").strip()
-            payload = {
-                "schema": "tool_observation_v1",
-                "intent": str(tool_name or getattr(execution, "tool_name", "") or "tool").strip() or "tool",
-                "tool_surface": self._tool_surface_for_history(str(tool_name or getattr(execution, "tool_name", "") or "tool")),
-                "ok": bool(getattr(execution, "ok", False)),
-                "status": str(getattr(execution, "status", "") or "executed").strip() or "executed",
-                "response_preview": response_text[:1800] if response_text else "No tool output returned.",
-            }
-        payload.setdefault("mode", str(getattr(execution, "mode", "") or "").strip())
-        if not payload.get("response_preview"):
-            response_text = str(getattr(execution, "response_text", "") or "").strip()
-            if response_text:
-                payload["response_preview"] = response_text[:1800]
-        return payload
+        return agent_response_policy.tool_history_observation_payload(
+            execution=execution,
+            tool_name=tool_name,
+        )
 
     def _tool_history_observation_prompt(self, observation: dict[str, Any]) -> str:
         return agent_orchestrator_runtime.tool_history_observation_prompt(observation)
@@ -1930,14 +1775,11 @@ class NullaAgent(
         execution: Any,
         tool_name: str,
     ) -> dict[str, str]:
-        observation = self._tool_history_observation_payload(
+        return agent_response_policy.tool_history_observation_message(
+            self,
             execution=execution,
             tool_name=tool_name,
         )
-        return {
-            "role": "user",
-            "content": self._tool_history_observation_prompt(observation),
-        }
 
     def _tool_loop_final_message(self, synthesis: Any, executed_steps: list[dict[str, Any]]) -> str:
         return agent_orchestrator_runtime.tool_loop_final_message(synthesis, executed_steps)
@@ -2278,13 +2120,7 @@ class NullaAgent(
         return agent_hive_followups.extract_hive_topic_hint(text)
 
     def _append_footer(self, response: str, *, prefix: str, footer: str) -> str:
-        clean_response = str(response or "").strip()
-        clean_footer = str(footer or "").strip()
-        if not clean_footer:
-            return clean_response
-        if clean_footer.lower().startswith(f"{str(prefix or '').strip().lower()}:"):
-            return f"{clean_response}\n\n{clean_footer}".strip()
-        return f"{clean_response}\n\n{prefix}:\n{clean_footer}".strip()
+        return agent_response_policy.append_footer(response, prefix=prefix, footer=footer)
 
     def _public_capabilities(self) -> list[str]:
         capabilities = [

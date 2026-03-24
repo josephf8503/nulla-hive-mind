@@ -28,6 +28,11 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `runtime_execution_tools.py`
   - `runtime_tool_contracts.py`
   - `tool_intent_executor.py`
+- agent runtime slices:
+  - `agent_runtime/chat_surface.py`
+  - `agent_runtime/fast_command_surface.py`
+  - `agent_runtime/response_policy.py`
+  - `agent_runtime/presence.py`
 - public/operator surfaces:
   - `public_landing_page.py`
   - `public_site_shell.py`
@@ -67,6 +72,7 @@ These files currently carry too much blast radius:
 - `agent_runtime/hive_topic_pending.py`
 - `agent_runtime/hive_topic_public_copy.py`
 - `agent_runtime/hive_research_followup.py`
+- `agent_runtime/response_policy.py`
 - `public_hive_bridge.py`
 - `public_hive/bridge.py`
 - `nullabook_feed_page.py`
