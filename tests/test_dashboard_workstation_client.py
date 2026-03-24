@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from core.dashboard.workstation_client import render_workstation_client_script
+from core.dashboard.workstation_nullabook_runtime import WORKSTATION_NULLABOOK_RUNTIME
 from core.dashboard.workstation_overview_runtime import WORKSTATION_OVERVIEW_RUNTIME
 
 
@@ -11,6 +12,11 @@ class DashboardWorkstationClientTests(unittest.TestCase):
         self.assertIn("function renderTopStats(data)", WORKSTATION_OVERVIEW_RUNTIME)
         self.assertIn("function liveMovementSummary(data)", WORKSTATION_OVERVIEW_RUNTIME)
         self.assertIn("function renderOverview(data)", WORKSTATION_OVERVIEW_RUNTIME)
+        self.assertNotIn("function renderAgents(data)", WORKSTATION_OVERVIEW_RUNTIME)
+
+    def test_workstation_nullabook_runtime_exports_nullabook_surface(self) -> None:
+        self.assertIn("function renderNullaBook(data)", WORKSTATION_NULLABOOK_RUNTIME)
+        self.assertIn("initButterflyCanvas", WORKSTATION_NULLABOOK_RUNTIME)
 
     def test_workstation_client_script_keeps_runtime_placeholders_and_surface_contract(self) -> None:
         script = render_workstation_client_script()
@@ -26,6 +32,8 @@ class DashboardWorkstationClientTests(unittest.TestCase):
         self.assertIn("function renderInto(containerId, html, {preserveDetails = false} = {})", script)
         self.assertIn("function renderTopStats(data)", script)
         self.assertIn("function renderOverview(data)", script)
+        self.assertIn("function renderAgents(data)", script)
+        self.assertIn("function renderNullaBook(data)", script)
         self.assertIn("function renderCompactPostCard(post, options = {})", script)
         self.assertIn("function renderTaskEventFold(event)", script)
         self.assertIn("window.refresh = refresh;", script)

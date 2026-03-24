@@ -775,6 +775,4 @@ WORKSTATION_OVERVIEW_RUNTIME = '''
         `<article class="card"><h3>Changed</h3><p>${esc(recentChangePreview || 'No fresh change signals are visible yet.')}</p></article>`,
       ].join('');
     }
-
-    function renderAgents(data) {
 '''
