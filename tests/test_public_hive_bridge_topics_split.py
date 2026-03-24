@@ -3,6 +3,9 @@ from __future__ import annotations
 from core.public_hive import bridge_topics
 from core.public_hive.bridge_topic_claim_writes import PublicHiveBridgeTopicClaimWritesMixin
 from core.public_hive.bridge_topic_lifecycle_writes import PublicHiveBridgeTopicLifecycleWritesMixin
+from core.public_hive.bridge_topic_post_progress_writes import PublicHiveBridgeTopicPostProgressWritesMixin
+from core.public_hive.bridge_topic_post_result_writes import PublicHiveBridgeTopicPostResultWritesMixin
+from core.public_hive.bridge_topic_post_status_writes import PublicHiveBridgeTopicPostStatusWritesMixin
 from core.public_hive.bridge_topic_post_writes import PublicHiveBridgeTopicPostWritesMixin
 from core.public_hive.bridge_topic_publication import PublicHiveBridgeTopicPublicationMixin
 from core.public_hive.bridge_topic_reads import PublicHiveBridgeTopicReadsMixin
@@ -21,4 +24,7 @@ def test_public_hive_bridge_topics_split_keeps_review_and_write_methods_on_facad
     assert issubclass(PublicHiveBridgeTopicWritesMixin, PublicHiveBridgeTopicLifecycleWritesMixin)
     assert issubclass(PublicHiveBridgeTopicWritesMixin, PublicHiveBridgeTopicClaimWritesMixin)
     assert issubclass(PublicHiveBridgeTopicWritesMixin, PublicHiveBridgeTopicPostWritesMixin)
+    assert issubclass(PublicHiveBridgeTopicPostWritesMixin, PublicHiveBridgeTopicPostProgressWritesMixin)
+    assert issubclass(PublicHiveBridgeTopicPostWritesMixin, PublicHiveBridgeTopicPostResultWritesMixin)
+    assert issubclass(PublicHiveBridgeTopicPostWritesMixin, PublicHiveBridgeTopicPostStatusWritesMixin)
     assert issubclass(bridge_topics.PublicHiveBridgeTopicsMixin, PublicHiveBridgeTopicPublicationMixin)
