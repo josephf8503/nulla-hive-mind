@@ -5,8 +5,12 @@ from unittest import mock
 
 from core.agent_runtime import (
     fast_live_info,
+    fast_live_info_mode_classifier,
+    fast_live_info_mode_failure,
     fast_live_info_mode_markers,
     fast_live_info_mode_policy,
+    fast_live_info_mode_query,
+    fast_live_info_mode_recency,
     fast_live_info_mode_rules,
     fast_live_info_price,
     fast_live_info_rendering,
@@ -34,16 +38,27 @@ def test_fast_live_info_facade_reexports_split_modules() -> None:
     assert fast_live_info.live_info_mode is fast_live_info_router.live_info_mode
     assert fast_live_info_router.live_info_mode is fast_live_info_mode_policy.live_info_mode
     assert fast_live_info_mode_policy.live_info_mode is fast_live_info_mode_rules.live_info_mode
+    assert fast_live_info_mode_rules.live_info_mode is fast_live_info_mode_classifier.live_info_mode
     assert fast_live_info_mode_policy.normalize_live_info_query is fast_live_info_mode_rules.normalize_live_info_query
+    assert fast_live_info_mode_rules.normalize_live_info_query is fast_live_info_mode_query.normalize_live_info_query
     assert (
         fast_live_info_mode_policy.requires_ultra_fresh_insufficient_evidence
         is fast_live_info_mode_rules.requires_ultra_fresh_insufficient_evidence
     )
     assert (
+        fast_live_info_mode_rules.requires_ultra_fresh_insufficient_evidence
+        is fast_live_info_mode_recency.requires_ultra_fresh_insufficient_evidence
+    )
+    assert (
         fast_live_info_mode_policy.ultra_fresh_insufficient_evidence_response
         is fast_live_info_mode_rules.ultra_fresh_insufficient_evidence_response
     )
+    assert (
+        fast_live_info_mode_rules.ultra_fresh_insufficient_evidence_response
+        is fast_live_info_mode_recency.ultra_fresh_insufficient_evidence_response
+    )
     assert fast_live_info_mode_policy.live_info_failure_text is fast_live_info_mode_rules.live_info_failure_text
+    assert fast_live_info_mode_rules.live_info_failure_text is fast_live_info_mode_failure.live_info_failure_text
     assert fast_live_info_mode_policy._CLOCK_AND_DATE_MARKERS is fast_live_info_mode_markers._CLOCK_AND_DATE_MARKERS
     assert fast_live_info_mode_policy._WEATHER_MARKERS is fast_live_info_mode_markers._WEATHER_MARKERS
     assert fast_live_info_mode_policy._NEWS_MARKERS is fast_live_info_mode_markers._NEWS_MARKERS

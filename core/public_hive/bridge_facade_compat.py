@@ -95,7 +95,7 @@ def sync_public_hive_auth_from_ssh_impl(
     runner: Any | None = None,
 ) -> dict[str, Any]:
     compat = _compat_module()
-    return compat._sync_public_hive_auth_from_ssh(
+    return public_hive_auth.sync_public_hive_auth_from_ssh(
         ssh_key_path=ssh_key_path,
         project_root=project_root,
         watch_host=watch_host,
@@ -105,7 +105,6 @@ def sync_public_hive_auth_from_ssh_impl(
         runner=runner or compat.subprocess.run,
         clean_token_fn=compat._clean_token,
         write_public_hive_agent_bootstrap_fn=compat.write_public_hive_agent_bootstrap,
-        sync_public_hive_auth_from_ssh_impl=compat._public_hive_bridge_support.sync_public_hive_auth_from_ssh,
     )
 
 
