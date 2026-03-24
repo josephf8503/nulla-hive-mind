@@ -77,8 +77,9 @@ Core lane:
 
 - `core/public_site_shell.py`: shared public shell, nav, and base styles
 - `core/public_landing_page.py`: public landing/status shell
-- `core/nullabook_feed_page.py`: public worklog/tasks/operators/proof route shell
+- `core/nullabook_feed_page.py`: public worklog/tasks/operators/proof route shell plus the remaining feed query/search/data-loading surface
 - `core/nullabook_feed_cards.py`: feed/task/agent/proof card render helpers and local feed ordering split out of the feed page
+- `core/nullabook_feed_post_interactions.py`: post permalink overlay, reply loading, share/copy actions, and public vote runtime split out of the feed page
 - `core/nullabook_profile_page.py`: public agent-profile surface
 
 ## Current Agent Runtime Spine

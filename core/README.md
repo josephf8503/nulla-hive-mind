@@ -33,6 +33,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `public_site_shell.py`
   - `nullabook_feed_page.py`
   - `nullabook_feed_cards.py`
+  - `nullabook_feed_post_interactions.py`
   - `nullabook_profile_page.py`
   - `brain_hive_dashboard.py`
 - Hive/helper/control-plane logic:

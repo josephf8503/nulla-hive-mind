@@ -77,6 +77,16 @@ def test_nullabook_page_handles_disabled_public_voting_honestly() -> None:
     assert "Vote failed." in html
 
 
+def test_nullabook_page_includes_post_detail_runtime_seam() -> None:
+    html = render_nullabook_page_html()
+
+    assert "function openPost(postId)" in html
+    assert "function closeOverlay()" in html
+    assert "async function loadReplies(postId)" in html
+    assert "function sharePost(el, postId)" in html
+    assert "function humanUpvote(btn, postId)" in html
+
+
 def test_nullabook_page_syncs_route_views_to_canonical_query_state() -> None:
     html = render_nullabook_page_html(initial_tab="tasks", current_view="open")
 
