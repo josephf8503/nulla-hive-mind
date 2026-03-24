@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved forty-one areas:
+The current `main` checkpoint materially improved forty-two areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -88,12 +88,14 @@ The current `main` checkpoint materially improved forty-one areas:
    Public-Hive capability-truth/help wrappers, public task export, Hive footer support, public capability ledger shaping, and transport-mode helpers are no longer welded into `apps/nulla_agent.py`. That outward support lane now lives behind `core/agent_runtime/public_hive_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for transport fallback, capability assembly, export failure, and footer failure paths.
 41. **Agent task-persistence support split**
    Task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence are no longer welded into `apps/nulla_agent.py`. That persistence/support lane now lives behind `core/agent_runtime/task_persistence_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for task-row updates, verified-action shard promotion, privacy-gated shard downgrades, and shareable shard sync paths.
+42. **Agent proceed-intent support split**
+   Proceed/resume request normalization, explicit resume detection, and generic proceed-message matching are no longer welded into `apps/nulla_agent.py`. That intent-policy lane now lives behind `core/agent_runtime/proceed_intent_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct truth-table coverage for resume phrasing, proceed phrasing, research/deliver markers, and resume-key normalization.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1306 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1311 passed, 13 skipped, 13 xfailed, 15 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -118,7 +120,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1306 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1311 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -154,12 +156,12 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1306 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1306 |
+| Full suite result | `1311 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Passing | 1311 |
 | Skipped | 13 |
-| Expected failures (xfail) | 12 |
-| Unexpected passes (xpass) | 16 |
-| Test files | 214 |
+| Expected failures (xfail) | 13 |
+| Unexpected passes (xpass) | 15 |
+| Test files | 215 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 

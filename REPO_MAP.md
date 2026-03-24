@@ -110,6 +110,7 @@ Core lane:
 - `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help truth, credit status rendering, and fast/action result shaping moved out of the agent root
 - `core/agent_runtime/public_hive_support.py`: public-Hive capability truth/help wrappers, task export, footer support, capability ledger shaping, and transport-mode support moved out of the agent root
 - `core/agent_runtime/task_persistence_support.py`: task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence moved out of the agent root
+- `core/agent_runtime/proceed_intent_support.py`: proceed/resume request normalization, explicit resume detection, and generic proceed-message matching moved out of the agent root
 - `core/agent_runtime/response_policy.py`: response classification, workflow/footer visibility policy, and tool-history observation shaping moved out of the agent root
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
 - `core/agent_runtime/presence.py`: public presence heartbeat, idle commons cadence, and autonomous Hive research loop logic moved out of the agent root

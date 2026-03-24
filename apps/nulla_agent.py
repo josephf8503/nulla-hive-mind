@@ -29,6 +29,7 @@ from core.agent_runtime.builder_facade import BuilderFacadeMixin
 from core.agent_runtime.chat_surface_facade import ChatSurfaceFacadeMixin
 from core.agent_runtime.fast_path_facade import FastPathFacadeMixin
 from core.agent_runtime.hive_topic_facade import HiveTopicFacadeMixin
+from core.agent_runtime.proceed_intent_support import ProceedIntentSupportMixin
 from core.agent_runtime.public_hive_support import PublicHiveSupportMixin
 from core.agent_runtime.research_tool_loop_facade import ResearchToolLoopFacadeMixin
 from core.agent_runtime.task_persistence_support import TaskPersistenceSupportMixin
@@ -166,6 +167,7 @@ class NullaAgent(
     FastPathFacadeMixin,
     HiveTopicFacadeMixin,
     ChatSurfaceFacadeMixin,
+    ProceedIntentSupportMixin,
     PublicHiveSupportMixin,
     TaskPersistenceSupportMixin,
     BuilderFacadeMixin,
@@ -879,26 +881,6 @@ class NullaAgent(
     ) -> dict[str, Any]:
         return agent_checkpoint_runtime.merge_runtime_source_contexts(self, primary, secondary)
 
-    def _looks_like_explicit_resume_request(self, text: str) -> bool:
-        normalized = self._resume_request_key(text)
-        return normalized in {
-            "continue",
-            "resume",
-            "retry",
-            "try again",
-            "continue please",
-            "resume please",
-            "keep going",
-            "go on",
-            "pick up where you left off",
-        }
-
-    def _looks_like_resume_request(self, text: str) -> bool:
-        return self._looks_like_explicit_resume_request(text) or self._is_proceed_message(text)
-
-    def _resume_request_key(self, text: str) -> str:
-        return " ".join(str(text or "").strip().lower().split())
-
     def _session_hive_state(self, session_id: str) -> dict[str, Any]:
         return session_hive_state(session_id)
 
@@ -1604,13 +1586,6 @@ class NullaAgent(
             load_preferences_fn=load_preferences,
         )
 
-    _PROCEED_PATTERNS: frozenset[str] = frozenset({
-        "proceed", "carry on", "continue", "do it", "do all", "go ahead",
-        "start working", "yes", "yes proceed", "yes do it", "ok do it",
-        "ok proceed", "ok go ahead", "deliver it", "submit it", "just do it",
-        "yes pls", "yes please", "all good carry on", "proceed with next steps",
-        "proceed with that", "all good", "no proceed",
-    })
     _HIVE_REVIEW_ACTION_RE = re.compile(
         r"\b(?P<decision>approve|approved|reject|rejected|needs?\s+more\s+evidence|needs?\s+improvement|send\s+back|quarantine|void)\b"
         r"(?:\s+(?:the\s+)?)?"
@@ -1618,18 +1593,6 @@ class NullaAgent(
         r"(?:#)?(?P<object_id>[a-z0-9][a-z0-9-]{5,255})\b",
         re.IGNORECASE,
     )
-
-    def _is_proceed_message(self, text: str) -> bool:
-        compact = " ".join(str(text or "").strip().lower().split()).strip(" \t\n\r?!.,")
-        if compact in self._PROCEED_PATTERNS:
-            return True
-        padded = f" {compact} "
-        if any(f" {p} " in padded for p in (
-            "proceed", "carry on", "continue", "do it", "do all",
-            "go ahead", "start working", "just do it",
-        )):
-            return True
-        return bool(any(marker in compact for marker in ("do research", "start research", "run research", "deliver to hive", "deliver to the hive", "deliver it to hive", "deliver it to the hive", "submit to hive", "submit to the hive", "post to hive", "research and deliver", "research it", "do it properly")))
 
     def _maybe_handle_hive_review_command(
         self,
