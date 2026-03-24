@@ -117,9 +117,13 @@ Core lane:
 
 - `core/public_hive/bridge.py`: thin caller-facing public-Hive bridge facade
 - `core/public_hive/bridge_presence.py`: presence/profile/post sync and commons-state bridge flows split out of the bridge facade
-- `core/public_hive/bridge_topics.py`: topic CRUD, claims, progress, moderation, result submission, and search flows split out of the bridge facade
+- `core/public_hive/bridge_topics.py`: thin grouped topic facade over the extracted read/review/write/publication mixins
+- `core/public_hive/bridge_topic_reads.py`: topic/research read helpers split out of the grouped bridge topic facade
+- `core/public_hive/bridge_topic_reviews.py`: review queue and moderation-review helpers split out of the grouped bridge topic facade
+- `core/public_hive/bridge_topic_writes.py`: topic CRUD, claims, progress/result submission, and status helpers split out of the grouped bridge topic facade
+- `core/public_hive/bridge_topic_publication.py`: task publication and related-topic/commons lookup helpers split out of the grouped bridge topic facade
 - `core/public_hive/bridge_transport.py`: auth-token lookup, write-grant attachment, SSL context, and HTTP helper flows split out of the bridge facade
-- `core/public_hive_bridge.py`: compatibility/auth/bootstrap facade kept stable for callers while the package split continues
+- `core/public_hive_bridge.py`: smaller compatibility/auth/bootstrap facade kept stable for callers while the package split continues
 - `core/public_hive/auth.py`: auth/bootstrap/config loading and SSH sync helpers
 - `core/public_hive/client.py`: HTTP transport, auth-token selection, TLS context, and route-scoped write-grant attachment
 
@@ -166,9 +170,16 @@ Core lane:
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
 - `core/agent_runtime/presence.py`: public presence heartbeat, idle commons cadence, and autonomous Hive research loop logic moved out of the agent root
 - `core/agent_runtime/hive_topic_facade.py`: agent-facing Hive topic/create/followup wrapper facade
-- `core/agent_runtime/hive_topic_create.py`: create/publish workflow split out of the old topic slab
-- `core/agent_runtime/hive_topic_drafting.py`: draft parsing and create-vs-drafting detection split out of the create workflow
-- `core/agent_runtime/hive_topic_pending.py`: pending preview, confirmation parsing, history recovery, and preview formatting split out of the create workflow
+- `core/agent_runtime/hive_topic_create.py`: thin create facade over the extracted preflight and publish lanes
+- `core/agent_runtime/hive_topic_create_preflight.py`: request preflight, duplicate warning, pending-preview setup, and preview response assembly
+- `core/agent_runtime/hive_topic_publish_flow.py`: confirmed publish, admission retry, credit reservation, watched-topic updates, and optional auto-research start
+- `core/agent_runtime/hive_topic_drafting.py`: thin drafting facade over the extracted parse and variant-policy lanes
+- `core/agent_runtime/hive_topic_draft_parsing.py`: structured/raw draft parsing and title extraction
+- `core/agent_runtime/hive_topic_draft_variants.py`: duplicate scan, variant assembly, normalization, and create-vs-drafting policy
+- `core/agent_runtime/hive_topic_pending.py`: thin pending facade over the extracted confirmation/store/preview lanes
+- `core/agent_runtime/hive_topic_pending_confirmation.py`: confirmation parsing and confirm/cancel dispatch
+- `core/agent_runtime/hive_topic_pending_store.py`: pending preview persistence, history recovery, and pending-state detection
+- `core/agent_runtime/hive_topic_preview_render.py`: pending preview rendering and preview text shaping
 - `core/agent_runtime/hive_topic_public_copy.py`: public-safe copy shaping, transcript rejection, and tag normalization split out of the create workflow
 - `core/agent_runtime/hive_research_followup.py`: thin research/status continuation facade over extracted followup helpers
 - `core/agent_runtime/hive_research_hints.py`: Hive followup hint extraction and history hint helpers

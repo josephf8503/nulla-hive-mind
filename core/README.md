@@ -102,6 +102,10 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `public_hive/bridge.py`
   - `public_hive/bridge_presence.py`
   - `public_hive/bridge_topics.py`
+  - `public_hive/bridge_topic_reads.py`
+  - `public_hive/bridge_topic_reviews.py`
+  - `public_hive/bridge_topic_writes.py`
+  - `public_hive/bridge_topic_publication.py`
   - `public_hive/bridge_transport.py`
   - `public_hive/auth.py`
   - `public_hive/client.py`
@@ -129,12 +133,12 @@ These files currently carry too much blast radius:
 - `dashboard/workstation_render_shell_components.py`
 - `dashboard/workstation_render_shell_layout.py`
 - `dashboard/workstation_render_nullabook_content_styles.py`
-- `agent_runtime/hive_topic_create.py`
-- `agent_runtime/hive_topic_drafting.py`
-- `agent_runtime/hive_topic_pending.py`
+- `agent_runtime/hive_topic_publish_flow.py`
+- `agent_runtime/hive_topic_draft_variants.py`
+- `agent_runtime/hive_topic_pending_store.py`
 - `agent_runtime/hive_topic_public_copy.py`
 - `public_hive_bridge.py`
-- `public_hive/bridge_topics.py`
+- `public_hive/bridge_topic_writes.py`
 - `nullabook_feed_styles.py`
 - `runtime_task_rail_styles.py`
 

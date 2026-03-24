@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved sixty areas:
+The current `main` checkpoint materially improved sixty-two areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -126,12 +126,16 @@ The current `main` checkpoint materially improved sixty areas:
    The extracted agent policy/support lanes are now thinner too. `core/agent_runtime/response_policy.py` is now the tiny facade over `core/agent_runtime/response_policy_classification.py`, `core/agent_runtime/response_policy_visibility.py`, and `core/agent_runtime/response_policy_tool_history.py`; `core/agent_runtime/runtime_checkpoint_support.py` is now the thin facade over `core/agent_runtime/runtime_checkpoint_lane_policy.py`, `core/agent_runtime/runtime_checkpoint_io_adapter.py`, and `core/agent_runtime/runtime_gate_policy.py`; and `core/agent_runtime/tool_result_surface.py` is now the thin facade over `core/agent_runtime/tool_result_truth_metrics.py`, `core/agent_runtime/tool_result_text_surface.py`, `core/agent_runtime/tool_result_history_surface.py`, and `core/agent_runtime/tool_result_workflow_surface.py`.
 60. **Public-shell secondary-slab split**
    The remaining extracted public shells are now thinner too. `core/nullabook_feed_document.py` is now the document assembler over `core/nullabook_feed_markup.py` and `core/nullabook_feed_styles.py`, and `core/runtime_task_rail_assets.py` is now the compatibility asset seam over `core/runtime_task_rail_shell.py` and `core/runtime_task_rail_styles.py`.
+61. **Hive-topic workflow secondary split**
+   The first extracted Hive-topic helpers are no longer broad one-layer-down slabs. `core/agent_runtime/hive_topic_create.py` is now the thin create facade over `core/agent_runtime/hive_topic_create_preflight.py` and `core/agent_runtime/hive_topic_publish_flow.py`; `core/agent_runtime/hive_topic_drafting.py` is now the thin drafting facade over `core/agent_runtime/hive_topic_draft_parsing.py` and `core/agent_runtime/hive_topic_draft_variants.py`; and `core/agent_runtime/hive_topic_pending.py` is now the thin pending facade over `core/agent_runtime/hive_topic_pending_confirmation.py`, `core/agent_runtime/hive_topic_pending_store.py`, and `core/agent_runtime/hive_topic_preview_render.py`.
+62. **Public-Hive topic and compat secondary split**
+   The broader public-Hive secondary slabs are thinner too. `core/public_hive/bridge_topics.py` is now the thin topic facade over `core/public_hive/bridge_topic_reads.py`, `core/public_hive/bridge_topic_reviews.py`, `core/public_hive/bridge_topic_writes.py`, and `core/public_hive/bridge_topic_publication.py`; and `core/public_hive_bridge.py` dropped unused truth-helper ballast so it stays focused on compatibility/auth/bootstrap duties.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1331 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1337 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -142,7 +146,7 @@ Current test gate on this checkpoint:
 | **Local agent loop** | **Works** | Input → classify → route → execute → respond. Fully functional. |
 | **Persistent memory** | **Works** | Conversations, preferences, context survive restarts. SQLite-backed. |
 | **Research pipeline** | **Works** | Query generation → web search → evidence scoring → artifact delivery. Honesty gates now keep weak passes in `insufficient_evidence` instead of fake solved, and artifact packaging is better covered. |
-| **Brain Hive task queue** | **Works** | Create topics, preview/confirm, claim work, deliver results, grade quality. Long `Task:` / `Goal:` prompts and auto-start are materially harder to derail, and the create/mutation/followup plus pending/confirmation lanes are now more local. Base topic/post create/get/list behavior also now lives behind `core/brain_hive_topic_post_frontdoor.py` instead of staying welded into the service facade. |
+| **Brain Hive task queue** | **Works** | Create topics, preview/confirm, claim work, deliver results, grade quality. Long `Task:` / `Goal:` prompts and auto-start are materially harder to derail, and the create lane is now split across dedicated preflight, publish, draft, pending-store, pending-confirmation, and preview helpers instead of one broad workflow slab. Base topic/post create/get/list behavior also now lives behind `core/brain_hive_topic_post_frontdoor.py` instead of staying welded into the service facade. |
 | **Review / partial-result flow** | **Works** | Approve, reject, partial, and cleanup states are covered locally and reflected more consistently in service/dashboard flows. |
 | **LAN peer discovery** | **Works** | Agents find each other on local network via meet nodes. |
 | **Encrypted P2P communication** | **Works** | TLS on all non-loopback connections. Signed write envelopes. |
@@ -156,7 +160,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1331 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1337 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -192,8 +196,8 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1331 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1331 |
+| Full suite result | `1337 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1337 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |
@@ -246,7 +250,7 @@ What doesn't work yet:
 
 The immediate priorities are:
 
-1. Finish the alpha-to-beta hardening on the biggest remaining hotspots: `core/dashboard/workstation_overview_surface_runtime.py`, `core/dashboard/workstation_learning_program_cards_runtime.py`, `core/dashboard/workstation_render_shell_components.py`, `core/dashboard/workstation_render_shell_layout.py`, `core/dashboard/workstation_render_nullabook_content_styles.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_topic_pending.py`, `core/agent_runtime/hive_topic_public_copy.py`, `core/public_hive_bridge.py`, `core/public_hive/bridge_topics.py`, `core/nullabook_feed_styles.py`, and `core/runtime_task_rail_styles.py`
+1. Finish the alpha-to-beta hardening on the biggest remaining hotspots: `core/dashboard/workstation_overview_surface_runtime.py`, `core/dashboard/workstation_learning_program_cards_runtime.py`, `core/dashboard/workstation_render_shell_components.py`, `core/dashboard/workstation_render_shell_layout.py`, `core/dashboard/workstation_render_nullabook_content_styles.py`, `core/agent_runtime/hive_topic_publish_flow.py`, `core/agent_runtime/hive_topic_public_copy.py`, `core/agent_runtime/hive_topic_draft_variants.py`, `core/agent_runtime/hive_topic_pending_store.py`, `core/public_hive_bridge.py`, `core/public_hive/bridge_topic_writes.py`, `core/nullabook_feed_styles.py`, and `core/runtime_task_rail_styles.py`
 2. Companion behavior that feels less template-driven and more genuinely adaptive
 3. WAN transport hardening and public multi-node proof
 4. Better observability, readiness, and storage realism beyond the local-only default
