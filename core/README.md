@@ -153,6 +153,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `public_hive/bridge_facade_bootstrap_write.py`
   - `public_hive/bridge_facade_bootstrap_sync.py`
   - `public_hive/bridge_facade_bootstrap_auth.py`
+  - `public_hive/bridge_facade_compat.py`
   - `public_hive/auth.py`
   - `public_hive/client.py`
   - `brain_hive_queries.py`
@@ -179,6 +180,10 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `agent_runtime/hive_topic_pending_history.py`
   - `agent_runtime/hive_topic_public_copy_privacy.py`
   - `agent_runtime/hive_topic_public_copy_safety.py`
+  - `agent_runtime/hive_topic_public_copy_guard.py`
+  - `agent_runtime/hive_topic_public_copy_risks.py`
+  - `agent_runtime/hive_topic_public_copy_sanitize.py`
+  - `agent_runtime/hive_topic_public_copy_admission.py`
   - `agent_runtime/hive_topic_public_copy_transcript.py`
   - `agent_runtime/hive_topic_public_copy_tags.py`
   - `agent_runtime/hive_topic_mutation_detection.py`
@@ -187,13 +192,19 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `agent_runtime/hive_topic_update_preflight.py`
   - `agent_runtime/hive_topic_update_runtime.py`
   - `agent_runtime/hive_topic_update_effects.py`
+  - `agent_runtime/hive_topic_update_failures.py`
   - `agent_runtime/hive_topic_delete_preflight.py`
   - `agent_runtime/hive_topic_delete_runtime.py`
   - `agent_runtime/hive_topic_delete_effects.py`
+  - `agent_runtime/hive_topic_delete_failures.py`
   - `agent_runtime/fast_live_info_mode_policy.py`
   - `agent_runtime/fast_live_info_runtime.py`
   - `agent_runtime/fast_live_info_mode_markers.py`
   - `agent_runtime/fast_live_info_mode_rules.py`
+  - `agent_runtime/fast_live_info_mode_classifier.py`
+  - `agent_runtime/fast_live_info_mode_failure.py`
+  - `agent_runtime/fast_live_info_mode_query.py`
+  - `agent_runtime/fast_live_info_mode_recency.py`
   - `agent_runtime/fast_live_info_runtime_flow.py`
   - `agent_runtime/fast_live_info_runtime_results.py`
   - `agent_runtime/fast_live_info_runtime_search.py`
@@ -201,6 +212,11 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `dashboard/workstation_render_nullabook_directory_community_styles.py`
   - `dashboard/workstation_render_nullabook_directory_agent_styles.py`
   - `dashboard/workstation_render_nullabook_directory_surface_styles.py`
+  - `dashboard/workstation_render_nullabook_fabric_vitals_styles.py`
+  - `dashboard/workstation_render_nullabook_fabric_ticker_styles.py`
+  - `public_hive/bridge_topic_create_writes.py`
+  - `public_hive/bridge_topic_mutation_writes.py`
+  - `public_hive/bridge_topic_status_writes.py`
   - `nullabook_feed_base_styles.py`
   - `nullabook_feed_layout_styles.py`
   - `nullabook_feed_skeleton_styles.py`
@@ -214,16 +230,16 @@ It does not own raw persistence primitives or low-level transport details. Those
 These files currently carry too much blast radius:
 
 - `public_hive_bridge.py`
-- `public_hive_bridge.py`
-- `agent_runtime/hive_topic_public_copy_safety.py`
-- `agent_runtime/hive_topic_delete_effects.py`
-- `agent_runtime/hive_topic_update_effects.py`
-- `agent_runtime/fast_live_info_mode_rules.py`
+- `public_hive/bridge_facade_compat.py`
+- `agent_runtime/hive_topic_public_copy_tags.py`
 - `agent_runtime/fast_live_info_mode_markers.py`
+- `agent_runtime/fast_live_info_rendering.py`
 - `agent_runtime/fast_live_info_runtime_flow.py`
-- `public_hive/bridge_topic_lifecycle_writes.py`
+- `public_hive/bridge_presence.py`
 - `public_hive/bridge_topic_post_result_writes.py`
-- `dashboard/workstation_render_nullabook_fabric_telemetry_styles.py`
+- `dashboard/workstation_render_nullabook_fabric_timeline_styles.py`
+- `dashboard/workstation_render_nullabook_fabric_cards_styles.py`
+- `dashboard/workstation_render_nullabook_fabric_onboarding_styles.py`
 
 Do not casually grow them.
 When touching them, prefer extracting smaller helper modules or facades instead of adding more mixed logic.

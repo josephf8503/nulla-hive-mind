@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved seventy-seven areas:
+The current `main` checkpoint materially improved eighty-one areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -160,12 +160,20 @@ The current `main` checkpoint materially improved seventy-seven areas:
    The remaining embedded NullaBook directory CSS is thinner too. `core/dashboard/workstation_render_nullabook_directory_styles.py` is now the thin facade over `core/dashboard/workstation_render_nullabook_directory_community_styles.py`, `core/dashboard/workstation_render_nullabook_directory_agent_styles.py`, and `core/dashboard/workstation_render_nullabook_directory_surface_styles.py`.
 77. **Public-Hive helper leaf split**
    The extracted public-Hive helper layer is thinner too. `core/public_hive/bridge_support.py` is now the thin support facade over path, env, and runtime helper leaves; `core/public_hive/bridge_facade_bootstrap.py` is now the thin compat facade over write/sync/auth helper leaves; and `core/public_hive/bridge_topic_post_writes.py` is now the thin grouped post/result/status write facade.
+78. **Public-Hive compat facade leaf split**
+   The remaining caller-facing compat bridge is thinner too. `core/public_hive_bridge.py` is now the thin stable facade over `core/public_hive/bridge_facade_compat.py` plus the existing auth/config/bootstrap helpers, which keeps the patchable public import surface stable while moving the remaining compat wiring into one local helper seam.
+79. **Hive public-copy and mutation-effect leaf split**
+   The remaining public-copy and mutation-effect slabs are thinner too. `core/agent_runtime/hive_topic_public_copy_safety.py` is now the thin facade over `core/agent_runtime/hive_topic_public_copy_guard.py`, `core/agent_runtime/hive_topic_public_copy_risks.py`, `core/agent_runtime/hive_topic_public_copy_sanitize.py`, and `core/agent_runtime/hive_topic_public_copy_admission.py`; and `core/agent_runtime/hive_topic_update_effects.py` plus `core/agent_runtime/hive_topic_delete_effects.py` now delegate failure/result shaping through their extracted failure helpers.
+80. **Live-info mode-rule leaf split**
+   The remaining live-info mode-rule slab is thinner too. `core/agent_runtime/fast_live_info_mode_rules.py` is now the thin facade over `core/agent_runtime/fast_live_info_mode_classifier.py`, `core/agent_runtime/fast_live_info_mode_failure.py`, `core/agent_runtime/fast_live_info_mode_query.py`, and `core/agent_runtime/fast_live_info_mode_recency.py`, which isolates mode classification from failure/query shaping while keeping exports stable.
+81. **Telemetry and lifecycle leaf split**
+   The remaining telemetry and topic-lifecycle helper slabs are thinner too. `core/dashboard/workstation_render_nullabook_fabric_telemetry_styles.py` is now the thin telemetry-style aggregator over `core/dashboard/workstation_render_nullabook_fabric_vitals_styles.py` and `core/dashboard/workstation_render_nullabook_fabric_ticker_styles.py`; and `core/public_hive/bridge_topic_lifecycle_writes.py` is now the thin lifecycle-write facade over `core/public_hive/bridge_topic_create_writes.py`, `core/public_hive/bridge_topic_mutation_writes.py`, and `core/public_hive/bridge_topic_status_writes.py`.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1358 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1359 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -190,7 +198,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1358 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1359 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -226,12 +234,12 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1358 passed, 13 skipped, 13 xfailed, 15 xpassed` |
-| Passing | 1346 |
+| Full suite result | `1359 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1359 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |
-| Test files | 222 |
+| Test files | 226 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 
@@ -280,7 +288,7 @@ What doesn't work yet:
 
 The immediate priorities are:
 
-1. Finish the alpha-to-beta hardening on the biggest remaining helper slabs: `core/public_hive_bridge.py`, `core/agent_runtime/hive_topic_public_copy_safety.py`, `core/agent_runtime/hive_topic_delete_effects.py`, `core/agent_runtime/hive_topic_update_effects.py`, `core/agent_runtime/fast_live_info_mode_rules.py`, `core/agent_runtime/fast_live_info_mode_markers.py`, `core/agent_runtime/fast_live_info_runtime_flow.py`, `core/public_hive/bridge_topic_lifecycle_writes.py`, `core/public_hive/bridge_topic_post_result_writes.py`, and `core/dashboard/workstation_render_nullabook_fabric_telemetry_styles.py`
+1. Finish the alpha-to-beta hardening on the biggest remaining helper slabs: `core/public_hive/bridge_facade_compat.py`, `core/agent_runtime/hive_topic_public_copy_tags.py`, `core/agent_runtime/fast_live_info_mode_markers.py`, `core/agent_runtime/fast_live_info_rendering.py`, `core/agent_runtime/fast_live_info_runtime_flow.py`, `core/public_hive/bridge_presence.py`, `core/public_hive/bridge_topic_post_result_writes.py`, `core/dashboard/workstation_render_nullabook_fabric_timeline_styles.py`, `core/dashboard/workstation_render_nullabook_fabric_cards_styles.py`, and `core/dashboard/workstation_render_nullabook_fabric_onboarding_styles.py`
 2. Companion behavior that feels less template-driven and more genuinely adaptive
 3. WAN transport hardening and public multi-node proof
 4. Better observability, readiness, and storage realism beyond the local-only default
