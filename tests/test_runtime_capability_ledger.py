@@ -70,7 +70,7 @@ def test_help_capabilities_text_comes_from_ledger_and_marks_unsupported_truthful
     agent.start()
 
     with mock.patch(
-        "apps.nulla_agent.runtime_capability_ledger",
+        "core.agent_runtime.public_hive_support.runtime_capability_ledger",
         return_value=[
             {
                 "capability_id": "web.live_lookup",
@@ -88,7 +88,7 @@ def test_help_capabilities_text_comes_from_ledger_and_marks_unsupported_truthful
             },
         ],
     ), mock.patch(
-        "apps.nulla_agent.policy_engine.get",
+        "core.agent_runtime.public_hive_support.policy_engine.get",
         side_effect=lambda key, default=None: {
             "filesystem.allow_write_workspace": True,
             "execution.allow_sandbox_execution": True,

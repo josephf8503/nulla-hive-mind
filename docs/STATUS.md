@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved thirty-nine areas:
+The current `main` checkpoint materially improved forty areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -84,12 +84,14 @@ The current `main` checkpoint materially improved thirty-nine areas:
    Response classification, workflow/footer visibility policy, and tool-history observation normalization are no longer welded into `apps/nulla_agent.py`. That lane now lives behind `core/agent_runtime/response_policy.py`, which cuts the agent composition root down again while keeping the runtime-facing method surface stable.
 39. **Agent chat-surface facade split**
    Chat-surface wrapper glue is no longer welded into `apps/nulla_agent.py`. That agent-facing wrapper lane now lives behind `core/agent_runtime/chat_surface_facade.py`, which leaves `core/agent_runtime/chat_surface.py` as the lower-level wording/observation/Hive-truth logic seam and cuts the composition root down again without changing the runtime-facing method surface.
+40. **Agent public-Hive support split**
+   Public-Hive capability-truth/help wrappers, public task export, Hive footer support, public capability ledger shaping, and transport-mode helpers are no longer welded into `apps/nulla_agent.py`. That outward support lane now lives behind `core/agent_runtime/public_hive_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for transport fallback, capability assembly, export failure, and footer failure paths.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1297 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1302 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -114,7 +116,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1297 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1302 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -150,12 +152,12 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1297 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1297 |
+| Full suite result | `1302 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1302 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |
-| Test files | 212 |
+| Test files | 213 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 

@@ -32,6 +32,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `agent_runtime/chat_surface.py`
   - `agent_runtime/chat_surface_facade.py`
   - `agent_runtime/fast_command_surface.py`
+  - `agent_runtime/public_hive_support.py`
   - `agent_runtime/response_policy.py`
   - `agent_runtime/presence.py`
 - public/operator surfaces:
