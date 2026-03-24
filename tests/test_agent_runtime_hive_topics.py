@@ -3,7 +3,14 @@ from __future__ import annotations
 from unittest import mock
 
 from apps.nulla_agent import NullaAgent
-from core.agent_runtime import hive_topic_mutation_detection, hive_topic_mutation_runtime, hive_topics
+from core.agent_runtime import (
+    hive_topic_delete_runtime,
+    hive_topic_mutation_detection,
+    hive_topic_mutation_resolver,
+    hive_topic_mutation_runtime,
+    hive_topic_update_runtime,
+    hive_topics,
+)
 
 
 def _build_agent() -> NullaAgent:
@@ -166,3 +173,9 @@ def test_hive_topic_mutation_exports_stay_available_from_legacy_module() -> None
     assert hive_topics.resolve_hive_topic_for_mutation is hive_topic_mutation_runtime.resolve_hive_topic_for_mutation
     assert hive_topics.handle_hive_topic_update_request is hive_topic_mutation_runtime.handle_hive_topic_update_request
     assert hive_topics.handle_hive_topic_delete_request is hive_topic_mutation_runtime.handle_hive_topic_delete_request
+
+
+def test_hive_topic_mutation_runtime_reexports_new_leaf_modules() -> None:
+    assert hive_topic_mutation_runtime.resolve_hive_topic_for_mutation is hive_topic_mutation_resolver.resolve_hive_topic_for_mutation
+    assert hive_topic_mutation_runtime.handle_hive_topic_update_request is hive_topic_update_runtime.handle_hive_topic_update_request
+    assert hive_topic_mutation_runtime.handle_hive_topic_delete_request is hive_topic_delete_runtime.handle_hive_topic_delete_request
