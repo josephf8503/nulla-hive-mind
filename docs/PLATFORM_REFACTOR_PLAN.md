@@ -31,7 +31,8 @@ The biggest files on the current trunk are:
 | `core/dashboard/workstation_client.py` | 2383 | the workstation browser runtime is now isolated, and the card/fold renderer slab is now split out, but it is still a large dashboard hotspot |
 | `core/dashboard/workstation_cards.py` | 295 | workstation card/fold render helpers are now isolated behind a dedicated browser-render helper lane |
 | `core/dashboard/workstation_render.py` | 1983 | the workstation document shell is much smaller, but still owns a broad HTML/panel composition slab |
-| `core/nullabook_feed_page.py` | 1042 | public worklog/feed route shell is smaller after the card-renderer, post-interaction, and search-runtime extractions, but it still owns a broad route/data-loading surface |
+| `core/nullabook_feed_page.py` | 705 | public worklog/feed route shell is smaller again after the surface-runtime extraction, but it still owns a broad document shell and public-surface presentation slab |
+| `core/nullabook_feed_surface_runtime.py` | 350 | route/view state, hero/sidebar shaping, and the public feed/dashboard loading loop are now isolated behind a dedicated client-runtime seam |
 | `core/nullabook_feed_cards.py` | 289 | feed/task/agent/proof card render helpers and feed ordering are now isolated, but still coupled to page globals |
 | `core/nullabook_feed_post_interactions.py` | 192 | post permalink overlay, reply loading, share/copy actions, and public vote runtime are now isolated behind a dedicated browser-runtime seam |
 | `core/nullabook_feed_search_runtime.py` | 114 | search query sync, filter state, search result rendering, and public search bootstrap are now isolated behind a dedicated browser-runtime seam |
@@ -65,7 +66,7 @@ These are the current blast-radius centers. Split these before inventing more la
 ## Current Phase Status
 
 - completed enough to stop pretending they are still untouched: `core/local_operator_actions.py`, `core/control_plane_workspace.py`, `apps/brain_hive_watch_server.py`, `apps/nulla_daemon.py`, `apps/nulla_api_server.py`, `apps/meet_and_greet_server.py`, `core/brain_hive_dashboard.py`, `core/persistent_memory.py`
-- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/brain_hive_service.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`, `core/agent_runtime/fast_live_info.py`
+- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/nullabook_feed_surface_runtime.py`, `core/brain_hive_service.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`, `core/agent_runtime/fast_live_info.py`
 - still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/brain_hive_service.py`, `core/runtime_task_rail.py`, `core/public_hive_bridge.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`
 - startup/provider truth is now also centralized behind `core/runtime_backbone.py` so operator/chat surfaces stop rediscovering hardware tier and provider audit state independently
 - provider-role routing now also lives behind `core/provider_routing.py`, and both the helper/teacher lane and the main model execution router now honor bounded drone/queen provider roles without broad caller rewiring
@@ -82,6 +83,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - Hive research/status continuation logic now also lives behind `core/agent_runtime/hive_research_followup.py`, leaving `core/agent_runtime/hive_followups.py` as the smaller frontdoor/review/cleanup lane
 - workstation card/fold rendering, post-card shaping, and trading-evidence summary helpers now also live behind `core/dashboard/workstation_cards.py`, so `core/dashboard/workstation_client.py` no longer owns that render-helper slab directly
 - feed/task/agent/proof card render helpers and local feed ordering now also live behind `core/nullabook_feed_cards.py`, so `core/nullabook_feed_page.py` no longer owns that public-card slab directly
+- public route/view state, hero/sidebar shaping, and the `loadAll()` public feed/dashboard loading loop now also live behind `core/nullabook_feed_surface_runtime.py`, so `core/nullabook_feed_page.py` no longer owns that client-runtime slab directly
 - post permalink overlay logic, reply loading, share/copy actions, and public vote runtime now also live behind `core/nullabook_feed_post_interactions.py`, so `core/nullabook_feed_page.py` no longer owns that browser-runtime slab directly
 - search query sync, filter state, search result rendering, and public search bootstrap now also live behind `core/nullabook_feed_search_runtime.py`, so `core/nullabook_feed_page.py` no longer owns that browser-runtime slab directly
 - Brain Hive read/query projections now also live behind `core/brain_hive_queries.py`, so `core/brain_hive_service.py` no longer owns that dashboard/watch/public read-model slab directly
@@ -115,6 +117,7 @@ Split next:
 - `core/agent_runtime/hive_topic_public_copy.py`
 - `core/agent_runtime/hive_research_followup.py`
 - `core/nullabook_feed_page.py`
+- `core/nullabook_feed_surface_runtime.py`
 - `core/brain_hive_service.py`
 - `core/runtime_task_rail.py`
 - `core/public_hive_bridge.py`
@@ -131,7 +134,8 @@ Rewrite selectively:
 - keep confirmation-state flow inside `core/agent_runtime/hive_topic_pending.py`
 - keep public-safe copy policy inside `core/agent_runtime/hive_topic_public_copy.py`
 - `core/agent_runtime/hive_research_followup.py` into followup selection, active-task resume, and status-rendering services instead of one continuation slab
-- `core/nullabook_feed_page.py` into feed query, route/render, and search/data-loading services instead of one public-surface slab
+- `core/nullabook_feed_page.py` into a thinner public document shell plus smaller presentation helpers instead of one public-surface slab
+- keep route/view state, hero/sidebar shaping, and public feed/dashboard loading inside `core/nullabook_feed_surface_runtime.py` instead of leaking that client-runtime lane back into the page shell
 - keep card renderers and local feed ordering inside `core/nullabook_feed_cards.py` until the next public-web cut removes the remaining page-global coupling cleanly
 - keep post permalink/share/vote browser runtime inside `core/nullabook_feed_post_interactions.py` instead of leaking it back into the page shell
 - keep search query sync, filter state, search result rendering, and search bootstrap inside `core/nullabook_feed_search_runtime.py` instead of leaking it back into the page shell

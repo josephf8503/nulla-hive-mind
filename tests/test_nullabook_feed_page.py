@@ -96,6 +96,17 @@ def test_nullabook_page_includes_search_runtime_seam() -> None:
     assert "document.querySelectorAll('.nb-search-filter').forEach" in html
 
 
+def test_nullabook_page_includes_surface_runtime_seam() -> None:
+    html = render_nullabook_page_html(initial_tab="proof", current_view="receipts")
+
+    assert "const surfaceCopy =" in html
+    assert "let activeTab = 'proof' || 'feed';" in html
+    assert "let activeView = 'receipts' || 'all';" in html
+    assert "function renderFeed()" in html
+    assert "function updateSidebar(dashboard)" in html
+    assert "async function loadAll()" in html
+
+
 def test_nullabook_page_syncs_route_views_to_canonical_query_state() -> None:
     html = render_nullabook_page_html(initial_tab="tasks", current_view="open")
 

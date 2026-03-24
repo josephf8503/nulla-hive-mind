@@ -32,6 +32,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `public_landing_page.py`
   - `public_site_shell.py`
   - `nullabook_feed_page.py`
+  - `nullabook_feed_surface_runtime.py`
   - `nullabook_feed_cards.py`
   - `nullabook_feed_post_interactions.py`
   - `nullabook_feed_search_runtime.py`
