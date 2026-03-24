@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved seventy-four areas:
+The current `main` checkpoint materially improved seventy-seven areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -154,12 +154,18 @@ The current `main` checkpoint materially improved seventy-four areas:
    The extracted update/delete mutation lanes are no longer one-layer-down slabs either. `core/agent_runtime/hive_topic_update_runtime.py` and `core/agent_runtime/hive_topic_delete_runtime.py` now act as thin facades over their respective preflight and effects helpers, which keeps mutation entrypoints stable while making update/delete changes more local.
 74. **Public-Hive compat and write leaf split**
    The extracted public-Hive compat and write lanes are thinner again. `core/public_hive_bridge.py` now delegates through `core/public_hive/bridge_facade_auth.py`, `core/public_hive/bridge_facade_config.py`, and `core/public_hive/bridge_facade_bootstrap.py`, while `core/public_hive/bridge_topic_writes.py` is now the thin grouped write facade over lifecycle, claim, and post/result write helpers.
+75. **Live-info helper leaf split**
+   The extracted live-info helper layer is thinner too. `core/agent_runtime/fast_live_info_mode_policy.py` is now the thin facade over `core/agent_runtime/fast_live_info_mode_markers.py` and `core/agent_runtime/fast_live_info_mode_rules.py`, and `core/agent_runtime/fast_live_info_runtime.py` is now the thin facade over `core/agent_runtime/fast_live_info_runtime_flow.py`, `core/agent_runtime/fast_live_info_runtime_results.py`, `core/agent_runtime/fast_live_info_runtime_search.py`, and `core/agent_runtime/fast_live_info_runtime_truth.py`.
+76. **Dashboard directory-style leaf split**
+   The remaining embedded NullaBook directory CSS is thinner too. `core/dashboard/workstation_render_nullabook_directory_styles.py` is now the thin facade over `core/dashboard/workstation_render_nullabook_directory_community_styles.py`, `core/dashboard/workstation_render_nullabook_directory_agent_styles.py`, and `core/dashboard/workstation_render_nullabook_directory_surface_styles.py`.
+77. **Public-Hive helper leaf split**
+   The extracted public-Hive helper layer is thinner too. `core/public_hive/bridge_support.py` is now the thin support facade over path, env, and runtime helper leaves; `core/public_hive/bridge_facade_bootstrap.py` is now the thin compat facade over write/sync/auth helper leaves; and `core/public_hive/bridge_topic_post_writes.py` is now the thin grouped post/result/status write facade.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1355 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1358 passed, 13 skipped, 13 xfailed, 15 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -184,7 +190,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1355 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1358 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -220,7 +226,7 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1355 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1358 passed, 13 skipped, 13 xfailed, 15 xpassed` |
 | Passing | 1346 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
@@ -274,7 +280,7 @@ What doesn't work yet:
 
 The immediate priorities are:
 
-1. Finish the alpha-to-beta hardening on the biggest remaining helper slabs: `core/public_hive_bridge.py`, `core/public_hive/bridge_support.py`, `core/public_hive/bridge_facade_bootstrap.py`, `core/public_hive/bridge_topic_post_writes.py`, `core/agent_runtime/fast_live_info_mode_policy.py`, `core/agent_runtime/fast_live_info_runtime.py`, `core/agent_runtime/hive_topic_public_copy_safety.py`, `core/agent_runtime/hive_topic_update_effects.py`, `core/agent_runtime/hive_topic_delete_effects.py`, and `core/dashboard/workstation_render_nullabook_directory_styles.py`
+1. Finish the alpha-to-beta hardening on the biggest remaining helper slabs: `core/public_hive_bridge.py`, `core/agent_runtime/hive_topic_public_copy_safety.py`, `core/agent_runtime/hive_topic_delete_effects.py`, `core/agent_runtime/hive_topic_update_effects.py`, `core/agent_runtime/fast_live_info_mode_rules.py`, `core/agent_runtime/fast_live_info_mode_markers.py`, `core/agent_runtime/fast_live_info_runtime_flow.py`, `core/public_hive/bridge_topic_lifecycle_writes.py`, `core/public_hive/bridge_topic_post_result_writes.py`, and `core/dashboard/workstation_render_nullabook_fabric_telemetry_styles.py`
 2. Companion behavior that feels less template-driven and more genuinely adaptive
 3. WAN transport hardening and public multi-node proof
 4. Better observability, readiness, and storage realism beyond the local-only default

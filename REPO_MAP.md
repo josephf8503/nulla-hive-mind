@@ -149,6 +149,9 @@ Core lane:
 - `core/public_hive/bridge_topic_lifecycle_writes.py`: topic CRUD and status transition write helpers split out of the grouped bridge-write facade
 - `core/public_hive/bridge_topic_claim_writes.py`: topic-claim write helper split out of the grouped bridge-write facade
 - `core/public_hive/bridge_topic_post_writes.py`: progress/result/update write helpers split out of the grouped bridge-write facade
+- `core/public_hive/bridge_topic_post_progress_writes.py`: public-Hive topic progress and topic-update write helpers split out of the grouped post-write facade
+- `core/public_hive/bridge_topic_post_result_writes.py`: public-Hive topic result submission and settlement helper split out of the grouped post-write facade
+- `core/public_hive/bridge_topic_post_status_writes.py`: public-Hive topic status helper split out of the grouped post-write facade
 - `core/public_hive/bridge_topic_publication.py`: task publication and related-topic/commons lookup helpers split out of the grouped bridge topic facade
 - `core/public_hive/bridge_transport.py`: auth-token lookup, write-grant attachment, SSL context, and HTTP helper flows split out of the bridge facade
 - `core/public_hive_bridge.py`: stable compatibility/auth/bootstrap facade that now delegates through extracted compat facade helpers and bridge support
@@ -156,6 +159,12 @@ Core lane:
 - `core/public_hive/bridge_facade_config.py`: public-Hive compat config/bootstrap loading facade
 - `core/public_hive/bridge_facade_bootstrap.py`: public-Hive compat bootstrap/write/auth sync facade
 - `core/public_hive/bridge_support.py`: public-Hive bootstrap discovery and SSH sync support seam
+- `core/public_hive/bridge_facade_bootstrap_write.py`: public-Hive compat bootstrap-write helper facade
+- `core/public_hive/bridge_facade_bootstrap_sync.py`: public-Hive compat SSH-sync helper facade
+- `core/public_hive/bridge_facade_bootstrap_auth.py`: public-Hive compat ensure-auth helper facade
+- `core/public_hive/bridge_support_paths.py`: public-Hive bootstrap-path helpers
+- `core/public_hive/bridge_support_env.py`: public-Hive bootstrap env/config merge helpers
+- `core/public_hive/bridge_support_runtime.py`: public-Hive bootstrap discovery and SSH-sync helpers
 - `core/public_hive/auth.py`: auth/bootstrap/config loading and SSH sync helpers
 - `core/public_hive/client.py`: HTTP transport, auth-token selection, TLS context, and route-scoped write-grant attachment
 
@@ -257,6 +266,16 @@ Core lane:
 - `core/agent_runtime/fast_live_info_router.py`: thin live-info router facade over mode-policy and runtime helpers
 - `core/agent_runtime/fast_live_info_mode_policy.py`: live-info mode classification, freshness rules, and lookup-failure wording
 - `core/agent_runtime/fast_live_info_runtime.py`: live-info fast-path execution, fallback search handling, and chat-surface wording handoff
+- `core/agent_runtime/fast_live_info_mode_markers.py`: live-info query marker sets and classification constants
+- `core/agent_runtime/fast_live_info_mode_rules.py`: live-info mode selection, freshness policy, query normalization, and failure wording helpers
+- `core/agent_runtime/fast_live_info_runtime_flow.py`: live-info fast-path control flow and response dispatch
+- `core/agent_runtime/fast_live_info_runtime_results.py`: live-info fast-path result shaping helpers
+- `core/agent_runtime/fast_live_info_runtime_search.py`: live-info fallback search and audit logging helper
+- `core/agent_runtime/fast_live_info_runtime_truth.py`: live-info chat-truth wording handoff helpers
+- `core/dashboard/workstation_render_nullabook_directory_styles.py`: thin embedded-NullaBook directory-style facade
+- `core/dashboard/workstation_render_nullabook_directory_community_styles.py`: embedded-NullaBook community-grid CSS leaf
+- `core/dashboard/workstation_render_nullabook_directory_agent_styles.py`: embedded-NullaBook agent-card CSS leaf
+- `core/dashboard/workstation_render_nullabook_directory_surface_styles.py`: embedded-NullaBook section-head and empty-state CSS leaf
 - `core/agent_runtime/fast_live_info_search.py`: fresh-info search execution seam
 - `core/agent_runtime/fast_live_info_rendering.py`: fresh-info result-rendering seam
 - `core/agent_runtime/fast_live_info_price.py`: fresh-info price-grounding seam

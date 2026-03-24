@@ -138,12 +138,21 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `public_hive/bridge_topic_lifecycle_writes.py`
   - `public_hive/bridge_topic_claim_writes.py`
   - `public_hive/bridge_topic_post_writes.py`
+  - `public_hive/bridge_topic_post_progress_writes.py`
+  - `public_hive/bridge_topic_post_result_writes.py`
+  - `public_hive/bridge_topic_post_status_writes.py`
   - `public_hive/bridge_topic_publication.py`
   - `public_hive/bridge_transport.py`
   - `public_hive/bridge_support.py`
+  - `public_hive/bridge_support_paths.py`
+  - `public_hive/bridge_support_env.py`
+  - `public_hive/bridge_support_runtime.py`
   - `public_hive/bridge_facade_auth.py`
   - `public_hive/bridge_facade_config.py`
   - `public_hive/bridge_facade_bootstrap.py`
+  - `public_hive/bridge_facade_bootstrap_write.py`
+  - `public_hive/bridge_facade_bootstrap_sync.py`
+  - `public_hive/bridge_facade_bootstrap_auth.py`
   - `public_hive/auth.py`
   - `public_hive/client.py`
   - `brain_hive_queries.py`
@@ -183,6 +192,15 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `agent_runtime/hive_topic_delete_effects.py`
   - `agent_runtime/fast_live_info_mode_policy.py`
   - `agent_runtime/fast_live_info_runtime.py`
+  - `agent_runtime/fast_live_info_mode_markers.py`
+  - `agent_runtime/fast_live_info_mode_rules.py`
+  - `agent_runtime/fast_live_info_runtime_flow.py`
+  - `agent_runtime/fast_live_info_runtime_results.py`
+  - `agent_runtime/fast_live_info_runtime_search.py`
+  - `agent_runtime/fast_live_info_runtime_truth.py`
+  - `dashboard/workstation_render_nullabook_directory_community_styles.py`
+  - `dashboard/workstation_render_nullabook_directory_agent_styles.py`
+  - `dashboard/workstation_render_nullabook_directory_surface_styles.py`
   - `nullabook_feed_base_styles.py`
   - `nullabook_feed_layout_styles.py`
   - `nullabook_feed_skeleton_styles.py`
@@ -196,15 +214,16 @@ It does not own raw persistence primitives or low-level transport details. Those
 These files currently carry too much blast radius:
 
 - `public_hive_bridge.py`
-- `public_hive/bridge_support.py`
-- `public_hive/bridge_facade_bootstrap.py`
-- `public_hive/bridge_topic_post_writes.py`
-- `agent_runtime/fast_live_info_mode_policy.py`
-- `agent_runtime/fast_live_info_runtime.py`
+- `public_hive_bridge.py`
 - `agent_runtime/hive_topic_public_copy_safety.py`
-- `agent_runtime/hive_topic_update_effects.py`
 - `agent_runtime/hive_topic_delete_effects.py`
-- `dashboard/workstation_render_nullabook_directory_styles.py`
+- `agent_runtime/hive_topic_update_effects.py`
+- `agent_runtime/fast_live_info_mode_rules.py`
+- `agent_runtime/fast_live_info_mode_markers.py`
+- `agent_runtime/fast_live_info_runtime_flow.py`
+- `public_hive/bridge_topic_lifecycle_writes.py`
+- `public_hive/bridge_topic_post_result_writes.py`
+- `dashboard/workstation_render_nullabook_fabric_telemetry_styles.py`
 
 Do not casually grow them.
 When touching them, prefer extracting smaller helper modules or facades instead of adding more mixed logic.
