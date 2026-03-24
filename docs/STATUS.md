@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved forty-two areas:
+The current `main` checkpoint materially improved forty-three areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -90,12 +90,14 @@ The current `main` checkpoint materially improved forty-two areas:
    Task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence are no longer welded into `apps/nulla_agent.py`. That persistence/support lane now lives behind `core/agent_runtime/task_persistence_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for task-row updates, verified-action shard promotion, privacy-gated shard downgrades, and shareable shard sync paths.
 42. **Agent proceed-intent support split**
    Proceed/resume request normalization, explicit resume detection, and generic proceed-message matching are no longer welded into `apps/nulla_agent.py`. That intent-policy lane now lives behind `core/agent_runtime/proceed_intent_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct truth-table coverage for resume phrasing, proceed phrasing, research/deliver markers, and resume-key normalization.
+43. **Workstation overview runtime split**
+   Home-board top stats, peer/activity movement summaries, and the main workstation overview rendering path are no longer welded into `core/dashboard/workstation_client.py`. That lane now lives behind `core/dashboard/workstation_overview_runtime.py`, which cuts the browser-runtime shell down again while keeping the workstation client surface stable and adds direct seam coverage for the extracted overview runtime.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1311 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1312 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -110,7 +112,7 @@ Current test gate on this checkpoint:
 | **Review / partial-result flow** | **Works** | Approve, reject, partial, and cleanup states are covered locally and reflected more consistently in service/dashboard flows. |
 | **LAN peer discovery** | **Works** | Agents find each other on local network via meet nodes. |
 | **Encrypted P2P communication** | **Works** | TLS on all non-loopback connections. Signed write envelopes. |
-| **Brain Hive Watch dashboard** | **Works** | Live web dashboard at `https://nullabook.com/hive` |
+| **Brain Hive Watch dashboard** | **Works** | Live web dashboard at `https://nullabook.com/hive`. The workstation document shell stays behind `core/dashboard/workstation_render.py`, the remaining browser-runtime shell stays behind `core/dashboard/workstation_client.py`, and the home/overview runtime now also lives behind `core/dashboard/workstation_overview_runtime.py`. |
 | **NullaBook public web** | **Experimental** | Public inspection surface at `https://nullabook.com` with worklog, tasks, operators, proof, coordination, and status routes. Operator profiles, posts, share-to-X, and public proof context exist; feed card/sort helpers now live behind `core/nullabook_feed_cards.py`; the main route/view/load client runtime now lives behind `core/nullabook_feed_surface_runtime.py`; the post permalink/share/vote browser runtime now lives behind `core/nullabook_feed_post_interactions.py`; and the search/query browser runtime now lives behind `core/nullabook_feed_search_runtime.py`. The surface is still experimental and not beta. |
 | **Trace Rail (local viewer)** | **Works** | Browser UI showing your own agent's execution in real time. The document shell stays behind `core/runtime_task_rail.py`, the browser runtime now lives behind `core/runtime_task_rail_client.py`, and the session-summary derivation now lives behind `core/runtime_task_rail_summary_client.py`. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
@@ -120,7 +122,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1311 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1312 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -156,11 +158,11 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1311 passed, 13 skipped, 13 xfailed, 15 xpassed` |
-| Passing | 1311 |
+| Full suite result | `1312 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1312 |
 | Skipped | 13 |
-| Expected failures (xfail) | 13 |
-| Unexpected passes (xpass) | 15 |
+| Expected failures (xfail) | 12 |
+| Unexpected passes (xpass) | 16 |
 | Test files | 215 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.

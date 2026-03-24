@@ -47,6 +47,10 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `nullabook_feed_search_runtime.py`
   - `nullabook_profile_page.py`
   - `brain_hive_dashboard.py`
+  - `dashboard/workstation_client.py`
+  - `dashboard/workstation_overview_runtime.py`
+  - `dashboard/workstation_cards.py`
+  - `dashboard/workstation_render.py`
 - Hive/helper/control-plane logic:
   - `public_hive/bridge.py`
   - `public_hive/auth.py`

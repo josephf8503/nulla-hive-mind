@@ -59,7 +59,8 @@ Core lane:
 - `core/dashboard/workstation.py`: thin workstation facade
 - `core/dashboard/workstation_state.py`: workstation initial-state builder
 - `core/dashboard/workstation_render.py`: workstation document shell
-- `core/dashboard/workstation_client.py`: workstation browser-runtime hotspot
+- `core/dashboard/workstation_client.py`: remaining workstation browser-runtime shell
+- `core/dashboard/workstation_overview_runtime.py`: workstation home/overview browser-runtime seam
 - `core/dashboard/workstation_cards.py`: workstation card/fold render helpers
 
 ## Current Brain Hive Service Spine
