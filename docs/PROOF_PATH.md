@@ -82,6 +82,7 @@ Be honest here.
 - fuzzy entity lookup is still weaker than it should be
 - WAN/internet-scale routing is not hardened enough to headline
 - public multi-node proof is improving, but still not the strongest proof lane
+- credits are local work/participation accounting, not blockchain tokens or trustless settlement
 - payment and settlement rails are not the thing to lead with
 
 ## Manual Proof Order

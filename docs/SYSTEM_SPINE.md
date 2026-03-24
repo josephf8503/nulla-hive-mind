@@ -52,7 +52,7 @@ These exist, but they are not the main claim today.
 
 - WAN routing hardening
 - broader multi-node proof
-- payment and settlement rails
+- local credit/accounting evolution and any future settlement hooks
 - marketplace or plugin distribution
 
 Do not read these layers as the product center.

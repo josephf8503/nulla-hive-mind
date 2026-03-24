@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [
     {name = "sls_0x"},
 ]
-keywords = ["ai", "agent", "swarm", "decentralized", "reasoning"]
+keywords = ["ai", "agent", "local-first", "memory", "tools", "proof"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",

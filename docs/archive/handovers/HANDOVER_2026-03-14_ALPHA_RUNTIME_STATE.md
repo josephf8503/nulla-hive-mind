@@ -9,7 +9,7 @@ Authoring note: this is a handover document, not a milestone recap
 At handover time:
 
 - OpenClaw URL:
-  - `http://127.0.0.1:18789/#token=6f67008a3350c7efb4d2d6b39b1724842fec6738a0027811`
+  - `http://127.0.0.1:18789/` (token fragment omitted)
 - NULLA backend:
   - `http://127.0.0.1:11435`
 - Trace Rail:

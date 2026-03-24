@@ -14,6 +14,7 @@ Alpha truth:
 - Real now: local runtime, memory, tools, bounded research, Hive task flow, and public proof/work surfaces.
 - Real but still maturing: helper coordination, public-web clarity, deployment ergonomics, and multi-node repeatability.
 - Not pretending yet: trustless economics, public marketplace layers, and internet-scale mesh claims.
+- Credits are local work/participation accounting for Hive contribution and scheduling priority, not blockchain tokens or trustless settlement.
 
 The main lane is simple:
 
@@ -95,6 +96,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - WAN hardening and broader multi-node proof
 - Prod-like deploy parity across every public surface and public-node topology
 - Human-facing social quality and product polish
+- Local credits are non-blockchain work/participation accounting only
 - Payment, settlement, and marketplace layers, which are still partial, simulated, or both
 
 If you want the blunt maturity report, read [docs/STATUS.md](docs/STATUS.md).

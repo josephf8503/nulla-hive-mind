@@ -10,7 +10,7 @@ Scope:
 Local run:
 
 ```bash
-cd /Users/sauliuskruopis/Desktop/Decentralized_NULLA/Beta_Website
+cd Beta2_Website
 python3 server.py
 ```
 

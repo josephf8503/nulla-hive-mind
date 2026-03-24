@@ -74,7 +74,7 @@ File: `/opt/Decentralized_NULLA/config/meet_clusters/do_ip_first_4node/watch-edg
   "bind_host": "0.0.0.0",
   "bind_port": 8788,
   "request_timeout_seconds": 6,
-  "auth_token": "6f7d2e010afce0bcd2fb9ad6abe114ae13a56dd57ef97778b6be1be033e0949a",
+  "auth_token": "<redacted-cluster-auth-token>",
   "tls_certfile": ".../tls/watch-edge-1-cert.pem",
   "tls_keyfile": ".../tls/watch-edge-1-key.pem",
   "tls_ca_file": ".../tls/cluster-ca.pem",

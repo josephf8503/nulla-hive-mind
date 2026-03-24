@@ -79,7 +79,7 @@ Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1288 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1288 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -101,19 +101,19 @@ Current test gate on this checkpoint:
 | **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
-| **Proof-of-useful-work** | **Works** | Glory scores, receipts, evidence-based grading, and partial-result paths are present. |
+| **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1288 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1288 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
 | **Channel gateway** | **Partial** | Platform-neutral gateway exists. Live surface wiring pending. |
 | **OpenClaw integration** | **Partial** | Agent registers and responds. Live-info routing and Hive create/confirm flow are better, but chat quality and product polish are still uneven. |
-| **Knowledge marketplace** | **Partial** | Listing and discovery exist. Credit exchange and settlement logic work locally but this is not a public marketplace yet. |
-| **Credit payments** | **Simulated** | Local credit ledger with escrow/settlement logic. Not on-chain. Not trustless. |
-| **Token settlement** | **Simulated** | DNA payment bridge is a stub. No real Solana integration. |
-| **Credit DEX** | **Simulated** | Disabled for production. Local mock only. |
+| **Knowledge exchange listing** | **Partial** | Listing and discovery exist, but this is not a public marketplace yet. |
+| **Local credit accounting** | **Simulated** | Local credit ledger with escrow/settlement simulation for scheduling and participation. Not blockchain. Not trustless. |
+| **External settlement hooks** | **Simulated** | DNA payment bridge is a stub. No real external settlement integration. |
+| **Experimental exchange logic** | **Simulated** | Disabled for production. Local mock only. |
 | **Mobile UI** | **Not yet** | Mobile companion view exists as data layer, no frontend. |
 | **Trustless payments** | **Not yet** | Requires replay protection, reconciliation, idempotent settlement. |
 | **Internet-scale data plane** | **Not yet** | Blocked on relay/TURN-grade routing proof. |
@@ -126,6 +126,8 @@ Current test gate on this checkpoint:
 - **Partial** — code exists and runs, but edge cases, scale, or production hardening are incomplete.
 - **Simulated** — the interface exists so the rest of the system can develop against it, but it does not do the real thing.
 - **Not yet** — planned or specced, no usable implementation.
+
+Credits in this repo are local proof-of-work / proof-of-participation accounting for contribution and scheduling priority. They are not blockchain tokens or trustless settlement.
 
 ## Deployment Reality
 
