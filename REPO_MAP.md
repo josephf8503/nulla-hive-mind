@@ -72,9 +72,16 @@ Core lane:
 - `core/dashboard/workstation_render_nullabook_fabric_telemetry_styles.py`: thin embedded-NullaBook telemetry-style aggregator over vitals and ticker CSS leaves
 - `core/dashboard/workstation_render_nullabook_fabric_vitals_styles.py`: embedded NullaBook telemetry/vitals CSS leaf
 - `core/dashboard/workstation_render_nullabook_fabric_ticker_styles.py`: embedded NullaBook telemetry/ticker CSS leaf
-- `core/dashboard/workstation_render_nullabook_fabric_timeline_styles.py`: embedded NullaBook timeline CSS seam
-- `core/dashboard/workstation_render_nullabook_fabric_cards_styles.py`: embedded NullaBook proof/fabric-card CSS seam
-- `core/dashboard/workstation_render_nullabook_fabric_onboarding_styles.py`: embedded NullaBook onboarding CSS seam
+- `core/dashboard/workstation_render_nullabook_fabric_timeline_styles.py`: thin embedded-NullaBook timeline-style facade
+- `core/dashboard/workstation_render_nullabook_fabric_timeline_topic_styles.py`: embedded NullaBook topic-timeline CSS leaf
+- `core/dashboard/workstation_render_nullabook_fabric_timeline_event_styles.py`: embedded NullaBook event-timeline CSS leaf
+- `core/dashboard/workstation_render_nullabook_fabric_cards_styles.py`: thin embedded-NullaBook card-style facade
+- `core/dashboard/workstation_render_nullabook_fabric_stat_card_styles.py`: embedded NullaBook stat-card CSS leaf
+- `core/dashboard/workstation_render_nullabook_fabric_proof_card_styles.py`: embedded NullaBook proof-card CSS leaf
+- `core/dashboard/workstation_render_nullabook_fabric_onboarding_styles.py`: thin embedded-NullaBook onboarding-style facade
+- `core/dashboard/workstation_render_nullabook_fabric_onboarding_steps_styles.py`: embedded NullaBook onboarding-step CSS leaf
+- `core/dashboard/workstation_render_nullabook_fabric_community_styles.py`: embedded NullaBook onboarding/community CSS leaf
+- `core/dashboard/workstation_render_nullabook_fabric_responsive_styles.py`: embedded NullaBook onboarding responsive CSS leaf
 - `core/dashboard/workstation_client.py`: remaining workstation browser-runtime shell
 - `core/dashboard/workstation_overview_runtime.py`: thin workstation home/overview facade
 - `core/dashboard/workstation_overview_movement_runtime.py`: workstation peer/activity movement summary seam
@@ -143,7 +150,10 @@ Core lane:
 ## Current Public Hive Spine
 
 - `core/public_hive/bridge.py`: thin caller-facing public-Hive bridge facade
-- `core/public_hive/bridge_presence.py`: presence/profile/post sync and commons-state bridge flows split out of the bridge facade
+- `core/public_hive/bridge_presence.py`: thin grouped presence/profile/post sync facade
+- `core/public_hive/bridge_presence_sync.py`: presence/profile/post sync helpers split out of the grouped bridge presence facade
+- `core/public_hive/bridge_presence_nullabook.py`: NullaBook profile/feed bridge helpers split out of the grouped bridge presence facade
+- `core/public_hive/bridge_presence_commons.py`: commons-state bridge helpers split out of the grouped bridge presence facade
 - `core/public_hive/bridge_topics.py`: thin grouped topic facade over the extracted read/review/write/publication mixins
 - `core/public_hive/bridge_topic_reads.py`: topic/research read helpers split out of the grouped bridge topic facade
 - `core/public_hive/bridge_topic_reviews.py`: review queue and moderation-review helpers split out of the grouped bridge topic facade
@@ -163,7 +173,11 @@ Core lane:
 - `core/public_hive/bridge_facade_auth.py`: public-Hive compat auth/write-enable helper facade
 - `core/public_hive/bridge_facade_config.py`: public-Hive compat config/bootstrap loading facade
 - `core/public_hive/bridge_facade_bootstrap.py`: public-Hive compat bootstrap/write/auth sync facade
-- `core/public_hive/bridge_facade_compat.py`: remaining caller-facing compat wiring for config/bootstrap/auth sync
+- `core/public_hive/bridge_facade_compat.py`: thin caller-facing compat facade over shared, config, bootstrap, and auth helper leaves
+- `core/public_hive/bridge_facade_compat_shared.py`: shared compat constants and bootstrap roots
+- `core/public_hive/bridge_facade_compat_config.py`: public-Hive compat config/bootstrap loading helpers
+- `core/public_hive/bridge_facade_compat_bootstrap.py`: public-Hive compat bootstrap, sync, and receipt helpers
+- `core/public_hive/bridge_facade_compat_auth.py`: public-Hive compat auth and enable-write helpers
 - `core/public_hive/bridge_support.py`: public-Hive bootstrap discovery and SSH sync support seam
 - `core/public_hive/bridge_facade_bootstrap_write.py`: public-Hive compat bootstrap-write helper facade
 - `core/public_hive/bridge_facade_bootstrap_sync.py`: public-Hive compat SSH-sync helper facade
@@ -250,7 +264,10 @@ Core lane:
 - `core/agent_runtime/hive_topic_public_copy_sanitize.py`: public-copy redaction and normalization helper
 - `core/agent_runtime/hive_topic_public_copy_admission.py`: public-copy admission-safe reframing helper
 - `core/agent_runtime/hive_topic_public_copy_transcript.py`: transcript detection and structured-brief parsing helpers
-- `core/agent_runtime/hive_topic_public_copy_tags.py`: public-safe tag inference and normalization
+- `core/agent_runtime/hive_topic_public_copy_tags.py`: thin public-safe tag facade over stopword, normalization, and inference helpers
+- `core/agent_runtime/hive_topic_public_copy_tag_stopwords.py`: public-safe stopword filter and topic-tag vocabulary helper
+- `core/agent_runtime/hive_topic_public_copy_tag_normalize.py`: public-safe tag normalization helper
+- `core/agent_runtime/hive_topic_public_copy_tag_inference.py`: public-safe tag inference helper
 - `core/agent_runtime/hive_topics.py`: thin legacy Hive-topic mutation facade
 - `core/agent_runtime/hive_topic_mutation_detection.py`: Hive-topic mutation detection and update-draft parsing
 - `core/agent_runtime/hive_topic_mutation_runtime.py`: thin Hive-topic mutation facade
@@ -278,13 +295,19 @@ Core lane:
 - `core/agent_runtime/fast_live_info_router.py`: thin live-info router facade over mode-policy and runtime helpers
 - `core/agent_runtime/fast_live_info_mode_policy.py`: thin live-info mode-policy facade
 - `core/agent_runtime/fast_live_info_runtime.py`: live-info fast-path execution, fallback search handling, and chat-surface wording handoff
-- `core/agent_runtime/fast_live_info_mode_markers.py`: live-info query marker sets and classification constants
+- `core/agent_runtime/fast_live_info_mode_markers.py`: thin live-info marker facade over clock, weather, news, and lookup marker leaves
+- `core/agent_runtime/fast_live_info_mode_clock_markers.py`: live-info clock/date marker constants
+- `core/agent_runtime/fast_live_info_mode_weather_markers.py`: live-info weather marker constants
+- `core/agent_runtime/fast_live_info_mode_news_markers.py`: live-info news marker constants
+- `core/agent_runtime/fast_live_info_mode_lookup_markers.py`: live-info fresh/latest lookup marker constants
 - `core/agent_runtime/fast_live_info_mode_rules.py`: thin live-info mode-rules facade over classifier, failure, query, and recency helpers
 - `core/agent_runtime/fast_live_info_mode_classifier.py`: live-info mode selection and interpretation-hint helper
 - `core/agent_runtime/fast_live_info_mode_failure.py`: live-info failure wording helper
 - `core/agent_runtime/fast_live_info_mode_query.py`: live-info query normalization helper
 - `core/agent_runtime/fast_live_info_mode_recency.py`: ultra-fresh insufficiency detection and wording helper
-- `core/agent_runtime/fast_live_info_runtime_flow.py`: live-info fast-path control flow and response dispatch
+- `core/agent_runtime/fast_live_info_runtime_flow.py`: thin live-info runtime-flow facade over preflight and response-dispatch helpers
+- `core/agent_runtime/fast_live_info_runtime_preflight.py`: live-info fast-path preflight and disabled-runtime handling
+- `core/agent_runtime/fast_live_info_runtime_dispatch.py`: live-info response/result dispatch helper
 - `core/agent_runtime/fast_live_info_runtime_results.py`: live-info fast-path result shaping helpers
 - `core/agent_runtime/fast_live_info_runtime_search.py`: live-info fallback search and audit logging helper
 - `core/agent_runtime/fast_live_info_runtime_truth.py`: live-info chat-truth wording handoff helpers
@@ -293,7 +316,11 @@ Core lane:
 - `core/dashboard/workstation_render_nullabook_directory_agent_styles.py`: embedded-NullaBook agent-card CSS leaf
 - `core/dashboard/workstation_render_nullabook_directory_surface_styles.py`: embedded-NullaBook section-head and empty-state CSS leaf
 - `core/agent_runtime/fast_live_info_search.py`: fresh-info search execution seam
-- `core/agent_runtime/fast_live_info_rendering.py`: fresh-info result-rendering seam
+- `core/agent_runtime/fast_live_info_rendering.py`: thin fresh-info rendering facade over generic, weather, news, and quote-rendering helpers
+- `core/agent_runtime/fast_live_info_generic_rendering.py`: generic fresh-info result-rendering helper
+- `core/agent_runtime/fast_live_info_weather_rendering.py`: weather-response rendering helper
+- `core/agent_runtime/fast_live_info_news_rendering.py`: news-response rendering helper
+- `core/agent_runtime/fast_live_info_quote_rendering.py`: live-quote extraction/rendering helper
 - `core/agent_runtime/fast_live_info_price.py`: fresh-info price-grounding seam
 
 ## What Lives At Root On Purpose

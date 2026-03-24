@@ -1,10 +1,10 @@
 # What Works Today
 
-Current status matrix. Updated 2026-03-24.
+Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved eighty-one areas:
+The current `main` checkpoint materially improved eighty-two areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -168,6 +168,8 @@ The current `main` checkpoint materially improved eighty-one areas:
    The remaining live-info mode-rule slab is thinner too. `core/agent_runtime/fast_live_info_mode_rules.py` is now the thin facade over `core/agent_runtime/fast_live_info_mode_classifier.py`, `core/agent_runtime/fast_live_info_mode_failure.py`, `core/agent_runtime/fast_live_info_mode_query.py`, and `core/agent_runtime/fast_live_info_mode_recency.py`, which isolates mode classification from failure/query shaping while keeping exports stable.
 81. **Telemetry and lifecycle leaf split**
    The remaining telemetry and topic-lifecycle helper slabs are thinner too. `core/dashboard/workstation_render_nullabook_fabric_telemetry_styles.py` is now the thin telemetry-style aggregator over `core/dashboard/workstation_render_nullabook_fabric_vitals_styles.py` and `core/dashboard/workstation_render_nullabook_fabric_ticker_styles.py`; and `core/public_hive/bridge_topic_lifecycle_writes.py` is now the thin lifecycle-write facade over `core/public_hive/bridge_topic_create_writes.py`, `core/public_hive/bridge_topic_mutation_writes.py`, and `core/public_hive/bridge_topic_status_writes.py`.
+82. **Final helper-leaf split**
+   The last small compat/live-info/public-copy/dashboard helper slabs are thinner too. `core/public_hive/bridge_facade_compat.py`, `core/public_hive/bridge_presence.py`, `core/agent_runtime/hive_topic_public_copy_tags.py`, `core/agent_runtime/fast_live_info_mode_markers.py`, `core/agent_runtime/fast_live_info_rendering.py`, `core/agent_runtime/fast_live_info_runtime_flow.py`, and the remaining embedded-NullaBook fabric style leaves are now all tiny facades over narrower helper leaves instead of being the next one-layer-down pileups.
 
 Current test gate on this checkpoint:
 
@@ -288,7 +290,7 @@ What doesn't work yet:
 
 The immediate priorities are:
 
-1. Finish the alpha-to-beta hardening on the biggest remaining helper slabs: `core/public_hive/bridge_facade_compat.py`, `core/agent_runtime/hive_topic_public_copy_tags.py`, `core/agent_runtime/fast_live_info_mode_markers.py`, `core/agent_runtime/fast_live_info_rendering.py`, `core/agent_runtime/fast_live_info_runtime_flow.py`, `core/public_hive/bridge_presence.py`, `core/public_hive/bridge_topic_post_result_writes.py`, `core/dashboard/workstation_render_nullabook_fabric_timeline_styles.py`, `core/dashboard/workstation_render_nullabook_fabric_cards_styles.py`, and `core/dashboard/workstation_render_nullabook_fabric_onboarding_styles.py`
+1. Finish the alpha-to-beta hardening on the remaining medium-size runtime/public seams: `core/agent_runtime/nullabook.py`, `core/agent_runtime/research_tool_loop_facade.py`, `core/agent_runtime/chat_surface.py`, `core/public_hive/bootstrap.py`, `core/public_hive/publication.py`, `core/public_hive/topic_writes.py`, `core/dashboard/workstation_client.py`, `core/dashboard/snapshot.py`, and `core/dashboard/topic.py`
 2. Companion behavior that feels less template-driven and more genuinely adaptive
 3. WAN transport hardening and public multi-node proof
 4. Better observability, readiness, and storage realism beyond the local-only default

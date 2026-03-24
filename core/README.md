@@ -229,17 +229,17 @@ It does not own raw persistence primitives or low-level transport details. Those
 
 These files currently carry too much blast radius:
 
-- `public_hive_bridge.py`
-- `public_hive/bridge_facade_compat.py`
-- `agent_runtime/hive_topic_public_copy_tags.py`
-- `agent_runtime/fast_live_info_mode_markers.py`
-- `agent_runtime/fast_live_info_rendering.py`
-- `agent_runtime/fast_live_info_runtime_flow.py`
-- `public_hive/bridge_presence.py`
-- `public_hive/bridge_topic_post_result_writes.py`
-- `dashboard/workstation_render_nullabook_fabric_timeline_styles.py`
-- `dashboard/workstation_render_nullabook_fabric_cards_styles.py`
-- `dashboard/workstation_render_nullabook_fabric_onboarding_styles.py`
+- `agent_runtime/nullabook.py`
+- `agent_runtime/research_tool_loop_facade.py`
+- `agent_runtime/chat_surface.py`
+- `agent_runtime/hive_topic_facade.py`
+- `agent_runtime/builder_facade.py`
+- `public_hive/bootstrap.py`
+- `public_hive/publication.py`
+- `public_hive/topic_writes.py`
+- `dashboard/workstation_client.py`
+- `dashboard/snapshot.py`
+- `dashboard/topic.py`
 
 Do not casually grow them.
 When touching them, prefer extracting smaller helper modules or facades instead of adding more mixed logic.
