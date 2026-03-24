@@ -4,7 +4,7 @@ Brutally honest status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved thirty-eight areas:
+The current `main` checkpoint materially improved thirty-nine areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -17,7 +17,7 @@ The current `main` checkpoint materially improved thirty-eight areas:
 5. **Research and tool-loop boundaries**
    Live web lookup, adaptive research, curiosity evidence, and the research tool loop are no longer welded into the `apps/nulla_agent.py` root. The runtime still has large hotspots, but this lane is now behind a clearer facade.
 6. **Chat-surface wording boundaries**
-   Chat-surface wording, observation shaping, and Hive truth narration are no longer welded into the `apps/nulla_agent.py` root either. That lane now lives behind `core/agent_runtime/chat_surface.py`, which cuts the agent composition root down again and keeps user-surface wording changes more local.
+   Chat-surface wording, observation shaping, and Hive truth narration are no longer welded into the `apps/nulla_agent.py` root either. The logic lane now lives behind `core/agent_runtime/chat_surface.py`, and the agent-facing wrapper surface now also lives behind `core/agent_runtime/chat_surface_facade.py`, which cuts the agent composition root down again and keeps user-surface wording changes more local.
 7. **Fast-command and action-result boundaries**
    Credit commands, capability/help truth, credit status rendering, and fast/action result finalizers are no longer welded into the `apps/nulla_agent.py` root. That lane now lives behind `core/agent_runtime/fast_command_surface.py`, which cuts the agent composition root again and keeps command-surface changes more local.
 8. **Memory and public-Hive modularity**
@@ -82,12 +82,14 @@ The current `main` checkpoint materially improved thirty-eight areas:
    The caller-facing `PublicHiveBridge` class is no longer welded into `core/public_hive_bridge.py`. That lane now lives behind `core/public_hive/bridge.py`, leaving `core/public_hive_bridge.py` as the smaller compatibility/auth/bootstrap facade while keeping the public bridge import surface stable.
 38. **Agent response-policy split**
    Response classification, workflow/footer visibility policy, and tool-history observation normalization are no longer welded into `apps/nulla_agent.py`. That lane now lives behind `core/agent_runtime/response_policy.py`, which cuts the agent composition root down again while keeping the runtime-facing method surface stable.
+39. **Agent chat-surface facade split**
+   Chat-surface wrapper glue is no longer welded into `apps/nulla_agent.py`. That agent-facing wrapper lane now lives behind `core/agent_runtime/chat_surface_facade.py`, which leaves `core/agent_runtime/chat_surface.py` as the lower-level wording/observation/Hive-truth logic seam and cuts the composition root down again without changing the runtime-facing method surface.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1297 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1297 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -112,7 +114,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1297 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1297 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -148,11 +150,11 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1297 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1297 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Passing | 1297 |
 | Skipped | 13 |
-| Expected failures (xfail) | 13 |
-| Unexpected passes (xpass) | 15 |
+| Expected failures (xfail) | 12 |
+| Unexpected passes (xpass) | 16 |
 | Test files | 212 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.

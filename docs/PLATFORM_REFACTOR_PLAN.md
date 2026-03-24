@@ -27,7 +27,8 @@ The biggest files on the current trunk are:
 
 | File | Lines | Current reality |
 |------|-------|-----------------|
-| `apps/nulla_agent.py` | 2450 | still the main runtime composition root, but materially thinner after the fast-command, chat-surface, live-info, presence/autonomy, and response-policy extractions |
+| `apps/nulla_agent.py` | 2180 | still the main runtime composition root, but materially thinner after the fast-command, chat-surface logic/facade, live-info, presence/autonomy, and response-policy extractions |
+| `core/agent_runtime/chat_surface_facade.py` | 280 | agent-facing chat-surface wrapper glue is now isolated behind a dedicated facade seam |
 | `core/agent_runtime/response_policy.py` | 303 | response classification, workflow/footer visibility policy, and tool-history observation shaping are now isolated behind a dedicated runtime policy seam |
 | `core/dashboard/workstation_client.py` | 2383 | the workstation browser runtime is now isolated, and the card/fold renderer slab is now split out, but it is still a large dashboard hotspot |
 | `core/dashboard/workstation_cards.py` | 295 | workstation card/fold render helpers are now isolated behind a dedicated browser-render helper lane |
@@ -72,7 +73,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/brain_hive_service.py`, `core/runtime_task_rail.py`, `core/public_hive/bridge.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`
 - startup/provider truth is now also centralized behind `core/runtime_backbone.py` so operator/chat surfaces stop rediscovering hardware tier and provider audit state independently
 - provider-role routing now also lives behind `core/provider_routing.py`, and both the helper/teacher lane and the main model execution router now honor bounded drone/queen provider roles without broad caller rewiring
-- chat-surface wording, observation shaping, and Hive truth narration now also live behind `core/agent_runtime/chat_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
+- chat-surface wording, observation shaping, and Hive truth narration now also live behind `core/agent_runtime/chat_surface.py`, and the agent-facing wrapper surface now also lives behind `core/agent_runtime/chat_surface_facade.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - credit commands, capability/help truth, credit status rendering, and fast/action result shaping now also live behind `core/agent_runtime/fast_command_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - response classification, workflow/footer visibility policy, and tool-history observation shaping now also live behind `core/agent_runtime/response_policy.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - live-info, weather, news, and price lookup routing now also live behind `core/agent_runtime/fast_live_info.py`, leaving `core/agent_runtime/fast_paths.py` as the smaller utility/date/smalltalk shortcut lane
@@ -129,6 +130,7 @@ Split next:
 Rewrite selectively:
 
 - `apps/nulla_agent.py` into clearer orchestration and runtime service seams
+- keep chat-surface wrapper methods inside `core/agent_runtime/chat_surface_facade.py` instead of letting them leak back into the agent root
 - `core/public_hive/bridge.py` into smaller caller-facing workflow and transport-policy seams
 - keep `core/public_hive_bridge.py` as the compatibility/auth/bootstrap facade instead of growing bridge-class logic back into it
 - `core/dashboard/workstation_client.py` into browser-runtime/view-model/render-helper slices instead of one browser slab
@@ -332,13 +334,13 @@ pytest -q \
 Status on trunk:
 
 - this phase is actively in progress, not hypothetical
-- `apps/nulla_agent.py` is down to 2450 lines from the older 11k+ state
+- `apps/nulla_agent.py` is down to 2180 lines from the older 11k+ state
 - extracted runtime seams now include checkpoints, fast paths, response shaping, presence, builder support/controller, NullaBook, memory runtime, orchestrator helpers, Hive runtime/topics/create/followups, and turn dispatch/frontdoor/reasoning
 - fast-path wrapper glue now lives behind `core/agent_runtime/fast_path_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - Hive topic/create/followup wrapper glue now also lives behind `core/agent_runtime/hive_topic_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - builder workflow/scaffold wrapper glue now also lives behind `core/agent_runtime/builder_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - research/live-web/tool-loop wrapper glue now also lives behind `core/agent_runtime/research_tool_loop_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
-- chat-surface wording/observation/Hive truth glue now also lives behind `core/agent_runtime/chat_surface.py`, so `apps/nulla_agent.py` no longer carries that 800-line surface-shaping slab locally
+- chat-surface wording/observation/Hive truth logic now also lives behind `core/agent_runtime/chat_surface.py`, and the agent-facing wrapper glue now also lives behind `core/agent_runtime/chat_surface_facade.py`, so `apps/nulla_agent.py` no longer carries that surface-shaping slab locally
 - credit commands, capability/help truth, credit status rendering, and fast/action result glue now also live behind `core/agent_runtime/fast_command_surface.py`, so `apps/nulla_agent.py` no longer carries that command-surface slab locally
 - response classification, workflow/footer visibility policy, and tool-history observation shaping now also live behind `core/agent_runtime/response_policy.py`, so `apps/nulla_agent.py` no longer carries that response-policy slab locally
 - provider swarm/routing glue for the helper lane now also lives behind `core/provider_routing.py` and `core/model_teacher_pipeline.py`, so provider-role decisions stop leaking into callers

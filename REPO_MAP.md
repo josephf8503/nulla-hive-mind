@@ -105,7 +105,8 @@ Core lane:
 - `apps/nulla_agent.py`: still the main runtime composition root
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
-- `core/agent_runtime/chat_surface.py`: chat-surface wording, observation shaping, and Hive truth narration moved out of the agent root
+- `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive truth narration moved out of the agent root
+- `core/agent_runtime/chat_surface_facade.py`: agent-facing chat-surface wrapper facade moved out of the agent root
 - `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help truth, credit status rendering, and fast/action result shaping moved out of the agent root
 - `core/agent_runtime/response_policy.py`: response classification, workflow/footer visibility policy, and tool-history observation shaping moved out of the agent root
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
