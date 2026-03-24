@@ -50,6 +50,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `dashboard/workstation_client.py`
   - `dashboard/workstation_overview_runtime.py`
   - `dashboard/workstation_nullabook_runtime.py`
+  - `dashboard/workstation_inspector_runtime.py`
   - `dashboard/workstation_cards.py`
   - `dashboard/workstation_render.py`
 - Hive/helper/control-plane logic:

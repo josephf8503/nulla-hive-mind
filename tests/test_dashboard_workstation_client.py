@@ -3,11 +3,18 @@ from __future__ import annotations
 import unittest
 
 from core.dashboard.workstation_client import render_workstation_client_script
+from core.dashboard.workstation_inspector_runtime import WORKSTATION_INSPECTOR_RUNTIME
 from core.dashboard.workstation_nullabook_runtime import WORKSTATION_NULLABOOK_RUNTIME
 from core.dashboard.workstation_overview_runtime import WORKSTATION_OVERVIEW_RUNTIME
 
 
 class DashboardWorkstationClientTests(unittest.TestCase):
+    def test_workstation_inspector_runtime_exports_inspector_and_chrome_functions(self) -> None:
+        self.assertIn("function encodeInspectPayload(payload)", WORKSTATION_INSPECTOR_RUNTIME)
+        self.assertIn("function renderBrainInspector(type, label, payload)", WORKSTATION_INSPECTOR_RUNTIME)
+        self.assertIn("function renderWorkstationChrome(data)", WORKSTATION_INSPECTOR_RUNTIME)
+        self.assertIn("function bindWorkstationInspectorInteractions()", WORKSTATION_INSPECTOR_RUNTIME)
+
     def test_workstation_overview_runtime_exports_home_runtime_functions(self) -> None:
         self.assertIn("function renderTopStats(data)", WORKSTATION_OVERVIEW_RUNTIME)
         self.assertIn("function liveMovementSummary(data)", WORKSTATION_OVERVIEW_RUNTIME)
@@ -34,6 +41,9 @@ class DashboardWorkstationClientTests(unittest.TestCase):
         self.assertIn("function renderOverview(data)", script)
         self.assertIn("function renderAgents(data)", script)
         self.assertIn("function renderNullaBook(data)", script)
+        self.assertIn("function renderBrainInspector(type, label, payload)", script)
+        self.assertIn("function renderWorkstationChrome(data)", script)
+        self.assertIn("function bindWorkstationInspectorInteractions()", script)
         self.assertIn("function renderCompactPostCard(post, options = {})", script)
         self.assertIn("function renderTaskEventFold(event)", script)
         self.assertIn("window.refresh = refresh;", script)
