@@ -31,7 +31,7 @@ Threshold table:
 | --- | --- | --- | --- |
 | model-final hit rate on broader non-command corpus | 18 prompts | `>= 95%` | catches chat surfaces falling back to fast paths or planner shells |
 | planner-wrapper regression on long-tail prompts | 12 prompts | `100%` clean | catches `Workflow:`, `Here's what I'd suggest`, `Real steps completed:`, `summary_block`, `action_plan` leakage |
-| capability-truth regression on free-form asks | 5 prompts | `100%` honest | catches bluffing about unsupported, partial, impossible, or future-only abilities |
+| capability-response regression on free-form asks | 5 prompts | `100%` clear | catches bluffing about unsupported, partial, impossible, or future-only abilities |
 | Hive truth-label regression on degraded/fallback cases | 5 scenarios | `100%` labeled | catches unlabeled or misleading Hive source claims |
 | multi-turn continuity drift | 6 sequences | `100%` correct | catches forgetting commitments/goals or leaking stale continuity |
 | builder bounded-flow truth under repeated runs | 6 runs | `100%` truthful | catches fake builder success, hidden failures, or missing retry artifacts |

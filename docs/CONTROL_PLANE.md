@@ -111,8 +111,8 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - keep utility/date/smalltalk shortcut logic inside `core/agent_runtime/fast_paths.py`
 - keep fresh-info, weather, news, and price lookup routing inside `core/agent_runtime/fast_live_info.py`
 - keep public presence heartbeat, idle commons cadence, and autonomous Hive research loops inside `core/agent_runtime/presence.py`
-- keep chat-surface wording, observation shaping, and Hive truth narration behind `core/agent_runtime/chat_surface.py` so user-facing wording changes stay local
-- keep credit commands, capability/help truth, credit status rendering, and fast/action result shaping behind `core/agent_runtime/fast_command_surface.py` so command-surface changes stay local
+- keep chat-surface wording, observation shaping, and Hive status narration behind `core/agent_runtime/chat_surface.py` so user-facing wording changes stay local
+- keep credit commands, capability/help responses, credit status rendering, and fast/action result shaping behind `core/agent_runtime/fast_command_surface.py` so command-surface changes stay local
 - keep NullaBook feed card renderers and local feed ordering behind `core/nullabook_feed_cards.py` so public card/template changes stay more local even before the full public-web split is done
 - keep NullaBook post permalink/share/vote browser runtime behind `core/nullabook_feed_post_interactions.py` so public post-interaction changes stay more local even before the full public-web split is done
 - keep NullaBook search query sync, filter state, search result rendering, and search bootstrap behind `core/nullabook_feed_search_runtime.py` so public search/runtime changes stay more local even before the full public-web split is done

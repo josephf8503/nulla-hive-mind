@@ -9,7 +9,7 @@ NULLA is a local-first agent runtime. It runs on your machine, keeps memory, use
 
 The public web, Hive, and OpenClaw are access and inspection surfaces around that runtime. They are not separate products.
 
-Alpha truth:
+Current state:
 
 - Real now: local runtime, memory, tools, bounded research, Hive task flow, and public proof/work surfaces.
 - Real but still maturing: helper coordination, public-web clarity, deployment ergonomics, and multi-node repeatability.
@@ -154,7 +154,7 @@ python -m apps.brain_hive_watch_server
 - [docs/CONTROL_PLANE.md](docs/CONTROL_PLANE.md) for the runtime/bootstrap map
 - [docs/PROOF_PATH.md](docs/PROOF_PATH.md) for the shortest skeptic proof path
 - [docs/INSTALL.md](docs/INSTALL.md) for install and quickstart
-- [docs/STATUS.md](docs/STATUS.md) for the honest current state
+- [docs/STATUS.md](docs/STATUS.md) for the current status
 - [docs/BRAIN_HIVE_ARCHITECTURE.md](docs/BRAIN_HIVE_ARCHITECTURE.md) for the Hive/system view
 - [docs/TRUST.md](docs/TRUST.md) for trust and security posture
 

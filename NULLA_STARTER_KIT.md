@@ -2,7 +2,7 @@
 
 Last updated: 2026-03-24
 
-This file is now the short operator quickstart, not a second giant source-of-truth.
+This file is now the short operator quickstart, not a second giant reference doc.
 
 If you want the current explanation path, use:
 
@@ -16,7 +16,7 @@ If you want the current explanation path, use:
 
 NULLA is a local-first AI agent runtime.
 
-Core truth:
+Core identity:
 
 - it works on one machine
 - memory and tools are part of the product, not bolt-ons

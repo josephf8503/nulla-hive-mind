@@ -12,7 +12,7 @@ Core lane:
 - `REPO_MAP.md`: fast repo shape and where to look next
 - `CONTRIBUTING.md`: contribution path and regression discipline
 - `SECURITY.md`: security reporting
-- `AGENT_HANDOVER.md`: redirect to current truth docs
+- `AGENT_HANDOVER.md`: redirect to the current operating docs
 - `NULLA_STARTER_KIT.md`: short operator quickstart
 - `pyproject.toml`: package metadata and dependency entrypoint
 
@@ -24,7 +24,7 @@ Core lane:
 - `tools/`: tool registry and built-in tools
 - `network/`: transport, protocol, helper routing, and mesh boundaries
 - `tests/`: regression, proof, and architecture smoke coverage
-- `docs/`: current source-of-truth docs
+- `docs/`: current source-of-record docs
 - `installer/`: install/bootstrap UX and generated launcher paths
 - `ops/`: deployment, hygiene, and operational automation
 - `scripts/`: support utilities that are not product entrypoints
@@ -105,10 +105,10 @@ Core lane:
 - `apps/nulla_agent.py`: still the main runtime composition root
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
-- `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive truth narration moved out of the agent root
+- `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive status narration moved out of the agent root
 - `core/agent_runtime/chat_surface_facade.py`: agent-facing chat-surface wrapper facade moved out of the agent root
-- `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help truth, credit status rendering, and fast/action result shaping moved out of the agent root
-- `core/agent_runtime/public_hive_support.py`: public-Hive capability truth/help wrappers, task export, footer support, capability ledger shaping, and transport-mode support moved out of the agent root
+- `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help responses, credit status rendering, and fast/action result shaping moved out of the agent root
+- `core/agent_runtime/public_hive_support.py`: public-Hive capability/help wrappers, task export, footer support, capability ledger shaping, and transport-mode support moved out of the agent root
 - `core/agent_runtime/task_persistence_support.py`: task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence moved out of the agent root
 - `core/agent_runtime/proceed_intent_support.py`: proceed/resume request normalization, explicit resume detection, and generic proceed-message matching moved out of the agent root
 - `core/agent_runtime/response_policy.py`: response classification, workflow/footer visibility policy, and tool-history observation shaping moved out of the agent root

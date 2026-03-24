@@ -313,7 +313,7 @@ The product direction is clearly:
 - model staging
 - launch into a working runtime
 
-But the honest current state is:
+But the current state is:
 - skeleton exists
 - doctor exists
 - launchers exist

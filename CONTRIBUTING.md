@@ -26,7 +26,7 @@ Read in this order:
 - `apps/`: runtime and service entrypoints
 - `core/`: the real product logic
 - `tests/`: the regression safety net
-- `docs/`: source-of-truth docs
+- `docs/`: source-of-record docs
 - `installer/`: one-click install/bootstrap
 
 Ignore archived handovers and historical root docs unless you are specifically tracing old decisions.

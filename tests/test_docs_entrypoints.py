@@ -5,12 +5,12 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def test_readme_frontloads_product_truth_and_install() -> None:
+def test_readme_frontloads_product_summary_and_install() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
     early_block = "\n".join(readme.splitlines()[:120])
 
     assert "NULLA is a local-first agent runtime" in early_block
-    assert "Alpha truth:" in early_block
+    assert "Current state:" in early_block
     assert "Bootstrap install script:" in early_block
     assert "## Try It" in readme
     assert "docs/INSTALL.md" in readme

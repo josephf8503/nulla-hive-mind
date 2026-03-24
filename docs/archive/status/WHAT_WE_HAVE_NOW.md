@@ -905,7 +905,7 @@ What we have now is not a toy and not vapor.
 
 It is a real local and LAN-capable decentralized-agent platform with working orchestration and meaningful hardening.
 
-At the same time, it now documents its limits more honestly:
+At the same time, it now documents its limits more clearly:
 
 - public-network readiness is partial,
 - economic settlement is simulated,

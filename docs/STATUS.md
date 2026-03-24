@@ -1,6 +1,6 @@
 # What Works Today
 
-Brutally honest status matrix. Updated 2026-03-24.
+Current status matrix. Updated 2026-03-24.
 
 ## Latest Stabilization Checkpoint
 
@@ -8,8 +8,8 @@ The current `main` checkpoint materially improved forty-two areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
-2. **Runtime backbone and startup truth**
-   Operator/chat startup truth now routes through `core/runtime_backbone.py`, so hardware tier, provider audit rows, and runtime bootstrap state stop being rediscovered independently across entrypoints.
+2. **Runtime backbone and startup state**
+   Operator/chat startup state now routes through `core/runtime_backbone.py`, so hardware tier, provider audit rows, and runtime bootstrap state stop being rediscovered independently across entrypoints.
 3. **Service surface hardening**
    The API, meet, daemon, and watch surfaces are thinner and cleaner than before, with health/readiness contracts aligned and less mixed request/runtime glue living in entrypoints.
 4. **Install/package parity**
@@ -17,9 +17,9 @@ The current `main` checkpoint materially improved forty-two areas:
 5. **Research and tool-loop boundaries**
    Live web lookup, adaptive research, curiosity evidence, and the research tool loop are no longer welded into the `apps/nulla_agent.py` root. The runtime still has large hotspots, but this lane is now behind a clearer facade.
 6. **Chat-surface wording boundaries**
-   Chat-surface wording, observation shaping, and Hive truth narration are no longer welded into the `apps/nulla_agent.py` root either. The logic lane now lives behind `core/agent_runtime/chat_surface.py`, and the agent-facing wrapper surface now also lives behind `core/agent_runtime/chat_surface_facade.py`, which cuts the agent composition root down again and keeps user-surface wording changes more local.
+   Chat-surface wording, observation shaping, and Hive status narration are no longer welded into the `apps/nulla_agent.py` root either. The logic lane now lives behind `core/agent_runtime/chat_surface.py`, and the agent-facing wrapper surface now also lives behind `core/agent_runtime/chat_surface_facade.py`, which cuts the agent composition root down again and keeps user-surface wording changes more local.
 7. **Fast-command and action-result boundaries**
-   Credit commands, capability/help truth, credit status rendering, and fast/action result finalizers are no longer welded into the `apps/nulla_agent.py` root. That lane now lives behind `core/agent_runtime/fast_command_surface.py`, which cuts the agent composition root again and keeps command-surface changes more local.
+   Credit commands, capability/help responses, credit status rendering, and fast/action result finalizers are no longer welded into the `apps/nulla_agent.py` root. That lane now lives behind `core/agent_runtime/fast_command_surface.py`, which cuts the agent composition root again and keeps command-surface changes more local.
 8. **Memory and public-Hive modularity**
    Persistent memory is now behind a thin facade over `core/memory/`, and public-Hive write workflows are split behind `core/public_hive/` instead of staying trapped in broad mixed modules.
 9. **Hive task lifecycle and public-write integrity**
@@ -29,7 +29,7 @@ The current `main` checkpoint materially improved forty-two areas:
 11. **Security and key-storage posture**
    The signer lane now supports keyring-backed storage with cleaner fallback/rotation hygiene, and the repo’s public/docs hygiene checks explicitly guard against path leaks and key artifact regressions.
 12. **Regression and acceptance gates**
-   The repo now carries a sharded local full-suite path, clean-wheel smoke/install validation, GitHub CI, and the fast LLM acceptance gate as enforced truth surfaces instead of relying on a source checkout alone.
+   The repo now carries a sharded local full-suite path, clean-wheel smoke/install validation, GitHub CI, and the fast LLM acceptance gate as enforced verification surfaces instead of relying on a source checkout alone.
 13. **Dashboard workstation split**
    The workstation browser runtime is no longer welded into `core/dashboard/workstation_render.py`. The document shell and the browser runtime now live in separate modules, which cuts the dashboard blast radius again and makes workstation client changes more local.
 14. **Hive topic workflow split**
@@ -75,7 +75,7 @@ The current `main` checkpoint materially improved forty-two areas:
 34. **Runtime task rail summary split**
    The trace-rail session-summary derivation logic is no longer welded into `core/runtime_task_rail_client.py`. That summary lane now lives behind `core/runtime_task_rail_summary_client.py`, which cuts the client slab down again while keeping the rendered `/trace` contract stable.
 35. **Messaging and docs hygiene pass**
-   The front-door docs and package metadata now state the product center more honestly: credits are explicitly local work/participation accounting instead of blockchain/token language, marketplace/settlement claims are more clearly quarantined, and tracked operator/archive docs had leaked absolute local paths and token-shaped values scrubbed.
+   The front-door docs and package metadata now state the product center more clearly: credits are explicitly local work/participation accounting instead of blockchain/token language, marketplace/settlement claims are more clearly quarantined, and tracked operator/archive docs had leaked absolute local paths and token-shaped values scrubbed.
 36. **NullaBook surface-runtime split**
    The public feed route/view state, hero/sidebar shaping, and `loadAll()` public feed/dashboard loading loop are no longer welded into `core/nullabook_feed_page.py`. That lane now lives behind `core/nullabook_feed_surface_runtime.py`, which cuts the public feed shell down again while keeping the public route contract stable.
 37. **Public-Hive bridge-class split**
@@ -85,7 +85,7 @@ The current `main` checkpoint materially improved forty-two areas:
 39. **Agent chat-surface facade split**
    Chat-surface wrapper glue is no longer welded into `apps/nulla_agent.py`. That agent-facing wrapper lane now lives behind `core/agent_runtime/chat_surface_facade.py`, which leaves `core/agent_runtime/chat_surface.py` as the lower-level wording/observation/Hive-truth logic seam and cuts the composition root down again without changing the runtime-facing method surface.
 40. **Agent public-Hive support split**
-   Public-Hive capability-truth/help wrappers, public task export, Hive footer support, public capability ledger shaping, and transport-mode helpers are no longer welded into `apps/nulla_agent.py`. That outward support lane now lives behind `core/agent_runtime/public_hive_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for transport fallback, capability assembly, export failure, and footer failure paths.
+   Public-Hive capability/help wrappers, public task export, Hive footer support, public capability ledger shaping, and transport-mode helpers are no longer welded into `apps/nulla_agent.py`. That outward support lane now lives behind `core/agent_runtime/public_hive_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for transport fallback, capability assembly, export failure, and footer failure paths.
 41. **Agent task-persistence support split**
    Task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence are no longer welded into `apps/nulla_agent.py`. That persistence/support lane now lives behind `core/agent_runtime/task_persistence_support.py`, which cuts the composition root down again while keeping the runtime-facing method surface stable and adds direct seam coverage for task-row updates, verified-action shard promotion, privacy-gated shard downgrades, and shareable shard sync paths.
 42. **Agent proceed-intent support split**
