@@ -23,15 +23,18 @@ The repo shape is still carrying too much risk in a small set of giant files. Th
 
 ## Verified Current Risk Snapshot
 
-The biggest files on the current trunk are:
+The current trunk still has a short list of blast-radius centers plus a few newly-thin facades that must not re-bloat:
 
 | File | Lines | Current reality |
 |------|-------|-----------------|
-| `apps/nulla_agent.py` | 1786 | still the main runtime composition root, but materially thinner after the fast-command, chat-surface logic/facade, public-Hive support, task-persistence support, proceed-intent support, live-info, presence/autonomy, and response-policy extractions |
+| `apps/nulla_agent.py` | 781 | now the thin runtime composition root after the checkpoint, NullaBook, tool-result, and Hive-review extractions; the remaining risk is re-bloat, not one giant trunk file |
 | `core/agent_runtime/chat_surface_facade.py` | 280 | agent-facing chat-surface wrapper glue is now isolated behind a dedicated facade seam |
 | `core/agent_runtime/public_hive_support.py` | 187 | agent-facing public-Hive capability/export/footer support is now isolated behind a dedicated runtime seam |
 | `core/agent_runtime/task_persistence_support.py` | 195 | task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence are now isolated behind a dedicated runtime support seam |
 | `core/agent_runtime/proceed_intent_support.py` | 63 | proceed/resume request normalization, explicit resume detection, and generic proceed-message matching are now isolated behind a dedicated runtime intent-policy seam |
+| `core/agent_runtime/runtime_checkpoint_support.py` | 344 | checkpoint lifecycle, routing-profile selection, source-context merging, and patch-sensitive runtime/tool compatibility are now isolated behind a dedicated runtime support seam |
+| `core/agent_runtime/nullabook_runtime.py` | 264 | NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction are now isolated behind a dedicated runtime seam |
+| `core/agent_runtime/tool_result_surface.py` | 415 | workflow attachment, user-facing response shaping, planner-leak stripping, and tool-history observation shaping are now isolated behind a dedicated response-surface seam |
 | `core/agent_runtime/response_policy.py` | 303 | response classification, workflow/footer visibility policy, and tool-history observation shaping are now isolated behind a dedicated runtime policy seam |
 | `core/dashboard/workstation_client.py` | 532 | the workstation browser-runtime shell is no longer a top-tier hotspot after the card/fold helper, overview/home-runtime, embedded-NullaBook, inspector/truth-selection, and trading/learning extractions, but it still owns the remaining dashboard runtime glue |
 | `core/dashboard/workstation_overview_runtime.py` | 778 | workstation home-board top stats, peer/activity movement summaries, and overview rendering are now isolated behind a dedicated browser-runtime seam |
@@ -39,12 +42,14 @@ The biggest files on the current trunk are:
 | `core/dashboard/workstation_inspector_runtime.py` | 239 | inspect payload encoding, inspector truth/debug rendering, workstation chrome shaping, and inspector/tab click binding are now isolated behind a dedicated browser-runtime seam |
 | `core/dashboard/workstation_trading_learning_runtime.py` | 594 | trading-presence helpers plus the trading and learning-lab browser runtime are now isolated behind a dedicated browser-runtime seam |
 | `core/dashboard/workstation_cards.py` | 295 | workstation card/fold render helpers are now isolated behind a dedicated browser-render helper lane |
-| `core/dashboard/workstation_render.py` | 476 | the workstation document shell is now much smaller after the render-style extraction, but it still owns the remaining markup/tab composition shell |
+| `core/dashboard/workstation_render.py` | 253 | the workstation document shell is now thin after the render-style and tab-markup extractions |
 | `core/dashboard/workstation_render_tab_markup.py` | 230 | workstation tab navigation plus overview/work/fabric/commons/markets markup is now isolated behind a dedicated render-markup seam |
 | `core/dashboard/workstation_render_styles.py` | 12 | tiny style aggregator seam for workstation render styles |
 | `core/dashboard/workstation_render_shell_styles.py` | 877 | shared workstation shell/chrome CSS is now isolated behind a dedicated render-style seam |
 | `core/dashboard/workstation_render_nullabook_styles.py` | 641 | NullaBook-mode and embedded public-feed CSS is now isolated behind a dedicated render-style seam |
-| `core/nullabook_feed_page.py` | 705 | public worklog/feed route shell is smaller again after the surface-runtime extraction, but it still owns a broad document shell and public-surface presentation slab |
+| `core/nullabook_feed_page.py` | 24 | now the thin public feed facade that preserves `render_nullabook_page_html()` while delegating shell/document work |
+| `core/nullabook_feed_document.py` | 490 | full public feed document assembly is now isolated behind a dedicated presentation shell |
+| `core/nullabook_feed_shell.py` | 244 | public feed chrome, hero chips, route labels, and initial surface markup are now isolated behind a dedicated shell seam |
 | `core/nullabook_feed_surface_runtime.py` | 350 | route/view state, hero/sidebar shaping, and the public feed/dashboard loading loop are now isolated behind a dedicated client-runtime seam |
 | `core/nullabook_feed_cards.py` | 289 | feed/task/agent/proof card render helpers and feed ordering are now isolated, but still coupled to page globals |
 | `core/nullabook_feed_post_interactions.py` | 192 | post permalink overlay, reply loading, share/copy actions, and public vote runtime are now isolated behind a dedicated browser-runtime seam |
@@ -53,7 +58,7 @@ The biggest files on the current trunk are:
 | `core/agent_runtime/hive_topic_drafting.py` | 405 | draft parsing, original-draft recovery, title cleanup, and create-vs-drafting detection are now isolated behind a dedicated drafting lane |
 | `core/agent_runtime/hive_topic_pending.py` | 412 | pending preview state, confirmation parsing, history recovery, and preview formatting are now isolated behind a dedicated interaction-state lane |
 | `core/agent_runtime/hive_topic_public_copy.py` | 359 | public-safe copy shaping, transcript rejection, and tag normalization are now isolated behind a dedicated policy/helper lane |
-| `core/brain_hive_service.py` | 317 | service boundary is materially thinner after the read/query, commons-promotion, review-workflow, topic-lifecycle, commons-interaction, commons-state, write-support, and topic/post frontdoor extractions, but the remaining service-private identity/review glue is still too mixed |
+| `core/brain_hive_service.py` | 229 | service boundary is materially thinner after the read/query, commons-promotion, review-workflow, topic-lifecycle, commons-interaction, commons-state, write-support, topic/post frontdoor, and identity/review/idempotency extractions; the remaining risk is service-facade re-coupling |
 | `core/brain_hive_topic_post_frontdoor.py` | 141 | base topic/post create, get, and list behavior is now isolated behind a dedicated Brain Hive frontdoor seam while keeping the service facade stable |
 | `core/brain_hive_write_support.py` | 82 | public-visibility guard checks, post-row hydration, forced-review shaping, and Hive idempotent receipt helpers are now isolated behind a dedicated write-support seam |
 | `core/brain_hive_queries.py` | 366 | dashboard/watch/public read models are now isolated, and commons meta/signal helpers are now split out behind a shared commons-state seam |
@@ -62,13 +67,15 @@ The biggest files on the current trunk are:
 | `core/brain_hive_commons_state.py` | 152 | shared commons topic classification, commons post validation, commons meta shaping, downstream-use counts, and research-signal aggregation are now isolated behind a dedicated state/signal seam |
 | `core/brain_hive_review_workflow.py` | 156 | weighted review, quorum, and applied-state transitions are now isolated behind a dedicated moderation workflow lane |
 | `core/brain_hive_topic_lifecycle.py` | 188 | topic claim, claim-backed status transition, creator edit, and creator delete logic are now isolated behind a dedicated lifecycle lane |
-| `core/runtime_task_rail.py` | 719 | runtime task/reporting rail shell is much smaller after the browser-runtime extraction, but it still owns mixed document shell and rail composition |
-| `core/runtime_task_rail_client.py` | 452 | trace-rail browser runtime, event rendering, and polling logic are now isolated behind a dedicated client seam, but it still owns mixed client-state/render coupling |
+| `core/runtime_task_rail.py` | 8 | now the thin trace-rail facade that preserves `render_runtime_task_rail_html()` |
+| `core/runtime_task_rail_assets.py` | 678 | embedded trace-rail CSS/JS/bootstrap payloads are now isolated behind a dedicated asset seam |
+| `core/runtime_task_rail_client.py` | 74 | now the thin trace-rail browser facade that delegates polling and event/session rendering |
 | `core/runtime_task_rail_summary_client.py` | 172 | trace-rail session summary derivation is now isolated behind a dedicated summary seam |
-| `core/agent_runtime/fast_paths.py` | 785 | the utility/date/smalltalk shortcut lane is now much smaller after the live-info extraction, but it still owns mixed shortcut glue |
-| `core/public_hive/bridge.py` | 495 | caller-facing public-Hive bridge facade is now isolated inside the package, but it still owns a broad caller/runtime delegation seam |
-| `core/public_hive_bridge.py` | 296 | legacy compatibility/auth/bootstrap facade is much smaller after the bridge-class extraction |
-| `core/agent_runtime/hive_research_followup.py` | 739 | Hive research/status followup logic is now isolated, but it still owns a broad continuation slab |
+| `core/agent_runtime/fast_paths.py` | 92 | now the thin shortcut facade after the utility, companion, and builder helper extractions |
+| `core/public_hive/bridge.py` | 37 | now the thin caller-facing public-Hive bridge facade |
+| `core/public_hive/bridge_topics.py` | 313 | topic CRUD, claims, progress, moderation, result submission, and search are now isolated behind the main workflow seam in the bridge package |
+| `core/public_hive_bridge.py` | 306 | legacy compatibility/auth/bootstrap facade remains broader than the package bridge facade and must stay thin |
+| `core/agent_runtime/hive_research_followup.py` | 27 | now the thin research/status followup facade over extracted hint/resume/status helpers |
 | `core/agent_runtime/fast_live_info.py` | 553 | fresh-info, weather, news, and price lookup routing are now isolated, but still concentrated in one shortcut slab |
 | `core/agent_runtime/hive_topics.py` | 473 | mutation/update/delete lane is now local, but it still owns the remaining topic mutation surface |
 | `core/dashboard/render.py` | 346 | now a routing shell for public vs workstation rendering, no longer the main dashboard monolith |
@@ -120,6 +127,14 @@ These are the current blast-radius centers. Split these before inventing more la
 - Brain Hive base topic/post create, get, and list behavior now also lives behind `core/brain_hive_topic_post_frontdoor.py`, so `core/brain_hive_service.py` no longer owns that frontdoor lane directly while the service facade and the old module-level `get_topic` seam stay stable
 - front-door docs and package metadata now also state the product center more clearly: credits are explicitly local work/participation accounting instead of blockchain/token language, marketplace/settlement claims are more clearly quarantined, and the tracked archive/docs lane had leaked absolute local paths plus token-shaped values scrubbed
 - the caller-facing `PublicHiveBridge` class now also lives behind `core/public_hive/bridge.py`, so `core/public_hive_bridge.py` no longer owns that facade slab directly while the old bridge import surface stays stable
+- runtime checkpoint lifecycle, routing-profile selection, source-context merging, and patch-sensitive runtime/tool compatibility now also live behind `core/agent_runtime/runtime_checkpoint_support.py`, so `apps/nulla_agent.py` no longer owns that checkpoint/tool bridge slab directly
+- NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction now also live behind `core/agent_runtime/nullabook_runtime.py`, so `apps/nulla_agent.py` no longer owns that operator-facing NullaBook slab directly
+- workflow attachment, user-facing response shaping, planner-leak stripping, workflow summaries, and tool-history observation shaping now also live behind `core/agent_runtime/tool_result_surface.py`, so `apps/nulla_agent.py` no longer owns that response-surface slab directly
+- Hive review queue/action/cleanup handling now also lives behind `core/agent_runtime/hive_review_runtime.py`, so `apps/nulla_agent.py` no longer owns that review-command slab directly
+- public feed chrome and full document assembly now also live behind `core/nullabook_feed_shell.py` and `core/nullabook_feed_document.py`, so `core/nullabook_feed_page.py` is now just the thin public facade
+- trace-rail document assembly and embedded assets now also live behind `core/runtime_task_rail_document.py` and `core/runtime_task_rail_assets.py`, while client polling and event/session rendering now also live behind `core/runtime_task_rail_polling.py` and `core/runtime_task_rail_event_render.py`, so `core/runtime_task_rail.py` and `core/runtime_task_rail_client.py` are now thin facades
+- public-Hive presence/profile/post sync, topic CRUD/claims/progress/moderation/search flows, and bridge transport helpers now also live behind `core/public_hive/bridge_presence.py`, `core/public_hive/bridge_topics.py`, and `core/public_hive/bridge_transport.py`, so `core/public_hive/bridge.py` is now just the thin caller-facing facade
+- Hive followup hint/resume/status helpers now also live behind `core/agent_runtime/hive_research_hints.py`, `core/agent_runtime/hive_research_resume.py`, and `core/agent_runtime/hive_research_status.py`, while fast-path utility/companion/builder helpers now also live behind `core/agent_runtime/fast_paths_utility.py`, `core/agent_runtime/fast_paths_companion.py`, and `core/agent_runtime/fast_paths_builder.py`, and the remaining Brain Hive identity/review/idempotency glue now also lives behind `core/brain_hive_identity.py`, `core/brain_hive_review_state.py`, and `core/brain_hive_idempotency.py`
 
 ## Keep / Split / Rewrite / Quarantine
 
@@ -133,34 +148,30 @@ Keep:
 
 Split next:
 
-- `apps/nulla_agent.py`
 - `core/dashboard/workstation_overview_runtime.py`
-- `core/dashboard/workstation_nullabook_runtime.py`
-- `core/dashboard/workstation_inspector_runtime.py`
 - `core/dashboard/workstation_trading_learning_runtime.py`
-- `core/dashboard/workstation_render.py`
-- `core/dashboard/workstation_render_tab_markup.py`
 - `core/dashboard/workstation_render_shell_styles.py`
 - `core/dashboard/workstation_render_nullabook_styles.py`
 - `core/dashboard/workstation_cards.py`
+- `core/agent_runtime/hive_topic_create.py`
 - `core/agent_runtime/hive_topic_drafting.py`
 - `core/agent_runtime/hive_topic_pending.py`
 - `core/agent_runtime/hive_topic_public_copy.py`
-- `core/agent_runtime/hive_research_followup.py`
-- `core/nullabook_feed_page.py`
-- `core/nullabook_feed_surface_runtime.py`
-- `core/brain_hive_service.py`
-- `core/runtime_task_rail.py`
-- `core/public_hive/bridge.py`
+- `core/agent_runtime/response_policy.py`
+- `core/agent_runtime/runtime_checkpoint_support.py`
+- `core/agent_runtime/tool_result_surface.py`
+- `core/nullabook_feed_document.py`
+- `core/runtime_task_rail_assets.py`
+- `core/public_hive_bridge.py`
 
 Rewrite selectively:
 
-- `apps/nulla_agent.py` into clearer orchestration and runtime service seams
+- keep `apps/nulla_agent.py` as the now-thin composition root and keep checkpoint/NullaBook/tool-result/review seams in their extracted modules instead of leaking them back into the root
 - keep chat-surface wrapper methods inside `core/agent_runtime/chat_surface_facade.py` instead of letting them leak back into the agent root
 - keep public-Hive capability/export/footer wrapper methods inside `core/agent_runtime/public_hive_support.py` instead of letting them leak back into the agent root
 - keep task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence inside `core/agent_runtime/task_persistence_support.py` instead of leaking that persistence/support lane back into the agent root
 - keep proceed/resume request normalization, explicit resume detection, and generic proceed-message matching inside `core/agent_runtime/proceed_intent_support.py` instead of leaking that intent-policy lane back into the agent root
-- `core/public_hive/bridge.py` into smaller caller-facing workflow and transport-policy seams
+- keep `core/public_hive/bridge.py` as the thin caller-facing facade and keep presence/topics/transport lanes in `bridge_presence.py`, `bridge_topics.py`, and `bridge_transport.py`
 - keep `core/public_hive_bridge.py` as the compatibility/auth/bootstrap facade instead of growing bridge-class logic back into it
 - `core/dashboard/workstation_client.py` into smaller browser-runtime slices instead of one browser slab
 - keep shared card/fold render helpers inside `core/dashboard/workstation_cards.py`
@@ -177,17 +188,17 @@ Rewrite selectively:
 - keep `core/agent_runtime/hive_topic_create.py` focused on create/publish orchestration instead of draft parsing
 - keep confirmation-state flow inside `core/agent_runtime/hive_topic_pending.py`
 - keep public-safe copy policy inside `core/agent_runtime/hive_topic_public_copy.py`
-- `core/agent_runtime/hive_research_followup.py` into followup selection, active-task resume, and status-rendering services instead of one continuation slab
-- `core/nullabook_feed_page.py` into a thinner public document shell plus smaller presentation helpers instead of one public-surface slab
+- keep `core/agent_runtime/hive_research_followup.py` as the thin followup facade and keep hint/resume/status behavior in the extracted helper modules
+- keep `core/nullabook_feed_page.py` as the thin public facade and keep chrome/document assembly in `core/nullabook_feed_shell.py` and `core/nullabook_feed_document.py`
 - keep route/view state, hero/sidebar shaping, and public feed/dashboard loading inside `core/nullabook_feed_surface_runtime.py` instead of leaking that client-runtime lane back into the page shell
 - keep card renderers and local feed ordering inside `core/nullabook_feed_cards.py` until the next public-web cut removes the remaining page-global coupling cleanly
 - keep post permalink/share/vote browser runtime inside `core/nullabook_feed_post_interactions.py` instead of leaking it back into the page shell
 - keep search query sync, filter state, search result rendering, and search bootstrap inside `core/nullabook_feed_search_runtime.py` instead of leaking it back into the page shell
-- `core/brain_hive_service.py` into service contracts, read models, and workflow adapters instead of one dashboard-facing service slab
+- keep `core/brain_hive_service.py` as the service facade and keep the remaining identity/review/idempotency helpers behind their extracted private-glue modules
 - keep read/query projections inside `core/brain_hive_queries.py`, keep shared commons state/signal helpers inside `core/brain_hive_commons_state.py`, keep commons-promotion workflow inside `core/brain_hive_commons_promotion.py`, keep commons endorsements/comments/listing inside `core/brain_hive_commons_interactions.py`, keep moderation review/quorum/apply flow inside `core/brain_hive_review_workflow.py`, keep topic claim/update/delete lifecycle inside `core/brain_hive_topic_lifecycle.py`, keep write-side guard/hydration/idempotency helpers inside `core/brain_hive_write_support.py`, keep topic/post create-get-list behavior inside `core/brain_hive_topic_post_frontdoor.py`, and keep pushing `core/brain_hive_service.py` toward the remaining service-private identity/review glue instead of one dashboard-facing service block
-- keep trace-rail browser runtime, polling loop, and event/session rendering inside `core/runtime_task_rail_client.py`
+- keep trace-rail browser-runtime facade thin and keep polling/event-session rendering inside `core/runtime_task_rail_polling.py` and `core/runtime_task_rail_event_render.py`
 - keep session summary derivation inside `core/runtime_task_rail_summary_client.py`
-- `core/runtime_task_rail.py` into a thinner report/document shell plus explicit task-summary/event-shaping helpers instead of one mixed task/report lane
+- keep `core/runtime_task_rail.py` as the thin facade and keep document/assets assembly inside `core/runtime_task_rail_document.py` and `core/runtime_task_rail_assets.py`
 
 Quarantine in narrative and architecture priority:
 
@@ -305,11 +316,14 @@ pytest -q \
 Status on trunk:
 
 - `core/public_hive/__init__.py`, `auth.py`, `bootstrap.py`, `bridge.py`, `client.py`, `config.py`, `truth.py`, `topic_writes.py`, `publication.py`, and `moderation.py` are already live
-- `core/public_hive_bridge.py` is down to 296 lines
-- `core/public_hive/bridge.py` now owns the 495-line caller-facing bridge facade
+- `core/public_hive_bridge.py` is down to 306 lines
+- `core/public_hive/bridge.py` is down to 37 lines and now acts as the thin caller-facing bridge facade
+- `core/public_hive/bridge_presence.py` now owns the extracted presence/profile/post sync lane at 115 lines
+- `core/public_hive/bridge_topics.py` now owns the extracted topic CRUD/claim/progress/moderation/search lane at 313 lines
+- `core/public_hive/bridge_transport.py` now owns the extracted auth-token/write-grant/SSL/HTTP helper lane at 55 lines
 - `core/public_hive/writes.py` is down to a 37-line facade
 - auth/bootstrap/config composition now lives behind `core/public_hive/auth.py`
-- topic/profile/read/privacy boundaries are still the remaining cleanup surface
+- the remaining public-Hive risk is now mostly the broader topic workflow lane in `core/public_hive/bridge_topics.py`, not the bridge facade itself
 - the main slow-lane model router now reads `provider_role` from `core/task_router.py` and resolves ranked candidates through `core/provider_routing.py` inside `core/memory_first_router.py`
 
 Create:
@@ -371,8 +385,8 @@ pytest -q \
 Status on trunk:
 
 - this phase is actively in progress, not hypothetical
-- `apps/nulla_agent.py` is down to 1786 lines from the older 11k+ state
-- extracted runtime seams now include checkpoints, fast paths, response shaping, public-Hive support, task persistence support, proceed-intent support, presence, builder support/controller, NullaBook, memory runtime, orchestrator helpers, Hive runtime/topics/create/followups, and turn dispatch/frontdoor/reasoning
+- `apps/nulla_agent.py` is down to 781 lines from the older 11k+ state
+- extracted runtime seams now include checkpoints, fast paths, response shaping, public-Hive support, task persistence support, proceed-intent support, presence, builder support/controller, NullaBook, memory runtime, orchestrator helpers, Hive runtime/topics/create/followups, turn dispatch/frontdoor/reasoning, runtime checkpoint support, tool-result surface support, and Hive review runtime
 - fast-path wrapper glue now lives behind `core/agent_runtime/fast_path_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - Hive topic/create/followup wrapper glue now also lives behind `core/agent_runtime/hive_topic_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
 - builder workflow/scaffold wrapper glue now also lives behind `core/agent_runtime/builder_facade.py`, so `apps/nulla_agent.py` no longer carries that delegation slab locally
@@ -383,8 +397,12 @@ Status on trunk:
 - public-Hive capability/help wrappers, task export, footer support, public capability ledger shaping, and transport-mode helpers now also live behind `core/agent_runtime/public_hive_support.py`, so `apps/nulla_agent.py` no longer carries that outward public-support slab locally
 - task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence now also live behind `core/agent_runtime/task_persistence_support.py`, so `apps/nulla_agent.py` no longer carries that persistence/support slab locally
 - proceed/resume request normalization, explicit resume detection, and generic proceed-message matching now also live behind `core/agent_runtime/proceed_intent_support.py`, so `apps/nulla_agent.py` no longer carries that intent-policy slab locally
+- runtime checkpoint lifecycle, routing-profile selection, source-context merging, and patch-sensitive runtime/tool compatibility now also live behind `core/agent_runtime/runtime_checkpoint_support.py`, so `apps/nulla_agent.py` no longer carries that checkpoint/tool bridge slab locally
+- NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request text extraction now also live behind `core/agent_runtime/nullabook_runtime.py`, so `apps/nulla_agent.py` no longer carries that operator-facing NullaBook slab locally
+- workflow attachment, user-facing response shaping, planner-leak stripping, workflow summaries, and tool-history observation shaping now also live behind `core/agent_runtime/tool_result_surface.py`, so `apps/nulla_agent.py` no longer carries that response-surface slab locally
+- Hive review queue/action/cleanup handling now also lives behind `core/agent_runtime/hive_review_runtime.py`, so `apps/nulla_agent.py` no longer carries that review-command slab locally
 - provider swarm/routing glue for the helper lane now also lives behind `core/provider_routing.py` and `core/model_teacher_pipeline.py`, so provider-role decisions stop leaking into callers
-- the file is still too large, but the old doc numbers are no longer true
+- the root is now below the 1k-line bar, so the remaining risk is re-bloat, not one giant trunk file
 
 Target packages:
 
@@ -400,13 +418,13 @@ What is already true on trunk:
 - API, meet, daemon, and watch entrypoints are already thin facades or ASGI-backed service roots
 - the remaining work is concentrated inside the agent runtime and the large dashboard/public-surface modules, not the old entry shells
 
-Move out of `apps/nulla_agent.py`:
+Keep out of `apps/nulla_agent.py`:
 
-- bootstrap wiring into `core/runtime/bootstrap.py`
-- lifecycle into `core/runtime/lifecycle.py`
-- background loops into `core/runtime/background_loops.py`
-- turn execution into `core/conversation/turn_engine.py`
-- context/retrieval wiring into `core/memory/context_loader.py` and `core/memory/router.py`
+- checkpoint lifecycle, routing-profile selection, source-context merging, and patch-sensitive runtime/tool compatibility in `core/agent_runtime/runtime_checkpoint_support.py`
+- NullaBook intent/pending/post mutation flow in `core/agent_runtime/nullabook_runtime.py`
+- workflow attachment, response shaping, planner-leak stripping, and tool-history observation shaping in `core/agent_runtime/tool_result_surface.py`
+- review queue/action/cleanup logic in `core/agent_runtime/hive_review_runtime.py`
+- all existing builder/support/presence/public-Hive/response seams that already left the root
 
 Targeted regression:
 
@@ -461,7 +479,6 @@ Status on trunk:
 
 Split next:
 
-- `core/dashboard/workstation_client.py` -> `refresh_runtime.py`, `knowledge_runtime.py`
 - keep shared card/fold renderer helpers in `core/dashboard/workstation_cards.py`
 - keep workstation home/overview runtime in `core/dashboard/workstation_overview_runtime.py`
 - keep the embedded NullaBook panel runtime in `core/dashboard/workstation_nullabook_runtime.py`
@@ -470,7 +487,7 @@ Split next:
 - keep the workstation tab navigation plus panel markup in `core/dashboard/workstation_render_tab_markup.py`
 - keep the shared workstation shell/chrome CSS in `core/dashboard/workstation_render_shell_styles.py`
 - keep the NullaBook-mode CSS in `core/dashboard/workstation_render_nullabook_styles.py`
-- `core/dashboard/workstation_render.py` -> `shell_markup.py`, `footer_markup.py`
+- keep `core/dashboard/workstation_render.py` thin; do not let shell/footer helpers bloat it again
 - `apps/brain_hive_watch_server.py` -> `core/web/watch/routes_public.py`, `routes_topic.py`, `cache.py`, `tls.py`, `responses.py`
 - keep `apps/nulla_api_server.py` and `apps/meet_and_greet_server.py` thin; do not re-bloat the facades
 

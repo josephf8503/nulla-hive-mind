@@ -29,6 +29,10 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `runtime_tool_contracts.py`
   - `tool_intent_executor.py`
 - agent runtime slices:
+  - `agent_runtime/runtime_checkpoint_support.py`
+  - `agent_runtime/nullabook_runtime.py`
+  - `agent_runtime/tool_result_surface.py`
+  - `agent_runtime/hive_review_runtime.py`
   - `agent_runtime/chat_surface.py`
   - `agent_runtime/chat_surface_facade.py`
   - `agent_runtime/fast_command_surface.py`
@@ -41,6 +45,8 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `public_landing_page.py`
   - `public_site_shell.py`
   - `nullabook_feed_page.py`
+  - `nullabook_feed_shell.py`
+  - `nullabook_feed_document.py`
   - `nullabook_feed_surface_runtime.py`
   - `nullabook_feed_cards.py`
   - `nullabook_feed_post_interactions.py`
@@ -58,8 +64,18 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `dashboard/workstation_inspector_runtime.py`
   - `dashboard/workstation_trading_learning_runtime.py`
   - `dashboard/workstation_cards.py`
+  - `runtime_task_rail.py`
+  - `runtime_task_rail_document.py`
+  - `runtime_task_rail_assets.py`
+  - `runtime_task_rail_client.py`
+  - `runtime_task_rail_polling.py`
+  - `runtime_task_rail_event_render.py`
+  - `runtime_task_rail_summary_client.py`
 - Hive/helper/control-plane logic:
   - `public_hive/bridge.py`
+  - `public_hive/bridge_presence.py`
+  - `public_hive/bridge_topics.py`
+  - `public_hive/bridge_transport.py`
   - `public_hive/auth.py`
   - `public_hive/client.py`
   - `brain_hive_queries.py`
@@ -71,6 +87,9 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `brain_hive_topic_lifecycle.py`
   - `brain_hive_topic_post_frontdoor.py`
   - `brain_hive_service.py`
+  - `brain_hive_identity.py`
+  - `brain_hive_review_state.py`
+  - `brain_hive_idempotency.py`
   - `public_hive_bridge.py`
   - `control_plane_workspace.py`
 
@@ -78,21 +97,21 @@ It does not own raw persistence primitives or low-level transport details. Those
 
 These files currently carry too much blast radius:
 
-- `apps/nulla_agent.py`
+- `dashboard/workstation_overview_runtime.py`
+- `dashboard/workstation_trading_learning_runtime.py`
+- `dashboard/workstation_render_shell_styles.py`
+- `dashboard/workstation_render_nullabook_styles.py`
 - `dashboard/workstation_cards.py`
 - `agent_runtime/hive_topic_create.py`
 - `agent_runtime/hive_topic_drafting.py`
 - `agent_runtime/hive_topic_pending.py`
 - `agent_runtime/hive_topic_public_copy.py`
-- `agent_runtime/hive_research_followup.py`
 - `agent_runtime/response_policy.py`
+- `agent_runtime/runtime_checkpoint_support.py`
+- `agent_runtime/tool_result_surface.py`
 - `public_hive_bridge.py`
-- `public_hive/bridge.py`
-- `nullabook_feed_page.py`
-- `brain_hive_service.py`
-- `runtime_task_rail.py`
-- `runtime_task_rail_client.py`
-- `runtime_task_rail_summary_client.py`
+- `nullabook_feed_document.py`
+- `runtime_task_rail_assets.py`
 
 Do not casually grow them.
 When touching them, prefer extracting smaller helper modules or facades instead of adding more mixed logic.

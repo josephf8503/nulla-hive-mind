@@ -72,7 +72,7 @@ Core lane:
 
 ## Current Brain Hive Service Spine
 
-- `core/brain_hive_service.py`: stable Brain Hive service facade that now mainly owns the remaining service-private identity/review glue
+- `core/brain_hive_service.py`: stable Brain Hive service facade that now mainly owns the remaining service-private composition layer
 - `core/brain_hive_topic_post_frontdoor.py`: base topic/post create, get, and list behavior split out of the old service root
 - `core/brain_hive_queries.py`: dashboard/watch/public read-model and query projection helpers split out of the service root
 - `core/brain_hive_commons_state.py`: shared commons topic classification, commons meta shaping, downstream-use counts, and research-signal aggregation split out of the old service/query/promotion glue
@@ -81,12 +81,17 @@ Core lane:
 - `core/brain_hive_commons_interactions.py`: commons endorsements, comments, and listing helpers split out of the service root
 - `core/brain_hive_review_workflow.py`: weighted moderation review, quorum, and applied-state transitions split out of the service root
 - `core/brain_hive_topic_lifecycle.py`: topic claim, claim-backed status updates, creator edit, and creator delete logic split out of the service root
+- `core/brain_hive_identity.py`: remaining claim-link and display-field helpers split out of the service facade
+- `core/brain_hive_review_state.py`: remaining moderation/review-state helpers split out of the service facade
+- `core/brain_hive_idempotency.py`: remaining idempotent result/cache helpers split out of the service facade
 
 ## Current Public Web Spine
 
 - `core/public_site_shell.py`: shared public shell, nav, and base styles
 - `core/public_landing_page.py`: public landing/status shell
-- `core/nullabook_feed_page.py`: public worklog/tasks/operators/proof route shell plus the remaining document-shell/presentation surface
+- `core/nullabook_feed_page.py`: tiny public worklog/tasks/operators/proof route facade
+- `core/nullabook_feed_shell.py`: public feed chrome, hero chips, route labels, and initial surface markup
+- `core/nullabook_feed_document.py`: full NullaBook document assembly around the extracted runtime/card/search/post-interaction seams
 - `core/nullabook_feed_surface_runtime.py`: route/view state, hero/sidebar shaping, and public feed/dashboard loading split out of the feed page
 - `core/nullabook_feed_cards.py`: feed/task/agent/proof card render helpers and local feed ordering split out of the feed page
 - `core/nullabook_feed_post_interactions.py`: post permalink overlay, reply loading, share/copy actions, and public vote runtime split out of the feed page
@@ -95,24 +100,35 @@ Core lane:
 
 ## Current Public Hive Spine
 
-- `core/public_hive/bridge.py`: caller-facing public-Hive bridge facade and transport/runtime delegation
+- `core/public_hive/bridge.py`: thin caller-facing public-Hive bridge facade
+- `core/public_hive/bridge_presence.py`: presence/profile/post sync and commons-state bridge flows split out of the bridge facade
+- `core/public_hive/bridge_topics.py`: topic CRUD, claims, progress, moderation, result submission, and search flows split out of the bridge facade
+- `core/public_hive/bridge_transport.py`: auth-token lookup, write-grant attachment, SSL context, and HTTP helper flows split out of the bridge facade
 - `core/public_hive_bridge.py`: compatibility/auth/bootstrap facade kept stable for callers while the package split continues
 - `core/public_hive/auth.py`: auth/bootstrap/config loading and SSH sync helpers
 - `core/public_hive/client.py`: HTTP transport, auth-token selection, TLS context, and route-scoped write-grant attachment
 
 ## Current Trace Rail Spine
 
-- `core/runtime_task_rail.py`: stable trace-rail document shell/facade
-- `core/runtime_task_rail_client.py`: trace-rail browser runtime, event rendering, and polling logic
+- `core/runtime_task_rail.py`: stable trace-rail facade entrypoint
+- `core/runtime_task_rail_document.py`: trace-rail document assembly and shell composition
+- `core/runtime_task_rail_assets.py`: embedded trace-rail CSS/JS/bootstrap payloads
+- `core/runtime_task_rail_client.py`: thin trace-rail browser-runtime facade
+- `core/runtime_task_rail_polling.py`: trace-rail fetch/poll/session-state client logic
+- `core/runtime_task_rail_event_render.py`: trace-rail event-row and session-render helpers
 - `core/runtime_task_rail_summary_client.py`: trace-rail session summary derivation and stage/status shaping
 - `core/runtime_task_events.py`: runtime session/event store and list helpers
 - `core/web/api/service.py`: `/trace`, `/task-rail`, and `/api/runtime/*` frontdoor
 
 ## Current Agent Runtime Spine
 
-- `apps/nulla_agent.py`: still the main runtime composition root
+- `apps/nulla_agent.py`: thin runtime composition root
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
+- `core/agent_runtime/runtime_checkpoint_support.py`: checkpoint lifecycle, routing-profile selection, source-context merging, and patch-sensitive runtime/tool compatibility split out of the agent root
+- `core/agent_runtime/nullabook_runtime.py`: NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction split out of the agent root
+- `core/agent_runtime/tool_result_surface.py`: workflow attachment, user-facing response shaping, planner-leak stripping, and tool-history observation shaping split out of the agent root
+- `core/agent_runtime/hive_review_runtime.py`: Hive review queue/action/cleanup handling split out of the agent root
 - `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive status narration moved out of the agent root
 - `core/agent_runtime/chat_surface_facade.py`: agent-facing chat-surface wrapper facade moved out of the agent root
 - `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help responses, credit status rendering, and fast/action result shaping moved out of the agent root
@@ -127,11 +143,17 @@ Core lane:
 - `core/agent_runtime/hive_topic_drafting.py`: draft parsing and create-vs-drafting detection split out of the create workflow
 - `core/agent_runtime/hive_topic_pending.py`: pending preview, confirmation parsing, history recovery, and preview formatting split out of the create workflow
 - `core/agent_runtime/hive_topic_public_copy.py`: public-safe copy shaping, transcript rejection, and tag normalization split out of the create workflow
-- `core/agent_runtime/hive_research_followup.py`: research/status continuation split out of the old followup slab
+- `core/agent_runtime/hive_research_followup.py`: thin research/status continuation facade over extracted followup helpers
+- `core/agent_runtime/hive_research_hints.py`: Hive followup hint extraction and history hint helpers
+- `core/agent_runtime/hive_research_resume.py`: active-task resume and research-start followup handling
+- `core/agent_runtime/hive_research_status.py`: Hive status followup detection and topic resolution
 - `core/agent_runtime/builder_facade.py`: agent-facing builder workflow/scaffold wrapper facade
 - `core/agent_runtime/research_tool_loop_facade.py`: agent-facing research/live-web/tool-loop wrapper facade
 - `core/model_teacher_pipeline.py`: bounded provider-swarm selection for helper/teacher candidate generation
-- `core/agent_runtime/fast_paths.py`: utility time/date and smalltalk/general shortcut logic after the live-info extraction
+- `core/agent_runtime/fast_paths.py`: thin utility shortcut facade after the live-info and helper extractions
+- `core/agent_runtime/fast_paths_utility.py`: utility time/date/smalltalk/general shortcut helpers
+- `core/agent_runtime/fast_paths_companion.py`: companion-memory and personalized-plan shortcut helpers
+- `core/agent_runtime/fast_paths_builder.py`: builder/file-request/root-extraction shortcut helpers
 - `core/agent_runtime/fast_live_info.py`: fresh-info, weather, news, and price lookup shortcut logic moved out of the old fast-path slab
 
 ## What Lives At Root On Purpose
