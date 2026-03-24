@@ -11,14 +11,38 @@ from core.dashboard.workstation_inspector_runtime import WORKSTATION_INSPECTOR_R
 from core.dashboard.workstation_learning_program_cards_runtime import (
     WORKSTATION_LEARNING_PROGRAM_CARDS_RUNTIME,
 )
+from core.dashboard.workstation_learning_program_knowledge_cards_runtime import (
+    WORKSTATION_LEARNING_PROGRAM_KNOWLEDGE_CARDS_RUNTIME,
+)
 from core.dashboard.workstation_learning_program_runtime import (
     WORKSTATION_LEARNING_PROGRAM_RUNTIME,
 )
+from core.dashboard.workstation_learning_program_shared_runtime import (
+    WORKSTATION_LEARNING_PROGRAM_SHARED_RUNTIME,
+)
+from core.dashboard.workstation_learning_program_topic_cards_runtime import (
+    WORKSTATION_LEARNING_PROGRAM_TOPIC_CARDS_RUNTIME,
+)
+from core.dashboard.workstation_learning_program_trading_cards_runtime import (
+    WORKSTATION_LEARNING_PROGRAM_TRADING_CARDS_RUNTIME,
+)
 from core.dashboard.workstation_nullabook_runtime import WORKSTATION_NULLABOOK_RUNTIME
+from core.dashboard.workstation_overview_home_runtime import (
+    WORKSTATION_OVERVIEW_HOME_RUNTIME,
+)
 from core.dashboard.workstation_overview_movement_runtime import (
     WORKSTATION_OVERVIEW_MOVEMENT_RUNTIME,
 )
+from core.dashboard.workstation_overview_proof_runtime import (
+    WORKSTATION_OVERVIEW_PROOF_RUNTIME,
+)
 from core.dashboard.workstation_overview_runtime import WORKSTATION_OVERVIEW_RUNTIME
+from core.dashboard.workstation_overview_stats_runtime import (
+    WORKSTATION_OVERVIEW_STATS_RUNTIME,
+)
+from core.dashboard.workstation_overview_streams_runtime import (
+    WORKSTATION_OVERVIEW_STREAMS_RUNTIME,
+)
 from core.dashboard.workstation_overview_surface_runtime import (
     WORKSTATION_OVERVIEW_SURFACE_RUNTIME,
 )
@@ -47,6 +71,10 @@ class DashboardWorkstationClientTests(unittest.TestCase):
         self.assertIn("function renderTradingMiniStats(summary, heartbeat, presenceState)", WORKSTATION_TRADING_SURFACE_RUNTIME)
         self.assertIn("function renderLearningProgramCard({title, summaryText, chipsHtml, bodyHtml, open = false, openStateKey = ''})", WORKSTATION_LEARNING_PROGRAM_CARDS_RUNTIME)
         self.assertIn("function renderLearningLab(data)", WORKSTATION_LEARNING_PROGRAM_RUNTIME)
+        self.assertIn("function renderLearningMiniStats(items)", WORKSTATION_LEARNING_PROGRAM_SHARED_RUNTIME)
+        self.assertIn("function buildTradingProgramBody(summary, decision, patternHealth, missed, edges, discoveries, flow, recentCalls)", WORKSTATION_LEARNING_PROGRAM_TRADING_CARDS_RUNTIME)
+        self.assertIn("function buildGenericKnowledgeBody(learning, memory, mesh, recentLearning)", WORKSTATION_LEARNING_PROGRAM_KNOWLEDGE_CARDS_RUNTIME)
+        self.assertIn("function buildActiveTopicProgramCards(activeTopics)", WORKSTATION_LEARNING_PROGRAM_TOPIC_CARDS_RUNTIME)
 
     def test_workstation_inspector_runtime_exports_inspector_and_chrome_functions(self) -> None:
         self.assertIn("function encodeInspectPayload(payload)", WORKSTATION_INSPECTOR_RUNTIME)
@@ -62,6 +90,10 @@ class DashboardWorkstationClientTests(unittest.TestCase):
         self.assertIn("function distinctPeerSummary(data)", WORKSTATION_OVERVIEW_MOVEMENT_RUNTIME)
         self.assertIn("function renderOverviewMiniStats(data, movement)", WORKSTATION_OVERVIEW_SURFACE_RUNTIME)
         self.assertIn("function renderWorkstationHomeBoard(data, movement)", WORKSTATION_OVERVIEW_SURFACE_RUNTIME)
+        self.assertIn("function renderAdaptationStatusLine(adaptation)", WORKSTATION_OVERVIEW_STATS_RUNTIME)
+        self.assertIn("function renderProofMiniStats(proof, data)", WORKSTATION_OVERVIEW_PROOF_RUNTIME)
+        self.assertIn("function renderResearchGravityList(data)", WORKSTATION_OVERVIEW_STREAMS_RUNTIME)
+        self.assertIn("function renderOverview(data)", WORKSTATION_OVERVIEW_HOME_RUNTIME)
 
     def test_workstation_nullabook_runtime_exports_nullabook_surface(self) -> None:
         self.assertIn("function renderNullaBook(data)", WORKSTATION_NULLABOOK_RUNTIME)

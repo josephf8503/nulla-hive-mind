@@ -7,17 +7,47 @@ from core.dashboard.workstation_render import render_workstation_document
 from core.dashboard.workstation_render_nullabook_content_styles import (
     WORKSTATION_RENDER_NULLABOOK_CONTENT_STYLES,
 )
+from core.dashboard.workstation_render_nullabook_directory_styles import (
+    WORKSTATION_RENDER_NULLABOOK_DIRECTORY_STYLES,
+)
+from core.dashboard.workstation_render_nullabook_fabric_styles import (
+    WORKSTATION_RENDER_NULLABOOK_FABRIC_STYLES,
+)
+from core.dashboard.workstation_render_nullabook_feed_styles import (
+    WORKSTATION_RENDER_NULLABOOK_FEED_STYLES,
+)
 from core.dashboard.workstation_render_nullabook_mode_styles import (
     WORKSTATION_RENDER_NULLABOOK_MODE_STYLES,
+)
+from core.dashboard.workstation_render_shell_card_styles import (
+    WORKSTATION_RENDER_SHELL_CARD_STYLES,
 )
 from core.dashboard.workstation_render_shell_components import (
     WORKSTATION_RENDER_SHELL_COMPONENTS,
 )
+from core.dashboard.workstation_render_shell_footer_styles import (
+    WORKSTATION_RENDER_SHELL_FOOTER_STYLES,
+)
+from core.dashboard.workstation_render_shell_inspector_styles import (
+    WORKSTATION_RENDER_SHELL_INSPECTOR_STYLES,
+)
 from core.dashboard.workstation_render_shell_layout import (
     WORKSTATION_RENDER_SHELL_LAYOUT,
 )
+from core.dashboard.workstation_render_shell_learning_styles import (
+    WORKSTATION_RENDER_SHELL_LEARNING_STYLES,
+)
 from core.dashboard.workstation_render_shell_primitives import (
     WORKSTATION_RENDER_SHELL_PRIMITIVES,
+)
+from core.dashboard.workstation_render_shell_responsive_styles import (
+    WORKSTATION_RENDER_SHELL_RESPONSIVE_STYLES,
+)
+from core.dashboard.workstation_render_shell_stat_styles import (
+    WORKSTATION_RENDER_SHELL_STAT_STYLES,
+)
+from core.dashboard.workstation_render_shell_workbench_styles import (
+    WORKSTATION_RENDER_SHELL_WORKBENCH_STYLES,
 )
 from core.dashboard.workstation_render_styles import WORKSTATION_RENDER_STYLES
 from core.dashboard.workstation_render_tab_markup import WORKSTATION_RENDER_TAB_MARKUP
@@ -77,6 +107,16 @@ class DashboardWorkstationTests(unittest.TestCase):
         self.assertIn(".dashboard-workbench {", WORKSTATION_RENDER_SHELL_LAYOUT)
         self.assertIn(".nb-feed {", WORKSTATION_RENDER_NULLABOOK_CONTENT_STYLES)
         self.assertIn("body.nullabook-mode .nb-topbar { display: flex; }", WORKSTATION_RENDER_NULLABOOK_MODE_STYLES)
+        self.assertIn(".stats {", WORKSTATION_RENDER_SHELL_STAT_STYLES)
+        self.assertIn(".card {", WORKSTATION_RENDER_SHELL_CARD_STYLES)
+        self.assertIn(".learning-program {", WORKSTATION_RENDER_SHELL_LEARNING_STYLES)
+        self.assertIn(".hero-follow-link {", WORKSTATION_RENDER_SHELL_FOOTER_STYLES)
+        self.assertIn(".dashboard-workbench {", WORKSTATION_RENDER_SHELL_WORKBENCH_STYLES)
+        self.assertIn(".dashboard-inspector-title {", WORKSTATION_RENDER_SHELL_INSPECTOR_STYLES)
+        self.assertIn("#initialLoadingOverlay {", WORKSTATION_RENDER_SHELL_RESPONSIVE_STYLES)
+        self.assertIn(".nb-feed {", WORKSTATION_RENDER_NULLABOOK_FEED_STYLES)
+        self.assertIn(".nb-communities {", WORKSTATION_RENDER_NULLABOOK_DIRECTORY_STYLES)
+        self.assertIn(".nb-vitals {", WORKSTATION_RENDER_NULLABOOK_FABRIC_STYLES)
 
     def test_workstation_document_keeps_extracted_tab_markup_contracts(self) -> None:
         html = render_workstation_document(

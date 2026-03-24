@@ -6,8 +6,16 @@ from core.runtime_task_rail_assets import (
     RUNTIME_TASK_RAIL_SHELL_HTML,
     RUNTIME_TASK_RAIL_STYLE_BLOCK,
 )
+from core.runtime_task_rail_event_feed_styles import (
+    RUNTIME_TASK_RAIL_EVENT_FEED_STYLES,
+)
+from core.runtime_task_rail_panel_styles import RUNTIME_TASK_RAIL_PANEL_STYLES
 from core.runtime_task_rail_shell import RUNTIME_TASK_RAIL_SHELL_HTML as RUNTIME_TASK_RAIL_SHELL_FRAGMENT
 from core.runtime_task_rail_styles import RUNTIME_TASK_RAIL_STYLE_BLOCK as RUNTIME_TASK_RAIL_STYLE_FRAGMENT
+from core.runtime_task_rail_trace_styles import RUNTIME_TASK_RAIL_TRACE_STYLES
+from core.runtime_task_rail_workbench_styles import (
+    RUNTIME_TASK_RAIL_WORKBENCH_STYLES,
+)
 
 
 class RuntimeTaskRailAssetsTests(unittest.TestCase):
@@ -20,6 +28,10 @@ class RuntimeTaskRailAssetsTests(unittest.TestCase):
         self.assertIn(".trace-raw-panel", RUNTIME_TASK_RAIL_STYLE_BLOCK)
         self.assertIn("NULLA Task Rail", RUNTIME_TASK_RAIL_SHELL_HTML)
         self.assertIn("Selected-step center", RUNTIME_TASK_RAIL_SHELL_HTML)
+        self.assertIn(".panel-header", RUNTIME_TASK_RAIL_PANEL_STYLES)
+        self.assertIn(".summary-grid", RUNTIME_TASK_RAIL_TRACE_STYLES)
+        self.assertIn(".event-card", RUNTIME_TASK_RAIL_EVENT_FEED_STYLES)
+        self.assertIn(".trace-workbench", RUNTIME_TASK_RAIL_WORKBENCH_STYLES)
 
 
 if __name__ == "__main__":
