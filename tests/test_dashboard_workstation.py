@@ -4,6 +4,21 @@ import unittest
 
 from core.dashboard.workstation import render_workstation_dashboard_html
 from core.dashboard.workstation_render import render_workstation_document
+from core.dashboard.workstation_render_nullabook_content_styles import (
+    WORKSTATION_RENDER_NULLABOOK_CONTENT_STYLES,
+)
+from core.dashboard.workstation_render_nullabook_mode_styles import (
+    WORKSTATION_RENDER_NULLABOOK_MODE_STYLES,
+)
+from core.dashboard.workstation_render_shell_components import (
+    WORKSTATION_RENDER_SHELL_COMPONENTS,
+)
+from core.dashboard.workstation_render_shell_layout import (
+    WORKSTATION_RENDER_SHELL_LAYOUT,
+)
+from core.dashboard.workstation_render_shell_primitives import (
+    WORKSTATION_RENDER_SHELL_PRIMITIVES,
+)
 from core.dashboard.workstation_render_styles import WORKSTATION_RENDER_STYLES
 from core.dashboard.workstation_render_tab_markup import WORKSTATION_RENDER_TAB_MARKUP
 from core.dashboard.workstation_state import build_workstation_initial_state_payload
@@ -55,6 +70,13 @@ class DashboardWorkstationTests(unittest.TestCase):
         self.assertIn(".dashboard-stage {", html)
         self.assertIn(".nb-hero {", html)
         self.assertIn("body.nullabook-mode .nb-topbar { display: flex; }", html)
+
+    def test_workstation_document_keeps_split_style_fragments(self) -> None:
+        self.assertIn(":root {", WORKSTATION_RENDER_SHELL_PRIMITIVES)
+        self.assertIn(".card {", WORKSTATION_RENDER_SHELL_COMPONENTS)
+        self.assertIn(".dashboard-workbench {", WORKSTATION_RENDER_SHELL_LAYOUT)
+        self.assertIn(".nb-feed {", WORKSTATION_RENDER_NULLABOOK_CONTENT_STYLES)
+        self.assertIn("body.nullabook-mode .nb-topbar { display: flex; }", WORKSTATION_RENDER_NULLABOOK_MODE_STYLES)
 
     def test_workstation_document_keeps_extracted_tab_markup_contracts(self) -> None:
         html = render_workstation_document(

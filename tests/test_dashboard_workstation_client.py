@@ -2,19 +2,51 @@ from __future__ import annotations
 
 import unittest
 
+from core.dashboard.workstation_card_normalizers import WORKSTATION_CARD_NORMALIZERS
+from core.dashboard.workstation_card_render_sections import (
+    WORKSTATION_CARD_RENDER_SECTIONS,
+)
 from core.dashboard.workstation_client import render_workstation_client_script
 from core.dashboard.workstation_inspector_runtime import WORKSTATION_INSPECTOR_RUNTIME
+from core.dashboard.workstation_learning_program_cards_runtime import (
+    WORKSTATION_LEARNING_PROGRAM_CARDS_RUNTIME,
+)
+from core.dashboard.workstation_learning_program_runtime import (
+    WORKSTATION_LEARNING_PROGRAM_RUNTIME,
+)
 from core.dashboard.workstation_nullabook_runtime import WORKSTATION_NULLABOOK_RUNTIME
+from core.dashboard.workstation_overview_movement_runtime import (
+    WORKSTATION_OVERVIEW_MOVEMENT_RUNTIME,
+)
 from core.dashboard.workstation_overview_runtime import WORKSTATION_OVERVIEW_RUNTIME
+from core.dashboard.workstation_overview_surface_runtime import (
+    WORKSTATION_OVERVIEW_SURFACE_RUNTIME,
+)
 from core.dashboard.workstation_trading_learning_runtime import WORKSTATION_TRADING_LEARNING_RUNTIME
+from core.dashboard.workstation_trading_presence_runtime import (
+    WORKSTATION_TRADING_PRESENCE_RUNTIME,
+)
+from core.dashboard.workstation_trading_surface_runtime import (
+    WORKSTATION_TRADING_SURFACE_RUNTIME,
+)
 
 
 class DashboardWorkstationClientTests(unittest.TestCase):
+    def test_workstation_card_runtime_keeps_normalizers_and_renderers_split(self) -> None:
+        self.assertIn("function compactText(value, maxLen = 180)", WORKSTATION_CARD_NORMALIZERS)
+        self.assertIn("function taskEventPreview(event)", WORKSTATION_CARD_NORMALIZERS)
+        self.assertIn("function renderCompactPostCard(post, options = {})", WORKSTATION_CARD_RENDER_SECTIONS)
+        self.assertIn("function renderTaskEvents(events, limit, emptyText)", WORKSTATION_CARD_RENDER_SECTIONS)
+
     def test_workstation_trading_learning_runtime_exports_market_and_learning_functions(self) -> None:
         self.assertIn("function latestTradingPresence(trading)", WORKSTATION_TRADING_LEARNING_RUNTIME)
         self.assertIn("function tradingPresenceState(trading, generatedAt, agents)", WORKSTATION_TRADING_LEARNING_RUNTIME)
         self.assertIn("function renderTrading(data)", WORKSTATION_TRADING_LEARNING_RUNTIME)
         self.assertIn("function renderLearningLab(data)", WORKSTATION_TRADING_LEARNING_RUNTIME)
+        self.assertIn("function tradingHeartbeatState(heartbeat, generatedAt)", WORKSTATION_TRADING_PRESENCE_RUNTIME)
+        self.assertIn("function renderTradingMiniStats(summary, heartbeat, presenceState)", WORKSTATION_TRADING_SURFACE_RUNTIME)
+        self.assertIn("function renderLearningProgramCard({title, summaryText, chipsHtml, bodyHtml, open = false, openStateKey = ''})", WORKSTATION_LEARNING_PROGRAM_CARDS_RUNTIME)
+        self.assertIn("function renderLearningLab(data)", WORKSTATION_LEARNING_PROGRAM_RUNTIME)
 
     def test_workstation_inspector_runtime_exports_inspector_and_chrome_functions(self) -> None:
         self.assertIn("function encodeInspectPayload(payload)", WORKSTATION_INSPECTOR_RUNTIME)
@@ -27,6 +59,9 @@ class DashboardWorkstationClientTests(unittest.TestCase):
         self.assertIn("function liveMovementSummary(data)", WORKSTATION_OVERVIEW_RUNTIME)
         self.assertIn("function renderOverview(data)", WORKSTATION_OVERVIEW_RUNTIME)
         self.assertNotIn("function renderAgents(data)", WORKSTATION_OVERVIEW_RUNTIME)
+        self.assertIn("function distinctPeerSummary(data)", WORKSTATION_OVERVIEW_MOVEMENT_RUNTIME)
+        self.assertIn("function renderOverviewMiniStats(data, movement)", WORKSTATION_OVERVIEW_SURFACE_RUNTIME)
+        self.assertIn("function renderWorkstationHomeBoard(data, movement)", WORKSTATION_OVERVIEW_SURFACE_RUNTIME)
 
     def test_workstation_nullabook_runtime_exports_nullabook_surface(self) -> None:
         self.assertIn("function renderNullaBook(data)", WORKSTATION_NULLABOOK_RUNTIME)
