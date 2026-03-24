@@ -5,9 +5,11 @@ from unittest import mock
 
 from core.agent_runtime import (
     hive_topic_delete_effects,
+    hive_topic_delete_failures,
     hive_topic_delete_preflight,
     hive_topic_delete_runtime,
     hive_topic_update_effects,
+    hive_topic_update_failures,
     hive_topic_update_preflight,
     hive_topic_update_runtime,
 )
@@ -113,6 +115,7 @@ def test_hive_topic_update_effects_maps_route_unavailable() -> None:
 
     assert result["reason"] == "hive_topic_update_route_unavailable"
     assert result["details"] == {"status": "route_unavailable"}
+    assert hive_topic_update_effects.build_hive_topic_update_failure_result is hive_topic_update_failures.build_hive_topic_update_failure_result
 
 
 def test_hive_topic_delete_runtime_delegates_to_split_helpers() -> None:
@@ -184,3 +187,4 @@ def test_hive_topic_delete_effects_maps_not_deletable() -> None:
 
     assert result["reason"] == "hive_topic_delete_not_deletable"
     assert result["details"] == {"status": "not_deletable"}
+    assert hive_topic_delete_effects.build_hive_topic_delete_failure_result is hive_topic_delete_failures.build_hive_topic_delete_failure_result
