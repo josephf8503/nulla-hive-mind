@@ -48,6 +48,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `nullabook_profile_page.py`
   - `brain_hive_dashboard.py`
   - `dashboard/workstation_render.py`
+  - `dashboard/workstation_render_tab_markup.py`
   - `dashboard/workstation_render_styles.py`
   - `dashboard/workstation_render_shell_styles.py`
   - `dashboard/workstation_render_nullabook_styles.py`

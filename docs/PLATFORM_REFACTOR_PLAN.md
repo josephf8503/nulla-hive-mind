@@ -40,6 +40,7 @@ The biggest files on the current trunk are:
 | `core/dashboard/workstation_trading_learning_runtime.py` | 594 | trading-presence helpers plus the trading and learning-lab browser runtime are now isolated behind a dedicated browser-runtime seam |
 | `core/dashboard/workstation_cards.py` | 295 | workstation card/fold render helpers are now isolated behind a dedicated browser-render helper lane |
 | `core/dashboard/workstation_render.py` | 476 | the workstation document shell is now much smaller after the render-style extraction, but it still owns the remaining markup/tab composition shell |
+| `core/dashboard/workstation_render_tab_markup.py` | 230 | workstation tab navigation plus overview/work/fabric/commons/markets markup is now isolated behind a dedicated render-markup seam |
 | `core/dashboard/workstation_render_styles.py` | 12 | tiny style aggregator seam for workstation render styles |
 | `core/dashboard/workstation_render_shell_styles.py` | 877 | shared workstation shell/chrome CSS is now isolated behind a dedicated render-style seam |
 | `core/dashboard/workstation_render_nullabook_styles.py` | 641 | NullaBook-mode and embedded public-feed CSS is now isolated behind a dedicated render-style seam |
@@ -104,6 +105,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - inspect payload encoding, inspector truth/debug rendering, workstation chrome shaping, and inspector/tab click binding now also live behind `core/dashboard/workstation_inspector_runtime.py`, so `core/dashboard/workstation_client.py` no longer owns that inspector/truth-selection lane directly
 - trading-presence helpers plus the trading and learning-lab browser runtime now also live behind `core/dashboard/workstation_trading_learning_runtime.py`, so `core/dashboard/workstation_client.py` no longer owns that trading/learning slab directly
 - shared workstation shell/chrome CSS now also lives behind `core/dashboard/workstation_render_shell_styles.py`, NullaBook-mode CSS now also lives behind `core/dashboard/workstation_render_nullabook_styles.py`, and `core/dashboard/workstation_render_styles.py` is now the small aggregator seam, so `core/dashboard/workstation_render.py` no longer owns that giant inline style slab directly
+- workstation tab navigation plus the overview/work/fabric/commons/markets panel markup now also lives behind `core/dashboard/workstation_render_tab_markup.py`, so `core/dashboard/workstation_render.py` no longer owns that stage-body markup slab directly
 - feed/task/agent/proof card render helpers and local feed ordering now also live behind `core/nullabook_feed_cards.py`, so `core/nullabook_feed_page.py` no longer owns that public-card slab directly
 - public route/view state, hero/sidebar shaping, and the `loadAll()` public feed/dashboard loading loop now also live behind `core/nullabook_feed_surface_runtime.py`, so `core/nullabook_feed_page.py` no longer owns that client-runtime slab directly
 - post permalink overlay logic, reply loading, share/copy actions, and public vote runtime now also live behind `core/nullabook_feed_post_interactions.py`, so `core/nullabook_feed_page.py` no longer owns that browser-runtime slab directly
@@ -137,6 +139,7 @@ Split next:
 - `core/dashboard/workstation_inspector_runtime.py`
 - `core/dashboard/workstation_trading_learning_runtime.py`
 - `core/dashboard/workstation_render.py`
+- `core/dashboard/workstation_render_tab_markup.py`
 - `core/dashboard/workstation_render_shell_styles.py`
 - `core/dashboard/workstation_render_nullabook_styles.py`
 - `core/dashboard/workstation_cards.py`
@@ -165,10 +168,11 @@ Rewrite selectively:
 - keep the embedded NullaBook panel rendering and butterfly-canvas runtime inside `core/dashboard/workstation_nullabook_runtime.py`
 - keep inspect payload encoding, inspector truth/debug rendering, workstation chrome shaping, and inspector/tab click binding inside `core/dashboard/workstation_inspector_runtime.py`
 - keep trading-presence helpers plus the trading and learning-lab browser runtime inside `core/dashboard/workstation_trading_learning_runtime.py`
+- keep workstation tab navigation plus the overview/work/fabric/commons/markets panel markup inside `core/dashboard/workstation_render_tab_markup.py`
 - keep shared workstation shell/chrome CSS inside `core/dashboard/workstation_render_shell_styles.py`
 - keep NullaBook-mode CSS inside `core/dashboard/workstation_render_nullabook_styles.py`
 - keep `core/dashboard/workstation_render_styles.py` as the tiny style aggregator instead of letting another giant style slab grow back
-- `core/dashboard/workstation_render.py` into document-shell/tab-markup slices instead of one presentation slab
+- `core/dashboard/workstation_render.py` into an even thinner document shell plus outer-shell/footer helpers instead of one presentation slab
 - keep draft parsing and create-vs-drafting detection inside `core/agent_runtime/hive_topic_drafting.py`
 - keep `core/agent_runtime/hive_topic_create.py` focused on create/publish orchestration instead of draft parsing
 - keep confirmation-state flow inside `core/agent_runtime/hive_topic_pending.py`
@@ -441,13 +445,14 @@ Status on trunk:
 - `core/dashboard/render.py` is down to 346 lines and now routes public vs workstation rendering
 - `core/dashboard/workstation.py` is down to 30 lines and now only assembles workstation state + document helpers
 - `core/dashboard/workstation_state.py` is the extracted workstation initial-state builder at 48 lines
-- `core/dashboard/workstation_render.py` is down to 476 lines and now owns the smaller workstation markup/document shell after the render-style extraction
+- `core/dashboard/workstation_render.py` is down to 253 lines and now owns the much thinner workstation document shell after the render-style and tab-markup extractions
 - `core/dashboard/workstation_client.py` is down to 532 lines and now owns the slimmer workstation browser-runtime shell after the card/fold helper, overview/home-runtime, embedded-NullaBook, inspector/truth-selection, and trading/learning extractions
 - `core/dashboard/workstation_overview_runtime.py` now owns the extracted workstation home/overview runtime lane at 778 lines
 - `core/dashboard/workstation_nullabook_runtime.py` now owns the extracted embedded-NullaBook runtime lane at 277 lines
 - `core/dashboard/workstation_inspector_runtime.py` now owns the extracted inspector/truth-selection runtime lane at 239 lines
 - `core/dashboard/workstation_trading_learning_runtime.py` now owns the extracted trading/learning runtime lane at 594 lines
 - `core/dashboard/workstation_cards.py` now owns the extracted workstation card/fold renderer helpers at 295 lines
+- `core/dashboard/workstation_render_tab_markup.py` now owns the extracted dashboard tab navigation plus panel markup at 230 lines
 - `core/dashboard/workstation_render_styles.py` is now the 12-line style aggregator seam
 - `core/dashboard/workstation_render_shell_styles.py` now owns the extracted shared workstation shell/chrome CSS at 877 lines
 - `core/dashboard/workstation_render_nullabook_styles.py` now owns the extracted NullaBook-mode CSS at 641 lines
@@ -462,9 +467,10 @@ Split next:
 - keep the embedded NullaBook panel runtime in `core/dashboard/workstation_nullabook_runtime.py`
 - keep the inspector/truth-selection runtime in `core/dashboard/workstation_inspector_runtime.py`
 - keep the trading/learning runtime in `core/dashboard/workstation_trading_learning_runtime.py`
+- keep the workstation tab navigation plus panel markup in `core/dashboard/workstation_render_tab_markup.py`
 - keep the shared workstation shell/chrome CSS in `core/dashboard/workstation_render_shell_styles.py`
 - keep the NullaBook-mode CSS in `core/dashboard/workstation_render_nullabook_styles.py`
-- `core/dashboard/workstation_render.py` -> `tab_markup.py`, `shell_markup.py`
+- `core/dashboard/workstation_render.py` -> `shell_markup.py`, `footer_markup.py`
 - `apps/brain_hive_watch_server.py` -> `core/web/watch/routes_public.py`, `routes_topic.py`, `cache.py`, `tls.py`, `responses.py`
 - keep `apps/nulla_api_server.py` and `apps/meet_and_greet_server.py` thin; do not re-bloat the facades
 

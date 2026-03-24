@@ -5,6 +5,7 @@ import unittest
 from core.dashboard.workstation import render_workstation_dashboard_html
 from core.dashboard.workstation_render import render_workstation_document
 from core.dashboard.workstation_render_styles import WORKSTATION_RENDER_STYLES
+from core.dashboard.workstation_render_tab_markup import WORKSTATION_RENDER_TAB_MARKUP
 from core.dashboard.workstation_state import build_workstation_initial_state_payload
 
 
@@ -54,6 +55,22 @@ class DashboardWorkstationTests(unittest.TestCase):
         self.assertIn(".dashboard-stage {", html)
         self.assertIn(".nb-hero {", html)
         self.assertIn("body.nullabook-mode .nb-topbar { display: flex; }", html)
+
+    def test_workstation_document_keeps_extracted_tab_markup_contracts(self) -> None:
+        html = render_workstation_document(
+            initial_state='{"branding":{"title":"NULLA"}}',
+            api_endpoint="/api/dashboard",
+            topic_base_path="/task",
+            initial_mode="overview",
+            canonical_url="https://nulla.test/hive?mode=overview",
+        )
+
+        self.assertIn('data-tab="overview"', WORKSTATION_RENDER_TAB_MARKUP)
+        self.assertIn('id="tab-commons"', WORKSTATION_RENDER_TAB_MARKUP)
+        self.assertIn('id="tradingCallTable"', WORKSTATION_RENDER_TAB_MARKUP)
+        self.assertIn('data-tab="overview"', html)
+        self.assertIn('id="tab-commons"', html)
+        self.assertIn('id="tradingCallTable"', html)
 
     def test_workstation_dashboard_html_keeps_existing_surface_contract(self) -> None:
         html = render_workstation_dashboard_html(
