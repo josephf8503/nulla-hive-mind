@@ -7,6 +7,7 @@ from typing import Any
 
 from core.public_hive import PublicHiveBridgeConfig
 from core.public_hive import auth as public_hive_auth
+from core.public_hive import bridge_support as _public_hive_bridge_support
 from core.public_hive.bridge import PublicHiveBridge
 from core.runtime_paths import PROJECT_ROOT, config_path
 
@@ -51,18 +52,18 @@ def ensure_public_hive_agent_bootstrap() -> Path | None:
     )
 
 
-def _load_agent_bootstrap(*, include_runtime: bool = True) -> dict[str, Any]:
-    return public_hive_auth.load_agent_bootstrap(
-        include_runtime=include_runtime,
-        agent_bootstrap_paths_fn=_agent_bootstrap_paths,
-    )
-
-
-def _agent_bootstrap_paths(*, include_runtime: bool) -> tuple[Path, ...]:
-    return public_hive_auth.agent_bootstrap_paths(
-        include_runtime=include_runtime,
-        config_path_fn=config_path,
-    )
+_load_agent_bootstrap = _public_hive_bridge_support.load_agent_bootstrap
+_load_json_file = _public_hive_bridge_support.load_json_file
+_split_csv = _public_hive_bridge_support.split_csv
+_json_env_object = _public_hive_bridge_support.json_env_object
+_json_env_write_grants = _public_hive_bridge_support.json_env_write_grants
+_merge_auth_tokens_by_base_url = _public_hive_bridge_support.merge_auth_tokens_by_base_url
+_merge_write_grants_by_base_url = _public_hive_bridge_support.merge_write_grants_by_base_url
+_clean_token = _public_hive_bridge_support.clean_token
+_normalize_base_url = _public_hive_bridge_support.normalize_base_url
+_resolve_local_tls_ca_file = _public_hive_bridge_support.resolve_local_tls_ca_file
+_discover_local_cluster_bootstrap = _public_hive_bridge_support.discover_local_cluster_bootstrap
+find_public_hive_ssh_key = _public_hive_bridge_support.find_public_hive_ssh_key
 
 
 def write_public_hive_agent_bootstrap(
@@ -109,7 +110,7 @@ def sync_public_hive_auth_from_ssh(
     target_path: Path | None = None,
     runner: Any | None = None,
 ) -> dict[str, Any]:
-    return public_hive_auth.sync_public_hive_auth_from_ssh(
+    return _public_hive_bridge_support.sync_public_hive_auth_from_ssh(
         ssh_key_path=ssh_key_path,
         project_root=project_root,
         watch_host=watch_host,
@@ -120,14 +121,6 @@ def sync_public_hive_auth_from_ssh(
         clean_token_fn=_clean_token,
         write_public_hive_agent_bootstrap_fn=write_public_hive_agent_bootstrap,
     )
-
-
-def _split_csv(value: str) -> list[str]:
-    return public_hive_auth.split_csv(value)
-
-
-def _load_json_file(path: Path) -> dict[str, Any]:
-    return public_hive_auth.load_json_file(path)
 
 
 def public_hive_has_auth(config: PublicHiveBridgeConfig | None = None, *, payload: dict[str, Any] | None = None) -> bool:
@@ -154,12 +147,13 @@ def public_hive_write_enabled(config: PublicHiveBridgeConfig | None = None) -> b
     )
 
 
-def _resolve_local_tls_ca_file(tls_ca_file: str | None, *, project_root: str | Path | None = None) -> str | None:
-    return public_hive_auth.resolve_local_tls_ca_file(tls_ca_file, project_root=project_root or PROJECT_ROOT)
-
-
-def find_public_hive_ssh_key(project_root: str | Path | None = None) -> Path | None:
-    return public_hive_auth.find_public_hive_ssh_key(project_root=project_root)
+def _discover_local_cluster_bootstrap(*, project_root: str | Path | None = None) -> dict[str, Any]:
+    return _public_hive_bridge_support.discover_local_cluster_bootstrap(
+        project_root=project_root,
+        load_json_file_fn=_load_json_file,
+        clean_token_fn=_clean_token,
+        normalize_base_url_fn=_normalize_base_url,
+    )
 
 
 def ensure_public_hive_auth(
@@ -192,38 +186,5 @@ def ensure_public_hive_auth(
     )
 
 
-def _discover_local_cluster_bootstrap(*, project_root: str | Path | None = None) -> dict[str, Any]:
-    return public_hive_auth.discover_local_cluster_bootstrap(
-        project_root=project_root,
-        load_json_file_fn=_load_json_file,
-        clean_token_fn=_clean_token,
-        normalize_base_url_fn=_normalize_base_url,
-    )
-
-
-def _json_env_object(value: str) -> dict[str, str]:
-    return public_hive_auth.json_env_object(value)
-
-
-def _json_env_write_grants(value: str) -> dict[str, dict[str, dict[str, Any]]]:
-    return public_hive_auth.json_env_write_grants(value)
-
-
-def _merge_auth_tokens_by_base_url(raw: dict[str, Any]) -> dict[str, str]:
-    return public_hive_auth.merge_auth_tokens_by_base_url(raw)
-
-
-def _merge_write_grants_by_base_url(raw: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
-    return public_hive_auth.merge_write_grants_by_base_url(raw)
-
-
-def _clean_token(value: str) -> str | None:
-    return public_hive_auth.clean_token(value)
-
-
 def _url_requires_auth(url: str) -> bool:
     return public_hive_auth.url_requires_auth(url)
-
-
-def _normalize_base_url(url: str) -> str:
-    return public_hive_auth.normalize_base_url(url)
