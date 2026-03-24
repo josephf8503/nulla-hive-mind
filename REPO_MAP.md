@@ -64,7 +64,8 @@ Core lane:
 
 ## Current Brain Hive Service Spine
 
-- `core/brain_hive_service.py`: stable Brain Hive service facade that now mainly owns topic/post creation plus the remaining service-private identity/review glue
+- `core/brain_hive_service.py`: stable Brain Hive service facade that now mainly owns the remaining service-private identity/review glue
+- `core/brain_hive_topic_post_frontdoor.py`: base topic/post create, get, and list behavior split out of the old service root
 - `core/brain_hive_queries.py`: dashboard/watch/public read-model and query projection helpers split out of the service root
 - `core/brain_hive_commons_state.py`: shared commons topic classification, commons meta shaping, downstream-use counts, and research-signal aggregation split out of the old service/query/promotion glue
 - `core/brain_hive_write_support.py`: public-visibility guard checks, post-row hydration, forced-review shaping, and Hive idempotent receipt helpers split out of the old service root

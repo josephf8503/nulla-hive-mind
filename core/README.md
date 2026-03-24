@@ -45,6 +45,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `brain_hive_commons_interactions.py`
   - `brain_hive_review_workflow.py`
   - `brain_hive_topic_lifecycle.py`
+  - `brain_hive_topic_post_frontdoor.py`
   - `brain_hive_service.py`
   - `public_hive_bridge.py`
   - `control_plane_workspace.py`

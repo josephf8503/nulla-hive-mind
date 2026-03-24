@@ -9,10 +9,11 @@ from core import (
     brain_hive_queries,
     brain_hive_review_workflow,
     brain_hive_topic_lifecycle,
+    brain_hive_topic_post_frontdoor,
     brain_hive_write_support,
 )
 from core.agent_name_registry import get_agent_name
-from core.brain_hive_guard import guard_post_submission, guard_topic_submission
+from core.brain_hive_guard import guard_post_submission
 from core.brain_hive_models import (
     BrainHiveStatsResponse,
     HiveAgentProfile,
@@ -40,20 +41,11 @@ from core.brain_hive_models import (
     HiveTopicStatusUpdateRequest,
     HiveTopicUpdateRequest,
 )
-from core.brain_hive_moderation import ModerationDecision, moderate_post_submission, moderate_topic_submission
-from core.privacy_guard import assert_public_value_safe
+from core.brain_hive_moderation import ModerationDecision
 from core.scoreboard_engine import get_peer_scoreboard
-from storage.brain_hive_moderation_store import (
-    apply_post_moderation,
-    apply_topic_moderation,
-)
 from storage.brain_hive_store import (
-    create_post,
-    create_topic,
     get_topic,
     list_claim_links,
-    list_posts,
-    list_topics,
     upsert_claim_link,
 )
 from storage.db import get_connection
@@ -64,105 +56,21 @@ class BrainHiveService:
     _post_model_cls = HivePostRecord
 
     def create_topic(self, request: HiveTopicCreateRequest) -> HiveTopicRecord:
-        cached = self._cached_result(request.idempotency_key, HiveTopicRecord)
-        if cached is not None:
-            return cached
-        if request.creator_display_name:
-            try:
-                from core.agent_name_registry import claim_agent_name, get_agent_name
-                if not get_agent_name(request.created_by_agent_id):
-                    claim_agent_name(request.created_by_agent_id, request.creator_display_name)
-            except Exception:
-                pass
-        public_topic = self._visibility_requires_public_guard(request.visibility)
-        if public_topic:
-            guard_topic_submission(request)
-        moderation = moderate_topic_submission(request)
-        if request.force_review_required and moderation.state == "approved":
-            moderation = self._forced_review_decision(moderation)
-        topic_id = create_topic(
-            created_by_agent_id=request.created_by_agent_id,
-            title=request.title,
-            summary=request.summary,
-            topic_tags=list(request.topic_tags),
-            status=request.status,
-            visibility=request.visibility,
-            evidence_mode=request.evidence_mode,
-            linked_task_id=request.linked_task_id,
-        )
-        apply_topic_moderation(
-            topic_id=topic_id,
-            agent_id=request.created_by_agent_id,
-            moderation_state=moderation.state,
-            moderation_score=moderation.score,
-            reasons=moderation.reasons,
-            metadata=moderation.metadata,
-        )
-        record = self.get_topic(topic_id, include_flagged=True)
-        self._store_idempotent_result(request.idempotency_key, "hive.create_topic", record)
-        return record
+        return brain_hive_topic_post_frontdoor.create_topic_record(self, request)
 
     def get_topic(self, topic_id: str, *, include_flagged: bool = False) -> HiveTopicRecord:
-        row = get_topic(topic_id, visible_only=not include_flagged)
-        if not row:
-            raise KeyError(f"Unknown topic: {topic_id}")
-        creator_display_name, creator_claim_label = self._display_fields(row["created_by_agent_id"])
-        return HiveTopicRecord(
-            **row,
-            creator_display_name=creator_display_name,
-            creator_claim_label=creator_claim_label,
-        )
+        return brain_hive_topic_post_frontdoor.get_topic_record(self, topic_id, include_flagged=include_flagged)
 
     def list_topics(self, *, status: str | None = None, limit: int = 100, include_flagged: bool = False) -> list[HiveTopicRecord]:
-        rows = list_topics(status=status, limit=limit, visible_only=not include_flagged)
-        out: list[HiveTopicRecord] = []
-        for row in rows:
-            creator_display_name, creator_claim_label = self._display_fields(row["created_by_agent_id"])
-            out.append(
-                HiveTopicRecord(
-                    **row,
-                    creator_display_name=creator_display_name,
-                    creator_claim_label=creator_claim_label,
-                )
-            )
-        return out
+        return brain_hive_topic_post_frontdoor.list_topic_records(
+            self,
+            status=status,
+            limit=limit,
+            include_flagged=include_flagged,
+        )
 
     def create_post(self, request: HivePostCreateRequest) -> HivePostRecord:
-        cached = self._cached_result(request.idempotency_key, HivePostRecord)
-        if cached is not None:
-            return cached
-        topic = self.get_topic(request.topic_id, include_flagged=True)
-        if self._visibility_requires_public_guard(topic.visibility):
-            guard_post_submission(request)
-            assert_public_value_safe(request.evidence_refs, field_name="Hive evidence refs")
-        moderation = moderate_post_submission(request)
-        if request.force_review_required and moderation.state == "approved":
-            moderation = self._forced_review_decision(moderation)
-        post_id = create_post(
-            topic_id=request.topic_id,
-            author_agent_id=request.author_agent_id,
-            post_kind=request.post_kind,
-            stance=request.stance,
-            body=request.body,
-            evidence_refs=list(request.evidence_refs),
-        )
-        apply_post_moderation(
-            post_id=post_id,
-            agent_id=request.author_agent_id,
-            moderation_state=moderation.state,
-            moderation_score=moderation.score,
-            reasons=moderation.reasons,
-            metadata=moderation.metadata,
-        )
-        row = self._post_row(post_id)
-        author_display_name, author_claim_label = self._display_fields(row["author_agent_id"])
-        record = HivePostRecord(
-            **row,
-            author_display_name=author_display_name,
-            author_claim_label=author_claim_label,
-        )
-        self._store_idempotent_result(request.idempotency_key, "hive.create_post", record)
-        return record
+        return brain_hive_topic_post_frontdoor.create_post_record(self, request)
 
     def endorse_post(self, request: HiveCommonsEndorseRequest) -> HiveCommonsEndorseRecord:
         return brain_hive_commons_interactions.endorse_post(self, request)
@@ -207,18 +115,12 @@ class BrainHiveService:
         return brain_hive_topic_lifecycle.delete_topic(self, request)
 
     def list_posts(self, topic_id: str, *, limit: int = 200, include_flagged: bool = False) -> list[HivePostRecord]:
-        rows = list_posts(topic_id, limit=limit, visible_only=not include_flagged)
-        out: list[HivePostRecord] = []
-        for row in rows:
-            author_display_name, author_claim_label = self._display_fields(row["author_agent_id"])
-            out.append(
-                HivePostRecord(
-                    **row,
-                    author_display_name=author_display_name,
-                    author_claim_label=author_claim_label,
-                )
-            )
-        return out
+        return brain_hive_topic_post_frontdoor.list_post_records(
+            self,
+            topic_id,
+            limit=limit,
+            include_flagged=include_flagged,
+        )
 
     def review_object(self, request: HiveModerationReviewRequest) -> HiveModerationReviewSummary:
         return brain_hive_review_workflow.review_object(self, request)
