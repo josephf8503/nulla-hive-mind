@@ -87,7 +87,8 @@ Core lane:
 ## Current Trace Rail Spine
 
 - `core/runtime_task_rail.py`: stable trace-rail document shell/facade
-- `core/runtime_task_rail_client.py`: trace-rail browser runtime, session summary derivation, event rendering, and polling logic
+- `core/runtime_task_rail_client.py`: trace-rail browser runtime, event rendering, and polling logic
+- `core/runtime_task_rail_summary_client.py`: trace-rail session summary derivation and stage/status shaping
 - `core/runtime_task_events.py`: runtime session/event store and list helpers
 - `core/web/api/service.py`: `/trace`, `/task-rail`, and `/api/runtime/*` frontdoor
 

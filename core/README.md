@@ -68,6 +68,7 @@ These files currently carry too much blast radius:
 - `brain_hive_service.py`
 - `runtime_task_rail.py`
 - `runtime_task_rail_client.py`
+- `runtime_task_rail_summary_client.py`
 
 Do not casually grow them.
 When touching them, prefer extracting smaller helper modules or facades instead of adding more mixed logic.

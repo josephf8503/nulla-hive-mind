@@ -106,6 +106,7 @@ They currently mix too many responsibilities and force wide retest surfaces afte
 - keep the main model execution router behind `core/memory_first_router.py` so chat/research synthesis can honor provider roles without leaking provider-selection policy into callers
 - keep memory behind the `core.persistent_memory` facade and `core/memory/` internals
 - keep the trace-rail browser runtime behind `core/runtime_task_rail_client.py` so `/trace` keeps one stable shell while client/runtime changes stay local
+- keep the trace-rail session-summary derivation behind `core/runtime_task_rail_summary_client.py` so stage/status shaping stays local to the rail instead of leaking back into the shell
 - keep agent-facing fast-path wrappers behind `core/agent_runtime/fast_path_facade.py`
 - keep utility/date/smalltalk shortcut logic inside `core/agent_runtime/fast_paths.py`
 - keep fresh-info, weather, news, and price lookup routing inside `core/agent_runtime/fast_live_info.py`
