@@ -30,8 +30,15 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `tool_intent_executor.py`
 - agent runtime slices:
   - `agent_runtime/runtime_checkpoint_support.py`
+  - `agent_runtime/runtime_checkpoint_lane_policy.py`
+  - `agent_runtime/runtime_checkpoint_io_adapter.py`
+  - `agent_runtime/runtime_gate_policy.py`
   - `agent_runtime/nullabook_runtime.py`
   - `agent_runtime/tool_result_surface.py`
+  - `agent_runtime/tool_result_truth_metrics.py`
+  - `agent_runtime/tool_result_text_surface.py`
+  - `agent_runtime/tool_result_history_surface.py`
+  - `agent_runtime/tool_result_workflow_surface.py`
   - `agent_runtime/hive_review_runtime.py`
   - `agent_runtime/chat_surface.py`
   - `agent_runtime/chat_surface_facade.py`
@@ -40,6 +47,9 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `agent_runtime/task_persistence_support.py`
   - `agent_runtime/proceed_intent_support.py`
   - `agent_runtime/response_policy.py`
+  - `agent_runtime/response_policy_classification.py`
+  - `agent_runtime/response_policy_visibility.py`
+  - `agent_runtime/response_policy_tool_history.py`
   - `agent_runtime/presence.py`
 - public/operator surfaces:
   - `public_landing_page.py`
@@ -47,6 +57,8 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `nullabook_feed_page.py`
   - `nullabook_feed_shell.py`
   - `nullabook_feed_document.py`
+  - `nullabook_feed_markup.py`
+  - `nullabook_feed_styles.py`
   - `nullabook_feed_surface_runtime.py`
   - `nullabook_feed_cards.py`
   - `nullabook_feed_post_interactions.py`
@@ -57,16 +69,31 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `dashboard/workstation_render_tab_markup.py`
   - `dashboard/workstation_render_styles.py`
   - `dashboard/workstation_render_shell_styles.py`
+  - `dashboard/workstation_render_shell_primitives.py`
+  - `dashboard/workstation_render_shell_components.py`
+  - `dashboard/workstation_render_shell_layout.py`
   - `dashboard/workstation_render_nullabook_styles.py`
+  - `dashboard/workstation_render_nullabook_content_styles.py`
+  - `dashboard/workstation_render_nullabook_mode_styles.py`
   - `dashboard/workstation_client.py`
   - `dashboard/workstation_overview_runtime.py`
+  - `dashboard/workstation_overview_movement_runtime.py`
+  - `dashboard/workstation_overview_surface_runtime.py`
   - `dashboard/workstation_nullabook_runtime.py`
   - `dashboard/workstation_inspector_runtime.py`
   - `dashboard/workstation_trading_learning_runtime.py`
+  - `dashboard/workstation_trading_presence_runtime.py`
+  - `dashboard/workstation_trading_surface_runtime.py`
+  - `dashboard/workstation_learning_program_cards_runtime.py`
+  - `dashboard/workstation_learning_program_runtime.py`
   - `dashboard/workstation_cards.py`
+  - `dashboard/workstation_card_normalizers.py`
+  - `dashboard/workstation_card_render_sections.py`
   - `runtime_task_rail.py`
   - `runtime_task_rail_document.py`
   - `runtime_task_rail_assets.py`
+  - `runtime_task_rail_shell.py`
+  - `runtime_task_rail_styles.py`
   - `runtime_task_rail_client.py`
   - `runtime_task_rail_polling.py`
   - `runtime_task_rail_event_render.py`
@@ -97,21 +124,19 @@ It does not own raw persistence primitives or low-level transport details. Those
 
 These files currently carry too much blast radius:
 
-- `dashboard/workstation_overview_runtime.py`
-- `dashboard/workstation_trading_learning_runtime.py`
-- `dashboard/workstation_render_shell_styles.py`
-- `dashboard/workstation_render_nullabook_styles.py`
-- `dashboard/workstation_cards.py`
+- `dashboard/workstation_overview_surface_runtime.py`
+- `dashboard/workstation_learning_program_cards_runtime.py`
+- `dashboard/workstation_render_shell_components.py`
+- `dashboard/workstation_render_shell_layout.py`
+- `dashboard/workstation_render_nullabook_content_styles.py`
 - `agent_runtime/hive_topic_create.py`
 - `agent_runtime/hive_topic_drafting.py`
 - `agent_runtime/hive_topic_pending.py`
 - `agent_runtime/hive_topic_public_copy.py`
-- `agent_runtime/response_policy.py`
-- `agent_runtime/runtime_checkpoint_support.py`
-- `agent_runtime/tool_result_surface.py`
 - `public_hive_bridge.py`
-- `nullabook_feed_document.py`
-- `runtime_task_rail_assets.py`
+- `public_hive/bridge_topics.py`
+- `nullabook_feed_styles.py`
+- `runtime_task_rail_styles.py`
 
 Do not casually grow them.
 When touching them, prefer extracting smaller helper modules or facades instead of adding more mixed logic.

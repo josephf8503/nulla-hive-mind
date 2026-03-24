@@ -61,14 +61,27 @@ Core lane:
 - `core/dashboard/workstation_render.py`: workstation document shell
 - `core/dashboard/workstation_render_tab_markup.py`: workstation tab navigation plus panel-markup seam
 - `core/dashboard/workstation_render_styles.py`: workstation render-style aggregator seam
-- `core/dashboard/workstation_render_shell_styles.py`: shared workstation shell/chrome CSS seam
-- `core/dashboard/workstation_render_nullabook_styles.py`: NullaBook-mode workstation CSS seam
+- `core/dashboard/workstation_render_shell_styles.py`: tiny shared-workstation style aggregator seam
+- `core/dashboard/workstation_render_shell_primitives.py`: workstation shell reset/token CSS seam
+- `core/dashboard/workstation_render_shell_components.py`: workstation shell component CSS seam
+- `core/dashboard/workstation_render_shell_layout.py`: workstation shell layout/workbench CSS seam
+- `core/dashboard/workstation_render_nullabook_styles.py`: tiny NullaBook-mode workstation style aggregator seam
+- `core/dashboard/workstation_render_nullabook_content_styles.py`: embedded NullaBook content/feed CSS seam
+- `core/dashboard/workstation_render_nullabook_mode_styles.py`: embedded NullaBook mode/state CSS seam
 - `core/dashboard/workstation_client.py`: remaining workstation browser-runtime shell
-- `core/dashboard/workstation_overview_runtime.py`: workstation home/overview browser-runtime seam
+- `core/dashboard/workstation_overview_runtime.py`: thin workstation home/overview facade
+- `core/dashboard/workstation_overview_movement_runtime.py`: workstation peer/activity movement summary seam
+- `core/dashboard/workstation_overview_surface_runtime.py`: workstation overview/home rendering seam
 - `core/dashboard/workstation_nullabook_runtime.py`: workstation embedded-NullaBook browser-runtime seam
 - `core/dashboard/workstation_inspector_runtime.py`: workstation inspector/truth-selection browser-runtime seam
-- `core/dashboard/workstation_trading_learning_runtime.py`: workstation trading/learning browser-runtime seam
-- `core/dashboard/workstation_cards.py`: workstation card/fold render helpers
+- `core/dashboard/workstation_trading_learning_runtime.py`: thin workstation trading/learning facade
+- `core/dashboard/workstation_trading_presence_runtime.py`: workstation trading presence/pulse seam
+- `core/dashboard/workstation_trading_surface_runtime.py`: workstation trading card/surface seam
+- `core/dashboard/workstation_learning_program_cards_runtime.py`: workstation learning-program card seam
+- `core/dashboard/workstation_learning_program_runtime.py`: workstation learning-program chrome seam
+- `core/dashboard/workstation_cards.py`: thin workstation card/fold facade
+- `core/dashboard/workstation_card_normalizers.py`: workstation card payload normalization seam
+- `core/dashboard/workstation_card_render_sections.py`: workstation card render-section seam
 
 ## Current Brain Hive Service Spine
 
@@ -91,7 +104,9 @@ Core lane:
 - `core/public_landing_page.py`: public landing/status shell
 - `core/nullabook_feed_page.py`: tiny public worklog/tasks/operators/proof route facade
 - `core/nullabook_feed_shell.py`: public feed chrome, hero chips, route labels, and initial surface markup
-- `core/nullabook_feed_document.py`: full NullaBook document assembly around the extracted runtime/card/search/post-interaction seams
+- `core/nullabook_feed_document.py`: thin NullaBook document assembler
+- `core/nullabook_feed_markup.py`: public feed document markup shell
+- `core/nullabook_feed_styles.py`: public feed document CSS shell
 - `core/nullabook_feed_surface_runtime.py`: route/view state, hero/sidebar shaping, and public feed/dashboard loading split out of the feed page
 - `core/nullabook_feed_cards.py`: feed/task/agent/proof card render helpers and local feed ordering split out of the feed page
 - `core/nullabook_feed_post_interactions.py`: post permalink overlay, reply loading, share/copy actions, and public vote runtime split out of the feed page
@@ -112,7 +127,9 @@ Core lane:
 
 - `core/runtime_task_rail.py`: stable trace-rail facade entrypoint
 - `core/runtime_task_rail_document.py`: trace-rail document assembly and shell composition
-- `core/runtime_task_rail_assets.py`: embedded trace-rail CSS/JS/bootstrap payloads
+- `core/runtime_task_rail_assets.py`: compatibility asset seam for trace-rail shell/styles
+- `core/runtime_task_rail_shell.py`: trace-rail HTML shell payload
+- `core/runtime_task_rail_styles.py`: trace-rail CSS payload
 - `core/runtime_task_rail_client.py`: thin trace-rail browser-runtime facade
 - `core/runtime_task_rail_polling.py`: trace-rail fetch/poll/session-state client logic
 - `core/runtime_task_rail_event_render.py`: trace-rail event-row and session-render helpers
@@ -125,9 +142,16 @@ Core lane:
 - `apps/nulla_agent.py`: thin runtime composition root
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
-- `core/agent_runtime/runtime_checkpoint_support.py`: checkpoint lifecycle, routing-profile selection, source-context merging, and patch-sensitive runtime/tool compatibility split out of the agent root
+- `core/agent_runtime/runtime_checkpoint_support.py`: thin checkpoint/runtime-support facade
+- `core/agent_runtime/runtime_checkpoint_lane_policy.py`: routing-profile selection and lane-keep policy seam
+- `core/agent_runtime/runtime_checkpoint_io_adapter.py`: checkpoint/task/source-context adapter seam
+- `core/agent_runtime/runtime_gate_policy.py`: approval/runtime gate policy seam
 - `core/agent_runtime/nullabook_runtime.py`: NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction split out of the agent root
-- `core/agent_runtime/tool_result_surface.py`: workflow attachment, user-facing response shaping, planner-leak stripping, and tool-history observation shaping split out of the agent root
+- `core/agent_runtime/tool_result_surface.py`: thin response-surface facade
+- `core/agent_runtime/tool_result_truth_metrics.py`: chat-truth metric and audit seam
+- `core/agent_runtime/tool_result_text_surface.py`: user-facing response-shaping seam
+- `core/agent_runtime/tool_result_history_surface.py`: tool-history observation seam
+- `core/agent_runtime/tool_result_workflow_surface.py`: workflow-summary and runtime-event seam
 - `core/agent_runtime/hive_review_runtime.py`: Hive review queue/action/cleanup handling split out of the agent root
 - `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive status narration moved out of the agent root
 - `core/agent_runtime/chat_surface_facade.py`: agent-facing chat-surface wrapper facade moved out of the agent root
@@ -135,7 +159,10 @@ Core lane:
 - `core/agent_runtime/public_hive_support.py`: public-Hive capability/help wrappers, task export, footer support, capability ledger shaping, and transport-mode support moved out of the agent root
 - `core/agent_runtime/task_persistence_support.py`: task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence moved out of the agent root
 - `core/agent_runtime/proceed_intent_support.py`: proceed/resume request normalization, explicit resume detection, and generic proceed-message matching moved out of the agent root
-- `core/agent_runtime/response_policy.py`: response classification, workflow/footer visibility policy, and tool-history observation shaping moved out of the agent root
+- `core/agent_runtime/response_policy.py`: thin response-policy facade
+- `core/agent_runtime/response_policy_classification.py`: response classification seam
+- `core/agent_runtime/response_policy_visibility.py`: workflow/footer visibility seam
+- `core/agent_runtime/response_policy_tool_history.py`: tool-history observation/payload seam
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
 - `core/agent_runtime/presence.py`: public presence heartbeat, idle commons cadence, and autonomous Hive research loop logic moved out of the agent root
 - `core/agent_runtime/hive_topic_facade.py`: agent-facing Hive topic/create/followup wrapper facade
