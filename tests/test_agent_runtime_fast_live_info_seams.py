@@ -3,6 +3,16 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest import mock
 
+import core.agent_runtime.fast_live_info_generic_rendering as fast_live_info_generic_rendering
+import core.agent_runtime.fast_live_info_mode_clock_markers as fast_live_info_mode_clock_markers
+import core.agent_runtime.fast_live_info_mode_lookup_markers as fast_live_info_mode_lookup_markers
+import core.agent_runtime.fast_live_info_mode_news_markers as fast_live_info_mode_news_markers
+import core.agent_runtime.fast_live_info_mode_weather_markers as fast_live_info_weather_markers
+import core.agent_runtime.fast_live_info_news_rendering as fast_live_info_news_rendering
+import core.agent_runtime.fast_live_info_quote_rendering as fast_live_info_quote_rendering
+import core.agent_runtime.fast_live_info_runtime_dispatch as fast_live_info_runtime_dispatch
+import core.agent_runtime.fast_live_info_runtime_preflight as fast_live_info_runtime_preflight
+import core.agent_runtime.fast_live_info_weather_rendering as fast_live_info_weather_rendering
 from core.agent_runtime import (
     fast_live_info,
     fast_live_info_mode_classifier,
@@ -60,13 +70,21 @@ def test_fast_live_info_facade_reexports_split_modules() -> None:
     assert fast_live_info_mode_policy.live_info_failure_text is fast_live_info_mode_rules.live_info_failure_text
     assert fast_live_info_mode_rules.live_info_failure_text is fast_live_info_mode_failure.live_info_failure_text
     assert fast_live_info_mode_policy._CLOCK_AND_DATE_MARKERS is fast_live_info_mode_markers._CLOCK_AND_DATE_MARKERS
+    assert fast_live_info_mode_markers._CLOCK_AND_DATE_MARKERS is fast_live_info_mode_clock_markers._CLOCK_AND_DATE_MARKERS
     assert fast_live_info_mode_policy._WEATHER_MARKERS is fast_live_info_mode_markers._WEATHER_MARKERS
+    assert fast_live_info_mode_markers._WEATHER_MARKERS is fast_live_info_weather_markers._WEATHER_MARKERS
     assert fast_live_info_mode_policy._NEWS_MARKERS is fast_live_info_mode_markers._NEWS_MARKERS
+    assert fast_live_info_mode_markers._NEWS_MARKERS is fast_live_info_mode_news_markers._NEWS_MARKERS
     assert fast_live_info_mode_policy._LIVE_LOOKUP_HINT_MARKERS is fast_live_info_mode_markers._LIVE_LOOKUP_HINT_MARKERS
+    assert fast_live_info_mode_markers._LIVE_LOOKUP_HINT_MARKERS is fast_live_info_mode_lookup_markers._LIVE_LOOKUP_HINT_MARKERS
     assert fast_live_info_mode_policy._FRESH_LOOKUP_MARKERS is fast_live_info_mode_markers._FRESH_LOOKUP_MARKERS
+    assert fast_live_info_mode_markers._FRESH_LOOKUP_MARKERS is fast_live_info_mode_lookup_markers._FRESH_LOOKUP_MARKERS
     assert fast_live_info_mode_policy._LATEST_DOMAIN_MARKERS is fast_live_info_mode_markers._LATEST_DOMAIN_MARKERS
+    assert fast_live_info_mode_markers._LATEST_DOMAIN_MARKERS is fast_live_info_mode_lookup_markers._LATEST_DOMAIN_MARKERS
     assert fast_live_info_runtime.maybe_handle_live_info_fast_path is fast_live_info_runtime_flow.maybe_handle_live_info_fast_path
     assert fast_live_info_runtime_flow.maybe_handle_live_info_fast_path is fast_live_info_runtime.maybe_handle_live_info_fast_path
+    assert fast_live_info_runtime_flow.prepare_live_info_request is fast_live_info_runtime_preflight.prepare_live_info_request
+    assert fast_live_info_runtime_flow.build_live_info_response_result is fast_live_info_runtime_dispatch.build_live_info_response_result
     assert fast_live_info_runtime_flow.disabled_live_info_result is fast_live_info_runtime_results.disabled_live_info_result
     assert fast_live_info_runtime_flow.live_info_result is fast_live_info_runtime_results.live_info_result
     assert (
@@ -84,8 +102,12 @@ def test_fast_live_info_facade_reexports_split_modules() -> None:
     assert fast_live_info.live_info_search_notes is fast_live_info_search.live_info_search_notes
     assert fast_live_info.try_live_quote_note is fast_live_info_search.try_live_quote_note
     assert fast_live_info.render_live_info_response is fast_live_info_rendering.render_live_info_response
+    assert fast_live_info_rendering.render_live_info_response is fast_live_info_generic_rendering.render_live_info_response
     assert fast_live_info.render_weather_response is fast_live_info_rendering.render_weather_response
+    assert fast_live_info_rendering.render_weather_response is fast_live_info_weather_rendering.render_weather_response
     assert fast_live_info.render_news_response is fast_live_info_rendering.render_news_response
+    assert fast_live_info_rendering.render_news_response is fast_live_info_news_rendering.render_news_response
+    assert fast_live_info_rendering.first_live_quote is fast_live_info_quote_rendering.first_live_quote
     assert fast_live_info.unresolved_price_lookup_response is fast_live_info_price.unresolved_price_lookup_response
 
 
