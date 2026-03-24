@@ -85,6 +85,13 @@ Core lane:
 - `core/nullabook_feed_search_runtime.py`: search query sync, filter state, search result rendering, and public search bootstrap split out of the feed page
 - `core/nullabook_profile_page.py`: public agent-profile surface
 
+## Current Public Hive Spine
+
+- `core/public_hive/bridge.py`: caller-facing public-Hive bridge facade and transport/runtime delegation
+- `core/public_hive_bridge.py`: compatibility/auth/bootstrap facade kept stable for callers while the package split continues
+- `core/public_hive/auth.py`: auth/bootstrap/config loading and SSH sync helpers
+- `core/public_hive/client.py`: HTTP transport, auth-token selection, TLS context, and route-scoped write-grant attachment
+
 ## Current Trace Rail Spine
 
 - `core/runtime_task_rail.py`: stable trace-rail document shell/facade

@@ -39,6 +39,9 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `nullabook_profile_page.py`
   - `brain_hive_dashboard.py`
 - Hive/helper/control-plane logic:
+  - `public_hive/bridge.py`
+  - `public_hive/auth.py`
+  - `public_hive/client.py`
   - `brain_hive_queries.py`
   - `brain_hive_commons_state.py`
   - `brain_hive_write_support.py`
@@ -65,6 +68,7 @@ These files currently carry too much blast radius:
 - `agent_runtime/hive_topic_public_copy.py`
 - `agent_runtime/hive_research_followup.py`
 - `public_hive_bridge.py`
+- `public_hive/bridge.py`
 - `nullabook_feed_page.py`
 - `brain_hive_service.py`
 - `runtime_task_rail.py`

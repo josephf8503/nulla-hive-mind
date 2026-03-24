@@ -11,6 +11,7 @@ from apps.nulla_agent import NullaAgent
 from core.credit_ledger import award_credits, escrow_credits_for_task, get_credit_balance, get_escrow_for_task
 from core.hive_write_grants import build_hive_write_grant
 from core.public_hive import PublicHiveBridgeConfig as ExtractedPublicHiveBridgeConfig
+from core.public_hive.bridge import PublicHiveBridge as ExtractedPublicHiveBridge
 from core.public_hive_bridge import (
     PublicHiveBridge,
     PublicHiveBridgeConfig,
@@ -40,6 +41,10 @@ class _FakeResponse:
 
 def test_public_hive_bridge_facade_reuses_extracted_config_contract() -> None:
     assert PublicHiveBridgeConfig is ExtractedPublicHiveBridgeConfig
+
+
+def test_public_hive_bridge_facade_reuses_extracted_bridge_contract() -> None:
+    assert PublicHiveBridge is ExtractedPublicHiveBridge
 
 
 def test_public_hive_bridge_syncs_presence_with_signed_envelope_and_token() -> None:

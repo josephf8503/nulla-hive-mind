@@ -53,7 +53,8 @@ The biggest files on the current trunk are:
 | `core/runtime_task_rail_client.py` | 452 | trace-rail browser runtime, event rendering, and polling logic are now isolated behind a dedicated client seam, but it still owns mixed client-state/render coupling |
 | `core/runtime_task_rail_summary_client.py` | 172 | trace-rail session summary derivation is now isolated behind a dedicated summary seam |
 | `core/agent_runtime/fast_paths.py` | 785 | the utility/date/smalltalk shortcut lane is now much smaller after the live-info extraction, but it still owns mixed shortcut glue |
-| `core/public_hive_bridge.py` | 774 | much smaller, but still the main public-hive facade and still too mixed |
+| `core/public_hive/bridge.py` | 495 | caller-facing public-Hive bridge facade is now isolated inside the package, but it still owns a broad caller/runtime delegation seam |
+| `core/public_hive_bridge.py` | 296 | legacy compatibility/auth/bootstrap facade is much smaller after the bridge-class extraction |
 | `core/agent_runtime/hive_research_followup.py` | 739 | Hive research/status followup logic is now isolated, but it still owns a broad continuation slab |
 | `core/agent_runtime/fast_live_info.py` | 553 | fresh-info, weather, news, and price lookup routing are now isolated, but still concentrated in one shortcut slab |
 | `core/agent_runtime/hive_topics.py` | 473 | mutation/update/delete lane is now local, but it still owns the remaining topic mutation surface |
@@ -66,8 +67,8 @@ These are the current blast-radius centers. Split these before inventing more la
 ## Current Phase Status
 
 - completed enough to stop pretending they are still untouched: `core/local_operator_actions.py`, `core/control_plane_workspace.py`, `apps/brain_hive_watch_server.py`, `apps/nulla_daemon.py`, `apps/nulla_api_server.py`, `apps/meet_and_greet_server.py`, `core/brain_hive_dashboard.py`, `core/persistent_memory.py`
-- materially improved but still active: `core/public_hive_bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/nullabook_feed_surface_runtime.py`, `core/brain_hive_service.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`, `core/agent_runtime/fast_live_info.py`
-- still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/brain_hive_service.py`, `core/runtime_task_rail.py`, `core/public_hive_bridge.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`
+- materially improved but still active: `core/public_hive/bridge.py`, `apps/nulla_agent.py`, `core/dashboard/workstation_render.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/nullabook_feed_surface_runtime.py`, `core/brain_hive_service.py`, `core/agent_runtime/hive_topic_create.py`, `core/agent_runtime/hive_topic_drafting.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`, `core/agent_runtime/fast_live_info.py`
+- still the next serious targets: `apps/nulla_agent.py`, `core/dashboard/workstation_client.py`, `core/nullabook_feed_page.py`, `core/brain_hive_service.py`, `core/runtime_task_rail.py`, `core/public_hive/bridge.py`, `core/agent_runtime/hive_research_followup.py`, `core/agent_runtime/fast_paths.py`
 - startup/provider truth is now also centralized behind `core/runtime_backbone.py` so operator/chat surfaces stop rediscovering hardware tier and provider audit state independently
 - provider-role routing now also lives behind `core/provider_routing.py`, and both the helper/teacher lane and the main model execution router now honor bounded drone/queen provider roles without broad caller rewiring
 - chat-surface wording, observation shaping, and Hive truth narration now also live behind `core/agent_runtime/chat_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
@@ -95,6 +96,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - Brain Hive public-visibility guard checks, post-row hydration, forced-review shaping, and Hive idempotent receipt helpers now also live behind `core/brain_hive_write_support.py`, so sibling Brain Hive write workflows stop bouncing through hidden service-private helpers for that seam
 - Brain Hive base topic/post create, get, and list behavior now also lives behind `core/brain_hive_topic_post_frontdoor.py`, so `core/brain_hive_service.py` no longer owns that frontdoor lane directly while the service facade and the old module-level `get_topic` seam stay stable
 - front-door docs and package metadata now also state the product center more honestly: credits are explicitly local work/participation accounting instead of blockchain/token language, marketplace/settlement claims are more clearly quarantined, and the tracked archive/docs lane had leaked absolute local paths plus token-shaped values scrubbed
+- the caller-facing `PublicHiveBridge` class now also lives behind `core/public_hive/bridge.py`, so `core/public_hive_bridge.py` no longer owns that facade slab directly while the old bridge import surface stays stable
 
 ## Keep / Split / Rewrite / Quarantine
 
@@ -120,12 +122,13 @@ Split next:
 - `core/nullabook_feed_surface_runtime.py`
 - `core/brain_hive_service.py`
 - `core/runtime_task_rail.py`
-- `core/public_hive_bridge.py`
+- `core/public_hive/bridge.py`
 
 Rewrite selectively:
 
 - `apps/nulla_agent.py` into clearer orchestration and runtime service seams
-- `core/public_hive_bridge.py` into explicit public-hive workflow and policy services
+- `core/public_hive/bridge.py` into smaller caller-facing workflow and transport-policy seams
+- keep `core/public_hive_bridge.py` as the compatibility/auth/bootstrap facade instead of growing bridge-class logic back into it
 - `core/dashboard/workstation_client.py` into browser-runtime/view-model/render-helper slices instead of one browser slab
 - keep shared card/fold render helpers inside `core/dashboard/workstation_cards.py`
 - `core/dashboard/workstation_render.py` into document-shell/render-section slices instead of one presentation slab
@@ -260,8 +263,9 @@ pytest -q \
 
 Status on trunk:
 
-- `core/public_hive/__init__.py`, `auth.py`, `bootstrap.py`, `client.py`, `config.py`, `truth.py`, `topic_writes.py`, `publication.py`, and `moderation.py` are already live
-- `core/public_hive_bridge.py` is down to 774 lines
+- `core/public_hive/__init__.py`, `auth.py`, `bootstrap.py`, `bridge.py`, `client.py`, `config.py`, `truth.py`, `topic_writes.py`, `publication.py`, and `moderation.py` are already live
+- `core/public_hive_bridge.py` is down to 296 lines
+- `core/public_hive/bridge.py` now owns the 495-line caller-facing bridge facade
 - `core/public_hive/writes.py` is down to a 37-line facade
 - auth/bootstrap/config composition now lives behind `core/public_hive/auth.py`
 - topic/profile/read/privacy boundaries are still the remaining cleanup surface
