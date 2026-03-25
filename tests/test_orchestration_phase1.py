@@ -17,6 +17,18 @@ from core.orchestration import (
 )
 from core.provider_routing import resolve_provider_routing_plan_for_envelope
 from core.task_router import build_task_envelope_for_request
+from storage.db import get_connection
+from storage.migrations import run_migrations
+
+
+def _clear_manifests() -> None:
+    run_migrations()
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM model_provider_manifests")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 class OrchestrationPhase1Tests(unittest.TestCase):
@@ -96,6 +108,7 @@ class OrchestrationPhase1Tests(unittest.TestCase):
         self.assertIn(shard.procedure_id, envelope.inputs["reused_procedure_ids"])
 
     def test_provider_routing_plan_for_envelope_exposes_capability_truth(self) -> None:
+        _clear_manifests()
         registry = ModelRegistry()
         registry.register_manifest(
             {
@@ -128,8 +141,107 @@ class OrchestrationPhase1Tests(unittest.TestCase):
         self.assertEqual(plan.task_envelope["task_id"], "coder-1")
         self.assertEqual(plan.capability_truth[0].role_fit, "drone")
         self.assertEqual(plan.capability_truth[0].max_safe_concurrency, 2)
+        self.assertEqual(plan.routing_requirements["required_locality"], "local")
+        self.assertIn("local provider", " ".join(plan.selection_notes).lower())
+
+    def test_provider_routing_plan_for_local_only_coder_fails_closed_without_local_candidate(self) -> None:
+        _clear_manifests()
+        registry = ModelRegistry()
+        registry.register_manifest(
+            {
+                "provider_name": "kimi-remote",
+                "model_name": "kimi-k2",
+                "source_type": "http",
+                "adapter_type": "openai_compatible",
+                "license_name": "Provider",
+                "license_reference": "user-managed",
+                "weight_location": "external",
+                "weights_bundled": False,
+                "redistribution_allowed": False,
+                "runtime_dependency": "remote-openai-compatible-provider",
+                "capabilities": ["summarize", "classify", "format", "structured_json", "code_complex"],
+                "runtime_config": {"base_url": "https://kimi.example"},
+                "metadata": {"deployment_class": "cloud", "orchestration_role": "queen"},
+                "enabled": True,
+            }
+        )
+        envelope = build_task_envelope(role="coder", goal="Patch the repo", task_id="coder-remote-only")
+
+        plan = resolve_provider_routing_plan_for_envelope(
+            registry,
+            envelope=envelope,
+            task_kind="action_plan",
+            output_mode="action_plan",
+        )
+
+        self.assertIsNone(plan.selected)
+        self.assertEqual(plan.candidates, ())
+        self.assertEqual(plan.routing_requirements["required_locality"], "local")
+        self.assertEqual(plan.rejected_candidates[0]["reason"], "requires_local_provider")
+
+    def test_provider_routing_plan_for_envelope_penalizes_saturated_local_lane(self) -> None:
+        _clear_manifests()
+        registry = ModelRegistry()
+        registry.register_manifest(
+            {
+                "provider_name": "local-busy",
+                "model_name": "qwen2.5:14b-busy",
+                "source_type": "http",
+                "adapter_type": "local_qwen_provider",
+                "license_name": "Apache-2.0",
+                "license_reference": "https://www.apache.org/licenses/LICENSE-2.0",
+                "weight_location": "user-supplied",
+                "weights_bundled": False,
+                "redistribution_allowed": True,
+                "runtime_dependency": "ollama",
+                "capabilities": ["summarize", "structured_json", "code_complex"],
+                "runtime_config": {"base_url": "http://127.0.0.1:11434"},
+                "metadata": {
+                    "deployment_class": "local",
+                    "orchestration_role": "drone",
+                    "queue_depth": 3,
+                    "max_safe_concurrency": 1,
+                },
+                "enabled": True,
+            }
+        )
+        registry.register_manifest(
+            {
+                "provider_name": "local-ready",
+                "model_name": "qwen2.5:14b-ready",
+                "source_type": "http",
+                "adapter_type": "local_qwen_provider",
+                "license_name": "Apache-2.0",
+                "license_reference": "https://www.apache.org/licenses/LICENSE-2.0",
+                "weight_location": "user-supplied",
+                "weights_bundled": False,
+                "redistribution_allowed": True,
+                "runtime_dependency": "ollama",
+                "capabilities": ["summarize", "structured_json", "code_complex"],
+                "runtime_config": {"base_url": "http://127.0.0.1:11435"},
+                "metadata": {
+                    "deployment_class": "local",
+                    "orchestration_role": "drone",
+                    "queue_depth": 0,
+                    "max_safe_concurrency": 2,
+                },
+                "enabled": True,
+            }
+        )
+        envelope = build_task_envelope(role="coder", goal="Patch the repo", task_id="coder-ready-lane")
+
+        plan = resolve_provider_routing_plan_for_envelope(
+            registry,
+            envelope=envelope,
+            task_kind="action_plan",
+            output_mode="action_plan",
+        )
+
+        assert plan.selected is not None
+        self.assertEqual(plan.selected.provider_name, "local-ready")
 
     def test_teacher_pipeline_carries_task_envelope_into_provenance(self) -> None:
+        _clear_manifests()
         registry = ModelRegistry()
         registry.register_manifest(
             {
@@ -171,6 +283,39 @@ class OrchestrationPhase1Tests(unittest.TestCase):
         assert candidate is not None
         self.assertEqual(candidate.provider_role, "queen")
         self.assertEqual(candidate.provenance["task_envelope"]["task_id"], "queen-1")
+
+    def test_teacher_pipeline_fails_closed_for_local_only_coder_without_local_provider(self) -> None:
+        _clear_manifests()
+        registry = ModelRegistry()
+        registry.register_manifest(
+            {
+                "provider_name": "kimi-remote",
+                "model_name": "kimi-k2",
+                "source_type": "http",
+                "adapter_type": "openai_compatible",
+                "license_name": "Provider",
+                "license_reference": "user-managed",
+                "weight_location": "external",
+                "weights_bundled": False,
+                "redistribution_allowed": False,
+                "runtime_dependency": "remote-openai-compatible-provider",
+                "capabilities": ["summarize", "structured_json", "code_complex"],
+                "runtime_config": {"base_url": "https://kimi.example"},
+                "metadata": {"deployment_class": "cloud", "orchestration_role": "queen"},
+                "enabled": True,
+            }
+        )
+        pipeline = ModelTeacherPipeline(registry)
+        envelope = build_task_envelope(role="coder", goal="Patch local code", task_id="coder-local-only")
+
+        candidate = pipeline.run(
+            task_kind="action_plan",
+            prompt="patch the local repo",
+            output_mode="action_plan",
+            task_envelope=envelope,
+        )
+
+        self.assertIsNone(candidate)
 
 
 if __name__ == "__main__":

@@ -64,6 +64,9 @@ class ProviderRoutingPlan:
     candidates: tuple[ModelProviderManifest, ...]
     capability_truth: tuple[ProviderCapabilityTruth, ...] = field(default_factory=tuple)
     task_envelope: dict[str, Any] = field(default_factory=dict)
+    routing_requirements: dict[str, Any] = field(default_factory=dict)
+    rejected_candidates: tuple[dict[str, str], ...] = field(default_factory=tuple)
+    selection_notes: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def candidate_provider_ids(self) -> tuple[str, ...]:
@@ -82,6 +85,33 @@ def rank_provider_candidates(
     swarm_size: int = 1,
     min_trust: float = 0.0,
 ) -> list[ModelProviderManifest]:
+    return _rank_provider_candidates_internal(
+        registry,
+        task_kind=task_kind,
+        output_mode=output_mode,
+        role=role,
+        preferred_provider=preferred_provider,
+        preferred_model=preferred_model,
+        allow_paid_fallback=allow_paid_fallback,
+        swarm_size=swarm_size,
+        min_trust=min_trust,
+        limit_to_swarm_size=True,
+    )
+
+
+def _rank_provider_candidates_internal(
+    registry: ModelRegistry,
+    *,
+    task_kind: str,
+    output_mode: str,
+    role: ProviderRole = "auto",
+    preferred_provider: str | None = None,
+    preferred_model: str | None = None,
+    allow_paid_fallback: bool | None = None,
+    swarm_size: int = 1,
+    min_trust: float = 0.0,
+    limit_to_swarm_size: bool,
+) -> list[ModelProviderManifest]:
     normalized_role = _normalize_role(role)
     resolved_allow_paid = _resolve_allow_paid_fallback(normalized_role, allow_paid_fallback)
     resolved_swarm_size = _resolve_swarm_size(normalized_role, swarm_size)
@@ -97,7 +127,7 @@ def rank_provider_candidates(
         )
     )
     if normalized_role == "auto":
-        return base_ranked[:resolved_swarm_size]
+        return base_ranked[:resolved_swarm_size] if limit_to_swarm_size else base_ranked
 
     total = max(len(base_ranked), 1)
     rescored: list[tuple[float, ModelProviderManifest]] = []
@@ -106,7 +136,8 @@ def rank_provider_candidates(
         role_bonus = _role_bonus(manifest, normalized_role)
         rescored.append((base_score + role_bonus, manifest))
     rescored.sort(key=lambda item: (item[0], item[1].provider_name, item[1].model_name), reverse=True)
-    return [manifest for _, manifest in rescored[:resolved_swarm_size]]
+    ranked = [manifest for _, manifest in rescored]
+    return ranked[:resolved_swarm_size] if limit_to_swarm_size else ranked
 
 
 def resolve_provider_routing_plan(
@@ -167,18 +198,147 @@ def resolve_provider_routing_plan_for_envelope(
 ) -> ProviderRoutingPlan:
     from core.orchestration import provider_role_for_task_role
 
-    return resolve_provider_routing_plan(
+    resolved_role = provider_role_for_task_role(envelope.role)
+    resolved_swarm_size = max(1, int(swarm_size or envelope.model_constraints.get("swarm_size") or 1))
+    ranked = _rank_provider_candidates_internal(
         registry,
         task_kind=task_kind,
         output_mode=output_mode,
-        role=provider_role_for_task_role(envelope.role),
+        role=resolved_role,
         preferred_provider=preferred_provider,
         preferred_model=preferred_model,
         allow_paid_fallback=allow_paid_fallback,
-        swarm_size=max(1, int(swarm_size or envelope.model_constraints.get("swarm_size") or 1)),
+        swarm_size=resolved_swarm_size,
         min_trust=min_trust,
-        task_envelope=envelope.to_dict(),
+        limit_to_swarm_size=False,
     )
+    requirements = _build_envelope_routing_requirements(envelope, output_mode=output_mode, provider_role=resolved_role)
+    accepted: list[tuple[float, ModelProviderManifest, ProviderCapabilityTruth]] = []
+    rejected: list[dict[str, str]] = []
+    selection_notes = list(requirements["notes"])
+    total = max(len(ranked), 1)
+    for index, manifest in enumerate(ranked):
+        capability = provider_capability_truth_for_manifest(manifest)
+        rejection_reason = _routing_rejection_reason(capability, requirements)
+        if rejection_reason:
+            rejected.append({"provider_id": manifest.provider_id, "reason": rejection_reason})
+            continue
+        accepted.append(
+            (
+                _envelope_manifest_score(
+                    capability,
+                    requirements=requirements,
+                    provider_role=resolved_role,
+                    rank_index=index,
+                    total_candidates=total,
+                ),
+                manifest,
+                capability,
+            )
+        )
+    accepted.sort(key=lambda item: (item[0], item[1].provider_name, item[1].model_name), reverse=True)
+    selected_rows = accepted[:resolved_swarm_size]
+    candidates = tuple(item[1] for item in selected_rows)
+    capability_truth = tuple(item[2] for item in selected_rows)
+    if not candidates and requirements["fail_closed"]:
+        selection_notes.append("No providers satisfied the envelope's hard locality requirements; routing failed closed.")
+    elif any(item[2].queue_depth > 0 for item in selected_rows):
+        selection_notes.append("Queue-depth pressure was applied while scoring provider candidates.")
+    return ProviderRoutingPlan(
+        role=resolved_role,
+        task_kind=task_kind,
+        output_mode=output_mode,
+        allow_paid_fallback=_resolve_allow_paid_fallback(_normalize_role(resolved_role), allow_paid_fallback),
+        swarm_size=resolved_swarm_size,
+        preferred_provider=preferred_provider,
+        preferred_model=preferred_model,
+        selected=candidates[0] if candidates else None,
+        candidates=candidates,
+        capability_truth=capability_truth,
+        task_envelope=envelope.to_dict(),
+        routing_requirements={key: value for key, value in requirements.items() if key != "notes"},
+        rejected_candidates=tuple(rejected),
+        selection_notes=tuple(selection_notes),
+    )
+
+
+def _build_envelope_routing_requirements(
+    envelope: TaskEnvelopeV1,
+    *,
+    output_mode: str,
+    provider_role: str,
+) -> dict[str, Any]:
+    tool_permissions = {str(item).strip() for item in envelope.tool_permissions if str(item).strip()}
+    allowed_side_effects = {str(item).strip() for item in envelope.allowed_side_effects if str(item).strip()}
+    privacy_class = str(envelope.privacy_class or "").strip().lower()
+    requires_local = privacy_class in {"local_private"} or bool(
+        allowed_side_effects & {"workspace_write", "memory_write"}
+    )
+    preferred_tool_support: list[str] = []
+    if any(permission.startswith("web.") for permission in tool_permissions):
+        preferred_tool_support.append("web_search")
+    notes: list[str] = []
+    if requires_local:
+        notes.append("Envelope requires a local provider because the task is private or has mutating side effects.")
+    return {
+        "required_locality": "local" if requires_local else None,
+        "preferred_locality": "local" if envelope.role in {"coder", "verifier", "memory_clerk"} else None,
+        "preferred_role_fit": provider_role if provider_role != "auto" else "",
+        "preferred_tool_support": tuple(preferred_tool_support),
+        "prefer_structured_output": output_mode != "plain_text" or envelope.role in {"coder", "verifier", "queen", "narrator"},
+        "prefer_long_context": envelope.role in {"queen", "researcher"},
+        "prefer_code_complex": envelope.role == "coder",
+        "fail_closed": requires_local,
+        "notes": tuple(notes),
+    }
+
+
+def _routing_rejection_reason(capability: ProviderCapabilityTruth, requirements: dict[str, Any]) -> str:
+    required_locality = str(requirements.get("required_locality") or "").strip()
+    if required_locality and capability.locality != required_locality:
+        return "requires_local_provider"
+    return ""
+
+
+def _envelope_manifest_score(
+    capability: ProviderCapabilityTruth,
+    *,
+    requirements: dict[str, Any],
+    provider_role: str,
+    rank_index: int,
+    total_candidates: int,
+) -> float:
+    score = float(max(1, total_candidates - rank_index))
+    cap_tools = {str(item).strip().lower() for item in capability.tool_support if str(item).strip()}
+    preferred_role_fit = str(requirements.get("preferred_role_fit") or "").strip()
+    if preferred_role_fit and capability.role_fit == preferred_role_fit:
+        score += 1.4
+    elif preferred_role_fit and capability.role_fit not in {"", "auto", preferred_role_fit}:
+        score -= 0.6
+    preferred_locality = str(requirements.get("preferred_locality") or "").strip()
+    if preferred_locality and capability.locality == preferred_locality:
+        score += 1.0
+    elif preferred_locality and capability.locality != preferred_locality:
+        score -= 0.35
+    if bool(requirements.get("prefer_structured_output", False)):
+        score += 0.45 if capability.structured_output_support else -0.2
+    if bool(requirements.get("prefer_long_context", False)) and capability.context_window > 0:
+        score += min(0.8, float(capability.context_window) / 64000.0)
+    if bool(requirements.get("prefer_code_complex", False)):
+        if "code_complex" in cap_tools:
+            score += 0.55
+        elif capability.locality == "local":
+            score += 0.15
+    for preferred_tool in tuple(requirements.get("preferred_tool_support") or ()):
+        if preferred_tool in cap_tools:
+            score += 0.4
+        else:
+            score -= 0.15
+    queue_pressure = float(capability.queue_depth) / float(max(1, capability.max_safe_concurrency))
+    score -= min(2.5, queue_pressure)
+    if provider_role == "queen" and capability.locality == "remote":
+        score += 0.15
+    return score
 
 
 def _normalize_role(role: str) -> ProviderRole:
