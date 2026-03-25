@@ -34,6 +34,49 @@ def test_record_shard_reuse_outcomes_dedupes_citations_and_summarizes_latest() -
     assert summary["remote-shard-1"]["total_count"] == 1
     assert summary["remote-shard-1"]["success_count"] == 1
     assert summary["remote-shard-1"]["durable_count"] == 0
+    assert summary["remote-shard-1"]["selected_count"] == 1
+    assert summary["remote-shard-1"]["selected_success_count"] == 1
+    assert summary["remote-shard-1"]["answer_backed_count"] == 1
+    assert summary["remote-shard-1"]["answer_backed_success_count"] == 1
     assert summary["remote-shard-1"]["last_outcome_label"] == "successful"
     assert summary["remote-shard-1"]["last_response_class"] == "generic_conversation"
     assert summary["remote-shard-1"]["last_validation_state"] == "signature_and_manifest_verified"
+
+
+def test_record_shard_reuse_outcomes_only_marks_selected_remote_shard_as_answer_backed_when_multiple_citations_present() -> None:
+    rows = record_shard_reuse_outcomes(
+        citations=[
+            {
+                "kind": "remote_shard",
+                "shard_id": "remote-shard-primary",
+                "receipt_id": "receipt-primary",
+                "selected_for_plan": True,
+                "answer_backed": True,
+                "rendered_via": "reasoning_engine",
+                "response_reason": "grounded_plan_response",
+            },
+            {
+                "kind": "remote_shard",
+                "shard_id": "remote-shard-incidental",
+                "receipt_id": "receipt-incidental",
+                "selected_for_plan": False,
+                "answer_backed": False,
+            },
+        ],
+        task_id="task-2",
+        session_id="session-2",
+        task_class="research",
+        response_class="generic_conversation",
+        success=True,
+        durable=True,
+    )
+
+    assert len(rows) == 2
+    summary = summarize_reuse_outcomes_for_shards(["remote-shard-primary", "remote-shard-incidental"])
+    assert summary["remote-shard-primary"]["selected_count"] == 1
+    assert summary["remote-shard-primary"]["answer_backed_count"] == 1
+    assert summary["remote-shard-primary"]["last_rendered_via"] == "reasoning_engine"
+    assert summary["remote-shard-primary"]["last_response_reason"] == "grounded_plan_response"
+    assert summary["remote-shard-incidental"]["success_count"] == 1
+    assert summary["remote-shard-incidental"]["selected_count"] == 0
+    assert summary["remote-shard-incidental"]["answer_backed_count"] == 0

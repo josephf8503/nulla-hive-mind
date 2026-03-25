@@ -51,6 +51,43 @@ def _build_media_candidate(media_analysis: Any) -> dict[str, Any] | None:
     }
 
 
+def _swarm_reuse_citations(context_snippets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        dict(snippet.get("citation") or {})
+        for snippet in list(context_snippets or [])
+        if isinstance(snippet, dict) and isinstance(snippet.get("citation"), dict) and snippet.get("citation")
+    ]
+
+
+def _annotate_swarm_reuse_citations(
+    citations: list[dict[str, Any]],
+    *,
+    rendered_via: str,
+    response_reason: str,
+) -> list[dict[str, Any]]:
+    selected_shard_id = next(
+        (
+            str(citation.get("shard_id") or "").strip()
+            for citation in list(citations or [])
+            if str(citation.get("kind") or "").strip() == "remote_shard"
+            and str(citation.get("shard_id") or "").strip()
+        ),
+        "",
+    )
+    answer_backed = response_reason in {"grounded_plan_response", "grounded_model_response"}
+    annotated: list[dict[str, Any]] = []
+    for citation in list(citations or []):
+        enriched = dict(citation)
+        shard_id = str(enriched.get("shard_id") or "").strip()
+        is_selected = bool(selected_shard_id) and shard_id == selected_shard_id
+        enriched["selected_for_plan"] = is_selected
+        enriched["answer_backed"] = bool(is_selected and answer_backed)
+        enriched["rendered_via"] = rendered_via if is_selected else ""
+        enriched["response_reason"] = response_reason if is_selected else ""
+        annotated.append(enriched)
+    return annotated
+
+
 def execute_grounded_turn(
     agent: Any,
     *,
@@ -267,11 +304,7 @@ def execute_grounded_turn(
         "external_media_evidence": media_analysis.evidence_items or media_evidence,
         "web_notes": web_notes,
     }
-    swarm_reuse_citations = [
-        dict(snippet.get("citation") or {})
-        for snippet in evidence["context_snippets"]
-        if isinstance(snippet, dict) and isinstance(snippet.get("citation"), dict) and snippet.get("citation")
-    ]
+    swarm_reuse_citations = _swarm_reuse_citations(evidence["context_snippets"])
 
     plan = build_plan_fn(
         task=task,
@@ -383,6 +416,11 @@ def execute_grounded_turn(
         turn_result,
         session_id=session_id,
         source_context=source_context,
+    )
+    swarm_reuse_citations = _annotate_swarm_reuse_citations(
+        swarm_reuse_citations,
+        rendered_via=rendered_via,
+        response_reason=response_reason,
     )
     reuse_outcome_records = record_shard_reuse_outcomes(
         citations=swarm_reuse_citations,

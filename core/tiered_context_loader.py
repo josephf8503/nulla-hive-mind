@@ -167,10 +167,22 @@ def _local_candidate_items(task: Any, classification: dict[str, Any]) -> tuple[l
         if citation:
             reuse_outcomes = dict(citation.get("reuse_outcomes") or {})
             reuse_note = ""
-            if int(reuse_outcomes.get("success_count") or 0) > 0:
+            answer_backed = int(reuse_outcomes.get("answer_backed_count") or 0)
+            answer_backed_durable = int(reuse_outcomes.get("answer_backed_durable_count") or 0)
+            selected = int(reuse_outcomes.get("selected_count") or 0)
+            success = int(reuse_outcomes.get("success_count") or 0)
+            durable = int(reuse_outcomes.get("durable_count") or 0)
+            if answer_backed > 0:
                 reuse_note = (
-                    f" Previously helped in {int(reuse_outcomes.get('success_count') or 0)} successful "
-                    f"turns ({int(reuse_outcomes.get('durable_count') or 0)} durable)."
+                    f" Previously backed answers in {answer_backed} turns "
+                    f"({answer_backed_durable} durable)."
+                )
+            elif selected > 0:
+                reuse_note = f" Previously selected during planning in {selected} turns."
+            elif success > 0:
+                reuse_note = (
+                    f" Previously cited in {success} successful turns "
+                    f"({durable} durable); answer-backed proof not established yet."
                 )
             content = (
                 f"Cached remote shard from {citation.get('source_peer_id', 'unknown peer')[:12]}... "

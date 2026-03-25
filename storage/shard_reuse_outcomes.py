@@ -69,6 +69,7 @@ def record_shard_reuse_outcomes(
     clean = _normalize_remote_shard_citations(citations)
     if not clean:
         return []
+    single_citation = len(clean) == 1
     _init_table()
     outcome_label = _outcome_label(success=success, durable=durable)
     created_at = _utcnow()
@@ -76,6 +77,11 @@ def record_shard_reuse_outcomes(
     conn = get_connection()
     try:
         for citation in clean:
+            citation_details = _citation_reuse_details(
+                citation,
+                single_citation=single_citation,
+                success=success,
+            )
             row = {
                 "event_id": f"reuse-{uuid.uuid4().hex}",
                 "shard_id": str(citation.get("shard_id") or "").strip(),
@@ -92,7 +98,7 @@ def record_shard_reuse_outcomes(
                 "outcome_label": outcome_label,
                 "success": bool(success),
                 "durable": bool(durable),
-                "details": dict(details or {}),
+                "details": {**dict(details or {}), **citation_details},
                 "created_at": created_at,
             }
             conn.execute(
@@ -162,22 +168,45 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
                 "total_count": 0,
                 "success_count": 0,
                 "durable_count": 0,
+                "selected_count": 0,
+                "selected_success_count": 0,
+                "selected_durable_count": 0,
+                "answer_backed_count": 0,
+                "answer_backed_success_count": 0,
+                "answer_backed_durable_count": 0,
                 "last_recorded_at": "",
                 "last_outcome_label": "",
                 "last_response_class": "",
                 "last_validation_state": "",
                 "last_receipt_id": "",
+                "last_selected_for_plan": False,
+                "last_answer_backed": False,
+                "last_rendered_via": "",
+                "last_response_reason": "",
             },
         )
+        details = dict(data.get("details") or {})
+        selected_for_plan = bool(details.get("selected_for_plan"))
+        answer_backed = bool(details.get("answer_backed"))
         summary["total_count"] += 1
         summary["success_count"] += 1 if data.get("success") else 0
         summary["durable_count"] += 1 if data.get("durable") else 0
+        summary["selected_count"] += 1 if selected_for_plan else 0
+        summary["selected_success_count"] += 1 if selected_for_plan and data.get("success") else 0
+        summary["selected_durable_count"] += 1 if selected_for_plan and data.get("durable") else 0
+        summary["answer_backed_count"] += 1 if answer_backed else 0
+        summary["answer_backed_success_count"] += 1 if answer_backed and data.get("success") else 0
+        summary["answer_backed_durable_count"] += 1 if answer_backed and data.get("durable") else 0
         if not summary["last_recorded_at"]:
             summary["last_recorded_at"] = str(data.get("created_at") or "")
             summary["last_outcome_label"] = str(data.get("outcome_label") or "")
             summary["last_response_class"] = str(data.get("response_class") or "")
             summary["last_validation_state"] = str(data.get("validation_state") or "")
             summary["last_receipt_id"] = str(data.get("receipt_id") or "")
+            summary["last_selected_for_plan"] = selected_for_plan
+            summary["last_answer_backed"] = answer_backed
+            summary["last_rendered_via"] = str(details.get("rendered_via") or "")
+            summary["last_response_reason"] = str(details.get("response_reason") or "")
     return summaries
 
 
@@ -209,6 +238,24 @@ def _outcome_label(*, success: bool, durable: bool) -> str:
     if success:
         return "successful"
     return "unsuccessful"
+
+
+def _citation_reuse_details(
+    citation: dict[str, Any],
+    *,
+    single_citation: bool,
+    success: bool,
+) -> dict[str, Any]:
+    selected_explicit = citation.get("selected_for_plan")
+    answer_backed_explicit = citation.get("answer_backed")
+    selected_for_plan = bool(selected_explicit) if selected_explicit is not None else single_citation
+    answer_backed = bool(answer_backed_explicit) if answer_backed_explicit is not None else (single_citation and bool(success))
+    return {
+        "selected_for_plan": selected_for_plan,
+        "answer_backed": answer_backed,
+        "rendered_via": str(citation.get("rendered_via") or "").strip(),
+        "response_reason": str(citation.get("response_reason") or "").strip(),
+    }
 
 
 def _row_to_outcome(row: dict[str, Any]) -> dict[str, Any]:

@@ -29,6 +29,12 @@ def test_rank_prefers_peer_received_shard_with_proven_reuse_success() -> None:
         "total_count": 4,
         "success_count": 4,
         "durable_count": 3,
+        "selected_count": 4,
+        "selected_success_count": 4,
+        "selected_durable_count": 3,
+        "answer_backed_count": 4,
+        "answer_backed_success_count": 4,
+        "answer_backed_durable_count": 3,
     }
 
     ranked = rank([baseline, proven], task)
@@ -47,5 +53,25 @@ def test_rank_does_not_apply_remote_reuse_bonus_to_local_generated_shard() -> No
     }
 
     ranked = rank([local_candidate], task)
+
+    assert ranked[0]["reuse_outcome_adjustment"] == 0.0
+
+
+def test_rank_does_not_apply_remote_reuse_bonus_from_incidental_success_without_answer_backed_proof() -> None:
+    task = SimpleNamespace(task_id="task-3")
+    incidental = _candidate(shard_id="peer-incidental")
+    incidental["reuse_outcomes"] = {
+        "total_count": 3,
+        "success_count": 3,
+        "durable_count": 2,
+        "selected_count": 0,
+        "selected_success_count": 0,
+        "selected_durable_count": 0,
+        "answer_backed_count": 0,
+        "answer_backed_success_count": 0,
+        "answer_backed_durable_count": 0,
+    }
+
+    ranked = rank([incidental], task)
 
     assert ranked[0]["reuse_outcome_adjustment"] == 0.0
