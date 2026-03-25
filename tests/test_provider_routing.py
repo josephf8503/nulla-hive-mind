@@ -143,3 +143,56 @@ def test_queen_role_falls_back_to_best_local_when_remote_absent() -> None:
     assert plan.selected is not None
     assert plan.selected.provider_name == "local-qwen-http"
     assert plan.candidate_provider_ids == ("local-qwen-http:qwen2.5:32b",)
+
+
+def test_queen_role_prefers_local_vllm_when_no_remote_queen_exists() -> None:
+    run_migrations()
+    _clear_manifests()
+    registry = ModelRegistry()
+    registry.register_manifest(
+        {
+            "provider_name": "local-qwen-http",
+            "model_name": "qwen2.5:14b",
+            "source_type": "http",
+            "adapter_type": "local_qwen_provider",
+            "license_name": "Apache-2.0",
+            "license_reference": "https://www.apache.org/licenses/LICENSE-2.0",
+            "weight_location": "user-supplied",
+            "weights_bundled": False,
+            "redistribution_allowed": True,
+            "runtime_dependency": "ollama",
+            "capabilities": ["summarize", "classify", "format", "structured_json"],
+            "runtime_config": {"base_url": "http://127.0.0.1:11434"},
+            "metadata": {"deployment_class": "local", "orchestration_role": "drone"},
+            "enabled": True,
+        }
+    )
+    registry.register_manifest(
+        {
+            "provider_name": "vllm-local",
+            "model_name": "qwen2.5:32b-vllm",
+            "source_type": "http",
+            "adapter_type": "openai_compatible",
+            "license_name": "User-managed",
+            "license_reference": "user-managed",
+            "weight_location": "external",
+            "weights_bundled": False,
+            "redistribution_allowed": False,
+            "runtime_dependency": "vllm",
+            "capabilities": ["summarize", "classify", "format", "long_context", "code_complex", "structured_json"],
+            "runtime_config": {"base_url": "http://127.0.0.1:8100/v1", "context_window": 65536},
+            "metadata": {"deployment_class": "local", "orchestration_role": "queen", "context_window": 65536},
+            "enabled": True,
+        }
+    )
+
+    plan = resolve_provider_routing_plan(
+        registry,
+        task_kind="action_plan",
+        output_mode="action_plan",
+        role="queen",
+    )
+
+    assert plan.selected is not None
+    assert plan.selected.provider_name == "vllm-local"
+    assert plan.candidate_provider_ids[0] == "vllm-local:qwen2.5:32b-vllm"

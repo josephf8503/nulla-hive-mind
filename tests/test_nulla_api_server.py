@@ -137,6 +137,36 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
         self.assertIn(("kimi-remote", "kimi-latest"), manifests)
         self.assertEqual(manifests[("kimi-remote", "kimi-latest")].runtime_config["base_url"], "https://kimi.example/v1")
 
+    def test_ensure_default_provider_registers_vllm_when_base_url_is_present(self) -> None:
+        manifests = {}
+        registry = mock.Mock()
+
+        def _get_manifest(provider_name: str, model_name: str):
+            return manifests.get((provider_name, model_name))
+
+        def _register_manifest(manifest):
+            manifests[(manifest.provider_name, manifest.model_name)] = manifest
+            return manifest
+
+        registry.get_manifest.side_effect = _get_manifest
+        registry.register_manifest.side_effect = _register_manifest
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "VLLM_BASE_URL": "http://127.0.0.1:8100/v1",
+                "NULLA_VLLM_MODEL": "qwen2.5:32b-vllm",
+                "VLLM_CONTEXT_WINDOW": "65536",
+            },
+            clear=False,
+        ):
+            _ensure_default_provider(registry, "qwen2.5:14b")
+
+        self.assertIn(("ollama-local", "qwen2.5:14b"), manifests)
+        self.assertIn(("vllm-local", "qwen2.5:32b-vllm"), manifests)
+        self.assertEqual(manifests[("vllm-local", "qwen2.5:32b-vllm")].runtime_config["base_url"], "http://127.0.0.1:8100/v1")
+        self.assertEqual(manifests[("vllm-local", "qwen2.5:32b-vllm")].metadata["context_window"], 65536)
+
     def test_normalize_chat_history_keeps_full_user_assistant_sequence(self) -> None:
         history = _normalize_chat_history(
             [

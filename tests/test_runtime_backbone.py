@@ -77,6 +77,44 @@ def test_build_provider_registry_snapshot_auto_registers_kimi_when_configured() 
     assert any(item.provider_id == "kimi-remote:kimi-latest" for item in snapshot.capability_truth)
 
 
+def test_build_provider_registry_snapshot_auto_registers_vllm_when_configured() -> None:
+    manifests = {}
+
+    def _get_manifest(provider_name: str, model_name: str):
+        return manifests.get((provider_name, model_name))
+
+    def _register_manifest(manifest):
+        manifests[(manifest.provider_name, manifest.model_name)] = manifest
+        return manifest
+
+    def _list_manifests(*, enabled_only: bool = False, limit: int = 256):
+        return list(manifests.values())[:limit]
+
+    registry = mock.Mock()
+    registry.startup_warnings.return_value = []
+    registry.provider_audit_rows.return_value = []
+    registry.get_manifest.side_effect = _get_manifest
+    registry.register_manifest.side_effect = _register_manifest
+    registry.list_manifests.side_effect = _list_manifests
+
+    with mock.patch.dict(
+        os.environ,
+        {
+            "VLLM_BASE_URL": "http://127.0.0.1:8100/v1",
+            "NULLA_VLLM_MODEL": "qwen2.5:32b-vllm",
+            "VLLM_CONTEXT_WINDOW": "65536",
+        },
+        clear=False,
+    ):
+        snapshot = build_provider_registry_snapshot(registry)
+
+    vllm_manifest = manifests[("vllm-local", "qwen2.5:32b-vllm")]
+    assert vllm_manifest.adapter_type == "openai_compatible"
+    assert vllm_manifest.runtime_config["base_url"] == "http://127.0.0.1:8100/v1"
+    assert vllm_manifest.metadata["orchestration_role"] == "queen"
+    assert any(item.provider_id == "vllm-local:qwen2.5:32b-vllm" for item in snapshot.capability_truth)
+
+
 def test_build_runtime_backbone_reuses_bootstrap_probe_and_provider_facades() -> None:
     probe = MachineProbe(
         cpu_cores=12,
