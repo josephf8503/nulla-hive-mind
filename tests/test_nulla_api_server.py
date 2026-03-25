@@ -167,6 +167,36 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
         self.assertEqual(manifests[("vllm-local", "qwen2.5:32b-vllm")].runtime_config["base_url"], "http://127.0.0.1:8100/v1")
         self.assertEqual(manifests[("vllm-local", "qwen2.5:32b-vllm")].metadata["context_window"], 65536)
 
+    def test_ensure_default_provider_registers_llamacpp_when_base_url_is_present(self) -> None:
+        manifests = {}
+        registry = mock.Mock()
+
+        def _get_manifest(provider_name: str, model_name: str):
+            return manifests.get((provider_name, model_name))
+
+        def _register_manifest(manifest):
+            manifests[(manifest.provider_name, manifest.model_name)] = manifest
+            return manifest
+
+        registry.get_manifest.side_effect = _get_manifest
+        registry.register_manifest.side_effect = _register_manifest
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "LLAMACPP_BASE_URL": "http://127.0.0.1:8090/v1",
+                "NULLA_LLAMACPP_MODEL": "qwen2.5:14b-gguf",
+                "LLAMACPP_CONTEXT_WINDOW": "16384",
+            },
+            clear=False,
+        ):
+            _ensure_default_provider(registry, "qwen2.5:14b")
+
+        self.assertIn(("ollama-local", "qwen2.5:14b"), manifests)
+        self.assertIn(("llamacpp-local", "qwen2.5:14b-gguf"), manifests)
+        self.assertEqual(manifests[("llamacpp-local", "qwen2.5:14b-gguf")].runtime_config["base_url"], "http://127.0.0.1:8090/v1")
+        self.assertEqual(manifests[("llamacpp-local", "qwen2.5:14b-gguf")].metadata["context_window"], 16384)
+
     def test_normalize_chat_history_keeps_full_user_assistant_sequence(self) -> None:
         history = _normalize_chat_history(
             [

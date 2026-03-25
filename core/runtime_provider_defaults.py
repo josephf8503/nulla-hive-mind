@@ -11,6 +11,8 @@ _DEFAULT_KIMI_BASE_URL = "https://api.moonshot.ai/v1"
 _DEFAULT_KIMI_MODEL = "kimi-k2"
 _DEFAULT_VLLM_BASE_URL = "http://127.0.0.1:8000/v1"
 _DEFAULT_VLLM_CONTEXT_WINDOW = 131072
+_DEFAULT_LLAMACPP_BASE_URL = "http://127.0.0.1:8080/v1"
+_DEFAULT_LLAMACPP_CONTEXT_WINDOW = 32768
 
 
 def default_runtime_model_tag() -> str:
@@ -28,6 +30,9 @@ def ensure_default_runtime_providers(
     local_model = str(model_tag or "").strip() or default_runtime_model_tag()
     if _ensure_local_ollama_provider(registry, model_tag=local_model):
         changed.append(f"ollama-local:{local_model}")
+    llamacpp_provider_id = _ensure_llamacpp_provider(registry, model_name=local_model, env=env_map)
+    if llamacpp_provider_id:
+        changed.append(llamacpp_provider_id)
     vllm_provider_id = _ensure_vllm_provider(registry, model_name=local_model, env=env_map)
     if vllm_provider_id:
         changed.append(vllm_provider_id)
@@ -193,6 +198,85 @@ def _ensure_vllm_provider(
             "deployment_class": "local",
             "context_window": context_window,
             "tool_support": ["structured_json", "tool_calls", "code_complex"],
+            "max_safe_concurrency": max_safe_concurrency,
+        },
+        enabled=True,
+    )
+    registry.register_manifest(manifest)
+    return manifest.provider_id
+
+
+def _ensure_llamacpp_provider(
+    registry: ModelRegistry,
+    *,
+    model_name: str,
+    env: Mapping[str, str],
+) -> str:
+    base_url = _env_first(
+        env,
+        "LLAMACPP_BASE_URL",
+        "NULLA_LLAMACPP_BASE_URL",
+        "LLAMA_CPP_BASE_URL",
+        "NULLA_LLAMA_CPP_BASE_URL",
+    )
+    if not base_url:
+        return ""
+    resolved_model_name = _env_first(
+        env,
+        "LLAMACPP_MODEL",
+        "NULLA_LLAMACPP_MODEL",
+        "LLAMA_CPP_MODEL",
+        "NULLA_LLAMA_CPP_MODEL",
+    ) or model_name or default_runtime_model_tag()
+    existing = registry.get_manifest("llamacpp-local", resolved_model_name)
+    has_base_url = bool(str(getattr(existing, "runtime_config", {}).get("base_url") or "").strip()) if existing else False
+    if existing and existing.enabled and has_base_url:
+        return existing.provider_id
+    context_window = _env_int(
+        env,
+        "LLAMACPP_CONTEXT_WINDOW",
+        "NULLA_LLAMACPP_CONTEXT_WINDOW",
+        "LLAMA_CPP_CONTEXT_WINDOW",
+        "NULLA_LLAMA_CPP_CONTEXT_WINDOW",
+        default=_DEFAULT_LLAMACPP_CONTEXT_WINDOW,
+    )
+    max_safe_concurrency = _env_int(
+        env,
+        "LLAMACPP_MAX_SAFE_CONCURRENCY",
+        "NULLA_LLAMACPP_MAX_SAFE_CONCURRENCY",
+        "LLAMA_CPP_MAX_SAFE_CONCURRENCY",
+        "NULLA_LLAMA_CPP_MAX_SAFE_CONCURRENCY",
+        default=1,
+    )
+    manifest = ModelProviderManifest(
+        provider_name="llamacpp-local",
+        model_name=resolved_model_name,
+        source_type="http",
+        adapter_type="openai_compatible",
+        license_name="User-managed",
+        license_reference="user-managed",
+        license_url_or_reference="user-managed",
+        weight_location="external",
+        runtime_dependency="llama.cpp",
+        notes="Local llama.cpp OpenAI-compatible lane — auto-registered when LLAMACPP_BASE_URL is configured.",
+        capabilities=["summarize", "classify", "format", "extract", "code_basic", "structured_json"],
+        runtime_config={
+            "base_url": base_url,
+            "api_path": "/chat/completions",
+            "health_path": "/models",
+            "timeout_seconds": 180,
+            "health_timeout_seconds": 10,
+            "temperature": 0.4,
+            "supports_json_mode": True,
+            "context_window": context_window,
+        },
+        metadata={
+            "runtime_family": "openai-compatible",
+            "confidence_baseline": 0.67,
+            "orchestration_role": "drone",
+            "deployment_class": "local",
+            "context_window": context_window,
+            "tool_support": ["structured_json"],
             "max_safe_concurrency": max_safe_concurrency,
         },
         enabled=True,

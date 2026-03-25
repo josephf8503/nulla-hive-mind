@@ -196,3 +196,57 @@ def test_queen_role_prefers_local_vllm_when_no_remote_queen_exists() -> None:
     assert plan.selected is not None
     assert plan.selected.provider_name == "vllm-local"
     assert plan.candidate_provider_ids[0] == "vllm-local:qwen2.5:32b-vllm"
+
+
+def test_drone_role_can_use_local_llamacpp_lane_when_qwen_is_absent() -> None:
+    run_migrations()
+    _clear_manifests()
+    registry = ModelRegistry()
+    registry.register_manifest(
+        {
+            "provider_name": "llamacpp-local",
+            "model_name": "qwen2.5:14b-gguf",
+            "source_type": "http",
+            "adapter_type": "openai_compatible",
+            "license_name": "User-managed",
+            "license_reference": "user-managed",
+            "weight_location": "external",
+            "weights_bundled": False,
+            "redistribution_allowed": False,
+            "runtime_dependency": "llama.cpp",
+            "capabilities": ["summarize", "classify", "format", "structured_json"],
+            "runtime_config": {"base_url": "http://127.0.0.1:8090/v1", "context_window": 16384},
+            "metadata": {"deployment_class": "local", "orchestration_role": "drone", "context_window": 16384},
+            "enabled": True,
+        }
+    )
+    registry.register_manifest(
+        {
+            "provider_name": "remote-generic",
+            "model_name": "helper",
+            "source_type": "http",
+            "adapter_type": "openai_compatible",
+            "license_name": "Provider",
+            "license_reference": "user-managed",
+            "weight_location": "external",
+            "weights_bundled": False,
+            "redistribution_allowed": False,
+            "runtime_dependency": "remote-openai-compatible-provider",
+            "capabilities": ["summarize", "classify", "format"],
+            "runtime_config": {"base_url": "https://remote.example"},
+            "metadata": {"deployment_class": "cloud"},
+            "enabled": True,
+        }
+    )
+
+    ranked = rank_provider_candidates(
+        registry,
+        task_kind="summarization",
+        output_mode="summary_block",
+        role="drone",
+        swarm_size=2,
+    )
+
+    assert ranked
+    assert ranked[0].provider_name == "llamacpp-local"
+    assert ranked[0].provider_id == "llamacpp-local:qwen2.5:14b-gguf"
