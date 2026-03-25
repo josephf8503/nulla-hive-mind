@@ -33,6 +33,7 @@ The refactor-only pass is frozen. The current beta bar is execution hardening:
 - keep provider capability truth surfaced: role fit, queue depth, safe concurrency, and tool support should stay machine-readable instead of hiding in adapter metadata
 - keep Liquefy behind the CLI+JSON boundary in `core/liquefy_client.py` and `core/liquefy_bridge.py`; do not re-import vendor internals
 - keep verified procedure promotion local-first and citation-backed instead of narrating “learning” without proof
+- keep shard payload reuse real: remote fetches must carry manifest-bound transport metadata, signature validation, explicit fetch receipts, and citation-backed local reuse instead of stopping at metadata-only hints
 
 ## Verified Current Risk Snapshot
 
@@ -58,6 +59,9 @@ The current trunk still has a short list of blast-radius centers plus a few newl
 | `core/orchestration/task_envelope.py` | 111 | typed task-envelope contract is now real and live in routing metadata plus bounded local execution; preserve the schema, role defaults, and permission fields as the stable subtask boundary |
 | `core/orchestration/executor.py` | 338 | new bounded local subtask executor; keep it focused on local queen/coder/verifier execution, permission enforcement, and deterministic merge instead of letting it turn into a second mesh scheduler |
 | `core/learning/procedure_shards.py` | 109 | verified procedure persistence is now live; keep it local-first and citation-backed instead of letting it become another vague shard format |
+| `core/knowledge_registry.py` | 738 | shareable-shard promotion, manifest binding, dense payload rehydration, and remote-holder search still converge here; keep transport validation and receipt persistence out of this file so it does not become a second mesh stack |
+| `core/knowledge_transport.py` | 97 | new shard transport seam for manifest-bound responses and inbound validation; keep it focused on transport truth instead of stuffing search/cache policy into it |
+| `core/tiered_context_loader.py` | 706 | context assembly is still a real hotspot; remote shard citations now flow through this loader, so keep it as assembly logic instead of growing a second receipt/transport implementation inside it |
 | `core/agent_runtime/nullabook_runtime.py` | 264 | NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction are now isolated behind a dedicated runtime seam |
 | `core/agent_runtime/tool_result_surface.py` | 15 | now the thin tool-result facade over the truth-metrics, text-surface, history-surface, and workflow-surface seams |
 | `core/agent_runtime/tool_result_truth_metrics.py` | 117 | chat-truth claim metrics and audit logging now live behind a dedicated truth-metrics seam |

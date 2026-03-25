@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved eighty-nine areas:
+The current `main` checkpoint materially improved ninety areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -184,12 +184,14 @@ The current `main` checkpoint materially improved eighty-nine areas:
    `core/runtime_backbone.py`, `core/runtime_capabilities.py`, `installer/write_install_receipt.py`, and `installer/doctor.py` now surface provider capability truth plus single-volume free-space checks, so the runtime/installer can say when a profile is not actually ready instead of only reporting the chosen model tag.
 89. **Bounded envelope execution baseline**
    `core/orchestration/executor.py` now turns `TaskEnvelopeV1` into a real local execution surface instead of pure metadata: coder envelopes can run bounded workspace patch/validate steps with required receipts, verifier envelopes fail closed on mutating intents, and queen envelopes can schedule child envelopes and merge their results deterministically.
+90. **Remote shard payload reuse baseline**
+   Remote shard reuse is no longer only metadata-first. `core/knowledge_transport.py` now binds `SHARD_PAYLOAD` responses to manifest metadata plus signed origin fields, `core/daemon/messages.py` now records explicit fetch receipts and fails closed on invalid payloads, `storage/shard_fetch_receipts.py` persists those receipts, and `core/tiered_context_loader.py` now surfaces cached remote-shard citations when a fetched `peer_received` shard is reused locally.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1389 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1394 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -209,14 +211,15 @@ Current test gate on this checkpoint:
 | **Trace Rail (local viewer)** | **Works** | Browser UI showing your own agent's execution in real time. `core/runtime_task_rail.py` is now the thin document facade; document assembly and shell composition live behind `core/runtime_task_rail_document.py`; the asset seam now fans out to `core/runtime_task_rail_shell.py` and `core/runtime_task_rail_styles.py` behind the tiny `core/runtime_task_rail_assets.py` compatibility module; `core/runtime_task_rail_client.py` is now the thin browser facade; polling and event/session rendering now live behind `core/runtime_task_rail_polling.py` and `core/runtime_task_rail_event_render.py`; and the session-summary derivation still lives behind `core/runtime_task_rail_summary_client.py`. |
 | **Coding operator baseline** | **Works** | Repo/workspace inspection, unified-diff patching, git status/diff, bounded tests/lint/format, tracked rollback, procedure promotion, and local proof artifacts are now explicit runtime tools instead of generic shell-only behavior. |
 | **Typed subtask execution baseline** | **Works (local baseline)** | `TaskEnvelopeV1` is no longer only routing metadata. Local coder/verifier envelopes can execute bounded runtime-tool steps under permissions, and queen envelopes can schedule child envelopes and merge them deterministically. Public/mesh delegation is still not the same thing and is not being claimed here. |
+| **Remote shard fetch/reuse baseline** | **Works (bounded)** | `SHARD_PAYLOAD` now carries manifest-bound transport metadata plus signed origin fields; accepted remote payloads emit explicit fetch receipts, cache locally as `peer_received` shards, and surface reuse citations through tiered context assembly. This is still not the same thing as hardened public-internet trust or automatic global synthesis. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
 | **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. Provider capability truth now also surfaces role fit, queue depth, max safe concurrency, and tool/structured-output support instead of only listing adapters. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
-| **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
+| **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts and cached remote-shard reuse can surface citation metadata instead of stopping at metadata-only hints. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1389 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1394 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -252,12 +255,12 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1389 passed, 13 skipped, 13 xfailed, 15 xpassed` |
-| Passing | 1389 |
+| Full suite result | `1394 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1394 |
 | Skipped | 13 |
-| Expected failures (xfail) | 13 |
-| Unexpected passes (xpass) | 15 |
-| Test files | 232 |
+| Expected failures (xfail) | 12 |
+| Unexpected passes (xpass) | 16 |
+| Test files | 233 |
 
 Run `python3 ops/pytest_shards.py --workers 6 --label <label> --pytest-arg=--tb=short` to reproduce the current full local gate.
 

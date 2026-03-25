@@ -234,6 +234,10 @@ Core lane:
 - `core/learning/procedure_promotion.py`: verified procedure promotion gate
 - `core/learning/reuse_ranker.py`: later-task procedure reuse ranking
 - `core/learning/procedure_metrics.py`: procedure shareability/success metrics
+- `core/knowledge_registry.py`: shareable shard promotion, manifest registration, dense payload rehydration, and remote-holder search
+- `core/knowledge_fetcher.py`: metadata-first remote shard consult/fetch request helpers
+- `core/knowledge_transport.py`: manifest-bound shard transport response and inbound validation seam
+- `storage/shard_fetch_receipts.py`: explicit remote shard fetch receipts and citation lookup for cached reuse
 - `core/liquefy_bridge.py`: proof/archive facade over the Liquefy CLI adapter plus local fallback artifacts
 - `core/liquefy_client.py`: Liquefy CLI+JSON adapter
 - `core/liquefy_models.py`: NULLA-side Liquefy self-test/proof/restore/search result models

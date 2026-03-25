@@ -46,6 +46,10 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `learning/procedure_promotion.py`
   - `learning/reuse_ranker.py`
   - `learning/procedure_metrics.py`
+- swarm knowledge reuse:
+  - `knowledge_registry.py`
+  - `knowledge_fetcher.py`
+  - `knowledge_transport.py`
 - proof/archive bridge:
   - `liquefy_bridge.py`
   - `liquefy_client.py`
