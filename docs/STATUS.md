@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved one hundred and nineteen areas:
+The current `main` checkpoint materially improved one hundred and twenty areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -244,12 +244,14 @@ The current `main` checkpoint materially improved one hundred and nineteen areas
    Bounded validation diagnosis no longer drops straight to raw text grep when pytest exposes a repo-meaningful callable or symbol. `core/execution/planner.py` now prefers `workspace.symbol_search` after validation failure, validation inspection, and command failure when a clean symbol can be extracted, reads the first unread symbol match instead of re-reading the same failing test forever, and only falls back to `workspace.search_text` when symbol lookup comes back empty. `core/runtime_execution_tools.py` now also preserves symbol-search path hints so that followthrough step can stay bounded and file-aware instead of guessing.
 119. **Bounded repair routing baseline**
    Explicit patch-and-validate repo work no longer depends on the caller already having classified it perfectly. `core/task_router.py` now recognizes bounded repo repair prompts as `debugging`, stops treating readonly `ruff format --check` validation as a risky destructive action, and keeps the resulting `TaskEnvelopeV1` on the queen/coder/verifier lane instead of collapsing back to `shell_guidance`. `core/execution/planner.py` now also backstops stale incoming task classes by still promoting the same explicit bounded repair request into the existing repair envelope when the request itself is clear.
+120. **DHT replacement-cache baseline**
+   Full DHT buckets no longer evict the oldest live incumbent just because a fresh challenger appears. `network/dht.py` now keeps a bounded per-bucket replacement cache, only replaces the oldest incumbent immediately when that incumbent is already stale, and promotes queued replacements when `remove_node()` or `prune_stale_nodes()` opens a slot. This still is not public-internet DHT hardening, but it stops the easiest churn-poisoning path where a full bucket could shed good peers too eagerly.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1474 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1477 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -284,7 +286,7 @@ Current test gate on this checkpoint:
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready, and the heavier local profiles can now prefer distinct configured local verifier lanes like `vllm-local` or `llamacpp-local` instead of flattening every local role back into one backend. |
 | **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1470 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist, NAT-mapped nodes now advertise `hole_punch` instead of pretending they are direct, and private-LAN nodes now stay `lan_only` unless a real relay is configured. This is more honest, but it is still not proven at scale over internet. |
-| **DHT routing** | **Partial** | Bucketed routing now has iterative lookup-frontier helpers that can exclude already-contacted peers, plus deterministic refresh targets for stale non-empty buckets. It is still not hardened as a public multi-hop routing layer. |
+| **DHT routing** | **Partial** | Bucketed routing now has iterative lookup-frontier helpers that can exclude already-contacted peers, deterministic refresh targets for stale non-empty buckets, and a bounded replacement-cache path so fresh full buckets queue challengers instead of evicting live incumbents immediately. It is still not hardened as a public multi-hop routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
 | **Channel gateway** | **Partial** | Platform-neutral gateway exists. Live surface wiring pending. |
 | **OpenClaw integration** | **Partial** | Agent registers and responds. Live-info routing and Hive create/confirm flow are better, but chat quality and product polish are still uneven. |
