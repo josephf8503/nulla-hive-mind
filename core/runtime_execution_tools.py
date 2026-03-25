@@ -267,6 +267,15 @@ def extract_observation_followup_hints(observation: dict[str, Any] | None) -> di
             "returncode": int(payload.get("returncode") or 0),
             "success": bool(payload.get("success", False)),
         }
+    if intent == "orchestration.execute_envelope":
+        return {
+            "intent": intent,
+            "task_id": str(payload.get("task_id") or "").strip(),
+            "task_role": str(payload.get("task_role") or "").strip(),
+            "receipt_count": int(payload.get("receipt_count") or 0),
+            "child_count": int(payload.get("child_count") or 0),
+            "merged_strategy": str(payload.get("merged_strategy") or "").strip(),
+        }
     if intent == "sandbox.run_command":
         stdout = str(payload.get("stdout") or "").strip()
         stderr = str(payload.get("stderr") or "").strip()
@@ -398,6 +407,13 @@ def execute_runtime_tool(
                 result,
                 validation_intent="workspace.run_formatter",
                 workspace_root=workspace_root,
+                source_context=source_context,
+            )
+        if intent == "orchestration.execute_envelope":
+            return _execute_task_envelope_intent(
+                arguments,
+                workspace_root=workspace_root,
+                session_id=_runtime_session_id(source_context),
                 source_context=source_context,
             )
         if intent == "sandbox.run_command":
@@ -1213,6 +1229,84 @@ def _run_validation(intent: str, arguments: dict[str, Any], *, workspace_root: P
         ok=bool(payload.get("ok")),
         status=str(payload.get("status") or ""),
         response_text=str(payload.get("response_text") or ""),
+        details=details,
+    )
+
+
+def _execute_task_envelope_intent(
+    arguments: dict[str, Any],
+    *,
+    workspace_root: Path,
+    session_id: str,
+    source_context: dict[str, Any] | None,
+) -> RuntimeExecutionResult:
+    payload = arguments.get("task_envelope")
+    if not isinstance(payload, dict):
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="invalid_arguments",
+            response_text="orchestration.execute_envelope requires a `task_envelope` object.",
+            details={
+                "observation": _tool_observation(
+                    intent="orchestration.execute_envelope",
+                    tool_surface="orchestration",
+                    ok=False,
+                    status="invalid_arguments",
+                ),
+            },
+        )
+    from core.orchestration import execute_task_envelope, task_envelope_from_dict
+
+    try:
+        envelope = task_envelope_from_dict(payload)
+    except Exception as exc:
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="invalid_arguments",
+            response_text=f"Invalid task envelope payload: {exc}",
+            details={
+                "error": str(exc),
+                "observation": _tool_observation(
+                    intent="orchestration.execute_envelope",
+                    tool_surface="orchestration",
+                    ok=False,
+                    status="invalid_arguments",
+                ),
+            },
+        )
+    envelope_result = execute_task_envelope(
+        envelope,
+        workspace_root=str(workspace_root),
+        session_id=session_id or envelope.task_id,
+        source_context=source_context,
+    )
+    details = {
+        "task_envelope": envelope.to_dict(),
+        "envelope_result": envelope_result.merge_payload(),
+        "receipts": [dict(item) for item in envelope_result.receipts],
+        "graph": list(envelope_result.details.get("graph") or []),
+        "scheduled_children": list(envelope_result.details.get("scheduled_children") or []),
+        "merged_result": dict(envelope_result.details.get("merged_result") or {}),
+        "step_results": list(envelope_result.details.get("step_results") or []),
+        "observation": _tool_observation(
+            intent="orchestration.execute_envelope",
+            tool_surface="orchestration",
+            ok=envelope_result.ok,
+            status=envelope_result.status,
+            task_id=envelope.task_id,
+            task_role=envelope.role,
+            receipt_count=len(envelope_result.receipts),
+            child_count=len(list(envelope.inputs.get("subtasks") or [])),
+            merged_strategy=envelope.merge_strategy if envelope.role == "queen" else "",
+        ),
+    }
+    return RuntimeExecutionResult(
+        handled=True,
+        ok=envelope_result.ok,
+        status=envelope_result.status,
+        response_text=envelope_result.output_text,
         details=details,
     )
 

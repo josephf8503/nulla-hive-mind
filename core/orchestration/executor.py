@@ -221,9 +221,21 @@ def _execute_queen_envelope(
         if graph.get(child.task_id) is None:
             graph.add_task(child)
 
-    scheduled = schedule_task_envelopes(children)
+    scheduled, dependency_error = _schedule_child_envelopes(children)
+    if dependency_error is not None:
+        return EnvelopeExecutionResult(
+            envelope=envelope,
+            ok=False,
+            status="dependency_blocked",
+            output_text=dependency_error["message"],
+            details={
+                "graph": _graph_snapshot(graph),
+                "dependency_error": dependency_error,
+            },
+        )
     ordered_children = {child.task_id: child for child in children}
     child_results: list[EnvelopeExecutionResult] = []
+    child_result_map: dict[str, EnvelopeExecutionResult] = {}
     execute_child = child_executor or (
         lambda child: execute_task_envelope(
             child,
@@ -237,9 +249,27 @@ def _execute_queen_envelope(
     )
     for scheduled_child in scheduled:
         child = ordered_children[scheduled_child.task_id]
-        child_result = execute_child(child)
+        blocked_dependencies = [
+            dependency
+            for dependency in _child_dependencies(child)
+            if dependency in child_result_map and not child_result_map[dependency].ok
+        ]
+        if blocked_dependencies:
+            child_result = EnvelopeExecutionResult(
+                envelope=child,
+                ok=False,
+                status="dependency_failed",
+                output_text=(
+                    f"{child.role} envelope `{child.task_id}` is blocked because "
+                    f"dependency execution failed: {', '.join(blocked_dependencies)}."
+                ),
+                details={"blocked_by": blocked_dependencies},
+            )
+        else:
+            child_result = execute_child(child)
         graph.mark_status(child.task_id, "completed" if child_result.ok else "failed", result=child_result.merge_payload())
         child_results.append(child_result)
+        child_result_map[child.task_id] = child_result
 
     merged = merge_task_results(envelope, [item.merge_payload() for item in child_results])
     ok = bool(merged.get("ok", False))
@@ -276,6 +306,55 @@ def _child_envelopes(envelope: TaskEnvelopeV1) -> list[TaskEnvelopeV1]:
             payload.setdefault("parent_task_id", envelope.task_id)
             out.append(task_envelope_from_dict(payload))
     return out
+
+
+def _child_dependencies(envelope: TaskEnvelopeV1) -> list[str]:
+    return [
+        str(item).strip()
+        for item in list(envelope.inputs.get("depends_on") or [])
+        if str(item).strip()
+    ]
+
+
+def _schedule_child_envelopes(children: list[TaskEnvelopeV1]) -> tuple[list[Any], dict[str, Any] | None]:
+    scheduled = schedule_task_envelopes(children)
+    by_id = {child.task_id: child for child in children}
+    unresolved = {item.task_id for item in scheduled}
+    ordered: list[Any] = []
+    while unresolved:
+        progressed = False
+        for item in scheduled:
+            if item.task_id not in unresolved:
+                continue
+            child = by_id[item.task_id]
+            dependencies = _child_dependencies(child)
+            unknown = [dependency for dependency in dependencies if dependency not in by_id]
+            if unknown:
+                return [], {
+                    "task_id": child.task_id,
+                    "dependencies": dependencies,
+                    "missing_dependencies": unknown,
+                    "message": (
+                        f"queen envelope dependency graph is invalid for `{child.task_id}`: "
+                        f"missing child dependencies {', '.join(unknown)}."
+                    ),
+                }
+            if any(dependency in unresolved for dependency in dependencies):
+                continue
+            ordered.append(item)
+            unresolved.remove(item.task_id)
+            progressed = True
+        if progressed:
+            continue
+        blocked = sorted(unresolved)
+        return [], {
+            "dependencies": {task_id: _child_dependencies(by_id[task_id]) for task_id in blocked},
+            "message": (
+                "queen envelope dependency graph is cyclic or unschedulable for child tasks: "
+                f"{', '.join(blocked)}."
+            ),
+        }
+    return ordered, None
 
 
 def _check_step_permission(envelope: TaskEnvelopeV1, *, intent: str) -> dict[str, str] | None:

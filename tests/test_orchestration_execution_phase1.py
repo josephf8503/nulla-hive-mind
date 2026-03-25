@@ -162,6 +162,71 @@ class OrchestrationExecutionPhase1Tests(unittest.TestCase):
         self.assertEqual(graph_rows["verify-child"]["status"], "completed")
         self.assertEqual(graph_rows["coder-child"]["status"], "completed")
 
+    def test_queen_envelope_respects_child_dependencies_for_real_runtime_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+            patch_text = "\n".join(
+                [
+                    "--- a/app.py",
+                    "+++ b/app.py",
+                    "@@ -1,2 +1,2 @@",
+                    " def answer():",
+                    "-    return 41",
+                    "+    return 42",
+                    "",
+                ]
+            )
+            coder = build_task_envelope(
+                role="coder",
+                task_id="coder-child",
+                parent_task_id="queen-parent",
+                goal="Patch the code first",
+                latency_budget="deep",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {"intent": "workspace.apply_unified_diff", "arguments": {"patch": patch_text}},
+                        {"intent": "workspace.run_tests", "arguments": {"command": "python3 -m pytest -q test_app.py"}},
+                    ],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+            verifier = build_task_envelope(
+                role="verifier",
+                task_id="verify-child",
+                parent_task_id="queen-parent",
+                goal="Verify after the patch lands",
+                latency_budget="low_latency",
+                inputs={
+                    "task_class": "file_inspection",
+                    "depends_on": ["coder-child"],
+                    "runtime_tools": [{"intent": "workspace.run_tests", "arguments": {"command": "python3 -m pytest -q test_app.py"}}],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+            queen = build_task_envelope(
+                role="queen",
+                task_id="queen-parent",
+                goal="Coordinate patch and verification",
+                merge_strategy="highest_score",
+                inputs={"subtasks": [coder.to_dict(), verifier.to_dict()]},
+            )
+
+            result = execute_task_envelope(queen, workspace_root=tmpdir)
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.details["scheduled_children"], ["coder-child", "verify-child"])
+            graph_rows = {item["task_id"]: item for item in result.details["graph"]}
+            self.assertEqual(graph_rows["coder-child"]["status"], "completed")
+            self.assertEqual(graph_rows["verify-child"]["status"], "completed")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
+
 
 if __name__ == "__main__":
     unittest.main()

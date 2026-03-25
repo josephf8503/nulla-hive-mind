@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from core.execution.validation_tools import runtime_validation_command, validation_command
+from core.orchestration import build_task_envelope
 from core.runtime_execution_tools import execute_runtime_tool
 
 
@@ -169,6 +170,119 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             runtime_validation_command("ruff check ."),
             f"{sys.executable} -m ruff check .",
         )
+
+    def test_runtime_tool_can_execute_coder_task_envelope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+            patch_text = "\n".join(
+                [
+                    "--- a/app.py",
+                    "+++ b/app.py",
+                    "@@ -1,2 +1,2 @@",
+                    " def answer():",
+                    "-    return 41",
+                    "+    return 42",
+                    "",
+                ]
+            )
+            envelope = build_task_envelope(
+                role="coder",
+                task_id="coder-runtime",
+                goal="Patch the answer and validate it",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {"intent": "workspace.apply_unified_diff", "arguments": {"patch": patch_text}},
+                        {"intent": "workspace.run_tests", "arguments": {"command": "python3 -m pytest -q test_app.py"}},
+                    ],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+
+            result = execute_runtime_tool(
+                "orchestration.execute_envelope",
+                {"task_envelope": envelope.to_dict()},
+                source_context={"workspace": tmpdir, "session_id": "session-envelope"},
+            )
+
+            assert result is not None
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.details["observation"]["intent"], "orchestration.execute_envelope")
+            self.assertEqual(result.details["observation"]["task_role"], "coder")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
+
+    def test_runtime_tool_executes_queen_envelope_with_dependency_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+            patch_text = "\n".join(
+                [
+                    "--- a/app.py",
+                    "+++ b/app.py",
+                    "@@ -1,2 +1,2 @@",
+                    " def answer():",
+                    "-    return 41",
+                    "+    return 42",
+                    "",
+                ]
+            )
+            coder = build_task_envelope(
+                role="coder",
+                task_id="coder-child",
+                parent_task_id="queen-parent",
+                goal="Patch first",
+                latency_budget="deep",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {"intent": "workspace.apply_unified_diff", "arguments": {"patch": patch_text}},
+                        {"intent": "workspace.run_tests", "arguments": {"command": "python3 -m pytest -q test_app.py"}},
+                    ],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+            verifier = build_task_envelope(
+                role="verifier",
+                task_id="verify-child",
+                parent_task_id="queen-parent",
+                goal="Verify second",
+                latency_budget="low_latency",
+                inputs={
+                    "task_class": "file_inspection",
+                    "depends_on": ["coder-child"],
+                    "runtime_tools": [{"intent": "workspace.run_tests", "arguments": {"command": "python3 -m pytest -q test_app.py"}}],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+            queen = build_task_envelope(
+                role="queen",
+                task_id="queen-parent",
+                goal="Coordinate both steps",
+                merge_strategy="highest_score",
+                inputs={"subtasks": [coder.to_dict(), verifier.to_dict()]},
+            )
+
+            result = execute_runtime_tool(
+                "orchestration.execute_envelope",
+                {"task_envelope": queen.to_dict()},
+                source_context={"workspace": tmpdir, "session_id": "session-queen"},
+            )
+
+            assert result is not None
+            self.assertTrue(result.ok)
+            self.assertEqual(result.details["scheduled_children"], ["coder-child", "verify-child"])
+            self.assertEqual(result.details["observation"]["task_role"], "queen")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
 
 
 if __name__ == "__main__":
