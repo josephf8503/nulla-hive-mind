@@ -902,6 +902,27 @@ def orchestration_role_for_task_class(task_class: str) -> str:
     return "narrator"
 
 
+def _looks_like_orchestrated_operator_request(user_input: str) -> bool:
+    lowered = f" {' '.join(str(user_input or '').lower().split())} "
+    has_mutation = any(marker in lowered for marker in (" replace ", " patch ", " edit ", " change ", " fix "))
+    if not has_mutation:
+        return False
+    has_validation = any(
+        marker in lowered
+        for marker in (
+            " run tests ",
+            " rerun tests ",
+            " pytest ",
+            " run lint ",
+            " lint it ",
+            " ruff check ",
+            " check formatting ",
+            " ruff format ",
+        )
+    )
+    return has_validation
+
+
 def build_task_envelope_for_request(
     user_input: str,
     *,
@@ -919,13 +940,19 @@ def build_task_envelope_for_request(
             routed_task_class,
             user_input=user_input,
             context=context,
-        )
+    )
     profile = model_execution_profile(
         routed_task_class,
         chat_surface=chat_surface,
         planner_style_requested=planner_style_requested,
     )
     role = orchestration_role_for_task_class(routed_task_class)
+    if _looks_like_orchestrated_operator_request(user_input):
+        role = "queen"
+        profile = {
+            **dict(profile),
+            "provider_role": "queen",
+        }
     if str(profile.get("task_kind") or "") == "action_plan" and role == "narrator":
         role = "queen"
     reused = _reused_procedure_inputs(task_class=routed_task_class, user_input=user_input)

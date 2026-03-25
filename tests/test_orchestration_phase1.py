@@ -194,6 +194,17 @@ class OrchestrationPhase1Tests(unittest.TestCase):
         self.assertIn("web_search", envelope.model_constraints["preferred_tool_support"])
         self.assertTrue(envelope.model_constraints["prefer_long_context"])
 
+    def test_build_task_envelope_for_request_promotes_patch_and_validate_flow_to_queen(self) -> None:
+        envelope = build_task_envelope_for_request(
+            "replace `return 41` with `return 42` in app.py, then run `python3 -m pytest -q test_app.py`",
+            context={"share_scope": "local_only"},
+            task_id="task-routing-operator-1",
+        )
+
+        self.assertEqual(envelope.role, "queen")
+        self.assertEqual(envelope.model_constraints["required_locality"], "")
+        self.assertEqual(envelope.model_constraints["preferred_provider_role"], "queen")
+
     def test_provider_routing_plan_for_envelope_exposes_capability_truth(self) -> None:
         _clear_manifests()
         registry = ModelRegistry()

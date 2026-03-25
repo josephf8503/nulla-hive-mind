@@ -10,6 +10,7 @@ from unittest import mock
 from core.execution.validation_tools import runtime_validation_command, validation_command
 from core.orchestration import build_task_envelope
 from core.runtime_execution_tools import execute_runtime_tool
+from core.tool_intent_executor import plan_tool_workflow
 
 
 class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
@@ -301,6 +302,38 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertTrue(result.ok)
             self.assertEqual(result.details["scheduled_children"], ["coder-child", "verify-child"])
             self.assertEqual(result.details["observation"]["task_role"], "queen")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
+
+    def test_planned_orchestrated_operator_envelope_executes_end_to_end(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+
+            decision = plan_tool_workflow(
+                user_text="replace `return 41` with `return 42` in app.py, then run `python3 -m pytest -q test_app.py`",
+                task_class="debugging",
+                executed_steps=[],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(decision.handled)
+            self.assertEqual(decision.next_payload["intent"], "orchestration.execute_envelope")
+
+            result = execute_runtime_tool(
+                decision.next_payload["intent"],
+                dict(decision.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-planned-envelope"},
+            )
+
+            assert result is not None
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.details["observation"]["task_role"], "queen")
+            self.assertEqual(result.details["scheduled_children"][0][:6], "coder-")
             self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
 
 

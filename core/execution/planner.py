@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -7,6 +8,7 @@ from typing import Any
 
 from core.runtime_execution_tools import extract_observation_followup_hints, looks_like_execution_request
 from core.task_router import (
+    build_task_envelope_for_request,
     looks_like_explicit_lookup_request,
     looks_like_live_recency_lookup,
     looks_like_public_entity_lookup_request,
@@ -604,6 +606,134 @@ def _normalize_inline_path(path: str) -> str:
     return _normalize_inline_command(path)
 
 
+def _validation_step_from_request(*, user_text: str, explicit_command: str) -> dict[str, Any] | None:
+    lowered = f" {' '.join(str(user_text or '').lower().split())} "
+    command = _normalize_inline_command(explicit_command)
+    if command:
+        normalized = command.lower()
+        if re.match(r"^(?:python\d?(?:\.\d+)?\s+-m\s+)?pytest\b", normalized):
+            return {"intent": "workspace.run_tests", "arguments": {"command": command}}
+        if re.match(r"^(?:python\d?(?:\.\d+)?\s+-m\s+)?ruff\s+check\b", normalized):
+            return {"intent": "workspace.run_lint", "arguments": {"command": command}}
+        if re.match(r"^(?:python\d?(?:\.\d+)?\s+-m\s+)?ruff\s+format\b", normalized):
+            return {
+                "intent": "workspace.run_formatter",
+                "arguments": {
+                    "command": command,
+                    "apply": " --check" not in normalized,
+                },
+            }
+        return None
+    if any(marker in lowered for marker in (" run tests ", " rerun tests ", " pytest ")):
+        return {"intent": "workspace.run_tests", "arguments": {}}
+    if any(marker in lowered for marker in (" run lint ", " rerun lint ", " lint it ", " ruff check ")):
+        return {"intent": "workspace.run_lint", "arguments": {}}
+    if any(marker in lowered for marker in (" format it ", " run formatter ", " check formatting ", " ruff format ")):
+        return {
+            "intent": "workspace.run_formatter",
+            "arguments": {
+                "apply": any(marker in lowered for marker in (" format it ", " apply formatting ", " run formatter ")),
+            },
+        }
+    return None
+
+
+def _planned_orchestrated_operator_payload(
+    *,
+    user_text: str,
+    task_class: str,
+    source_context: dict[str, Any] | None,
+    replacement: dict[str, Any] | None,
+    explicit_command: str,
+) -> dict[str, Any] | None:
+    source_context = dict(source_context or {})
+    workspace = str(source_context.get("workspace") or source_context.get("workspace_root") or "").strip()
+    if not workspace:
+        return None
+    replace_payload = dict(replacement or {})
+    path = str(replace_payload.get("path") or "").strip()
+    old_text = str(replace_payload.get("old_text") or "").strip()
+    new_text = str(replace_payload.get("new_text") or "").strip()
+    if not (path and old_text and new_text):
+        return None
+    validation_step = _validation_step_from_request(user_text=user_text, explicit_command=explicit_command)
+    if validation_step is None:
+        return None
+    lowered = f" {' '.join(str(user_text or '').lower().split())} "
+    if not any(marker in lowered for marker in (" replace ", " patch ", " edit ", " change ", " fix ")):
+        return None
+    if str(task_class or "").strip().lower() not in {
+        "unknown",
+        "debugging",
+        "dependency_resolution",
+        "config",
+        "security_hardening",
+        "integration_orchestration",
+    }:
+        return None
+    from core.orchestration import build_task_envelope
+
+    task_suffix = hashlib.sha1(f"{task_class}|{path}|{old_text}|{new_text}|{explicit_command}".encode()).hexdigest()[:12]
+    queen_id = f"queen-{task_suffix}"
+    privacy_class = str(source_context.get("share_scope") or "local_only")
+    coder = build_task_envelope(
+        role="coder",
+        task_id=f"coder-{task_suffix}",
+        parent_task_id=queen_id,
+        goal=f"Apply the requested workspace change in `{path}`.",
+        inputs={
+            "task_class": str(task_class or "debugging").strip() or "debugging",
+            "runtime_tools": [
+                {"intent": "workspace.read_file", "arguments": {"path": path, "start_line": 1, "max_lines": 240}},
+                {
+                    "intent": "workspace.replace_in_file",
+                    "arguments": {
+                        "path": path,
+                        "old_text": old_text,
+                        "new_text": new_text,
+                        "replace_all": True,
+                    },
+                },
+            ],
+        },
+        required_receipts=("tool_receipt",),
+        privacy_class=privacy_class,
+    )
+    verifier = build_task_envelope(
+        role="verifier",
+        task_id=f"verify-{task_suffix}",
+        parent_task_id=queen_id,
+        goal="Validate the requested workspace change.",
+        inputs={
+            "task_class": "file_inspection",
+            "depends_on": [coder.task_id],
+            "runtime_tools": [validation_step],
+        },
+        required_receipts=("tool_receipt", "validation_result"),
+        privacy_class=privacy_class,
+    )
+    queen = build_task_envelope_for_request(
+        user_text,
+        context={"share_scope": privacy_class},
+        task_id=queen_id,
+        chat_surface=False,
+        planner_style_requested=False,
+    )
+    queen_payload = {
+        **queen.to_dict(),
+        "role": "queen",
+        "inputs": {
+            **dict(queen.inputs or {}),
+            "task_class": str(task_class or queen.inputs.get("task_class") or "unknown"),
+            "planner_source": "execution_planner",
+            "subtasks": [coder.to_dict(), verifier.to_dict()],
+        },
+        "merge_strategy": "highest_score",
+        "required_receipts": [],
+    }
+    return {"intent": "orchestration.execute_envelope", "arguments": {"task_envelope": queen_payload}}
+
+
 def plan_tool_workflow(
     *,
     user_text: str,
@@ -748,6 +878,19 @@ def plan_tool_workflow(
                 handled=True,
                 reason="planned_workspace_directory_bootstrap",
                 next_payload={"intent": "workspace.ensure_directory", "arguments": {"path": workspace_bootstrap_path}},
+            )
+        orchestrated_payload = _planned_orchestrated_operator_payload(
+            user_text=text,
+            task_class=task_class,
+            source_context=source_context,
+            replacement=replacement,
+            explicit_command=explicit_command,
+        )
+        if orchestrated_payload is not None:
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_orchestrated_operator_envelope",
+                next_payload=orchestrated_payload,
             )
         if explicit_command and any(marker in lowered for marker in (" retry ", " then retry", " then rerun", " rerun ")):
             return WorkflowPlannerDecision(
@@ -962,6 +1105,9 @@ def plan_tool_workflow(
                 next_payload={"intent": "sandbox.run_command", "arguments": {"command": retry_command}},
             )
         return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_edit", stop_after=True)
+
+    if last_intent == "orchestration.execute_envelope":
+        return WorkflowPlannerDecision(handled=True, reason="orchestration_stop_after_envelope", stop_after=True)
 
     if last_intent == "sandbox.run_command":
         returncode = int(hints.get("returncode") or 0)

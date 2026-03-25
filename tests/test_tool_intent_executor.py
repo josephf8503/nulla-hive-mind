@@ -877,6 +877,50 @@ class ToolIntentExecutorTests(unittest.TestCase):
         self.assertTrue(fourth.handled)
         self.assertEqual(fourth.next_payload["intent"], "sandbox.run_command")
 
+    def test_workflow_planner_can_emit_orchestrated_operator_envelope_for_patch_and_validate(self) -> None:
+        decision = plan_tool_workflow(
+            user_text="replace `return 41` with `return 42` in app.py, then run `python3 -m pytest -q test_app.py`",
+            task_class="debugging",
+            executed_steps=[],
+            source_context={"surface": "openclaw", "platform": "openclaw", "workspace": "/tmp/nulla-acceptance"},
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_orchestrated_operator_envelope")
+        self.assertEqual(decision.next_payload["intent"], "orchestration.execute_envelope")
+        envelope = dict(decision.next_payload["arguments"]["task_envelope"])
+        self.assertEqual(envelope["role"], "queen")
+        subtasks = list(envelope["inputs"]["subtasks"])
+        self.assertEqual([item["role"] for item in subtasks], ["coder", "verifier"])
+        self.assertEqual(subtasks[0]["inputs"]["runtime_tools"][1]["intent"], "workspace.replace_in_file")
+        self.assertEqual(subtasks[1]["inputs"]["runtime_tools"][0]["intent"], "workspace.run_tests")
+        self.assertEqual(subtasks[1]["inputs"]["depends_on"], [subtasks[0]["task_id"]])
+
+    def test_workflow_planner_stops_after_orchestrated_operator_envelope(self) -> None:
+        decision = plan_tool_workflow(
+            user_text="replace `return 41` with `return 42` in app.py, then run `python3 -m pytest -q test_app.py`",
+            task_class="debugging",
+            executed_steps=[
+                {
+                    "tool_name": "orchestration.execute_envelope",
+                    "arguments": {"task_envelope": {"task_id": "queen-1"}},
+                    "observation": {
+                        "intent": "orchestration.execute_envelope",
+                        "tool_surface": "orchestration",
+                        "ok": True,
+                        "status": "completed",
+                        "task_id": "queen-1",
+                        "task_role": "queen",
+                    },
+                }
+            ],
+            source_context={"surface": "openclaw", "platform": "openclaw", "workspace": "/tmp/nulla-acceptance"},
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertTrue(decision.stop_after)
+        self.assertEqual(decision.reason, "orchestration_stop_after_envelope")
+
     def test_workflow_planner_can_stop_early_when_enough_state_is_gathered(self) -> None:
         decision = plan_tool_workflow(
             user_text="latest qwen release notes",

@@ -94,6 +94,7 @@ class BuilderFacadeMixin:
             "workspace.read_file",
             "workspace.write_file",
             "workspace.ensure_directory",
+            "orchestration.execute_envelope",
             "sandbox.run_command",
             "hive.create_topic",
         }:
@@ -351,6 +352,7 @@ class BuilderFacadeMixin:
                 "workspace.read_file",
                 "workspace.write_file",
                 "workspace.ensure_directory",
+                "orchestration.execute_envelope",
                 "sandbox.run_command",
                 "hive.create_topic",
             }
