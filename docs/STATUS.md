@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved one hundred and seventeen areas:
+The current `main` checkpoint materially improved one hundred and eighteen areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -240,12 +240,14 @@ The current `main` checkpoint materially improved one hundred and seventeen area
    The bounded local debug loop no longer requires the user to restate the most obvious literal fix by hand. When a failing test clearly asserts `fn() == <literal>`, the diagnosis path has already read that failing test, and the first unread implementation match defines `fn()` with a different literal `return`, `core/execution/planner.py` now promotes that evidence into the existing `verifier -> coder -> verifier` repair envelope instead of stopping at inspection-only diagnosis.
 117. **Recovery attempt isolation baseline**
    Bounded local recovery attempts no longer rerun fallback work against dirty sibling state or stale import cache artifacts. `core/orchestration/executor.py` can now restore the last tracked mutation from the failed dependency session before an explicitly-marked recovery child runs, `core/orchestration/result_merge.py` now fails `last_success` recovery merges closed when the final verifier still fails, and `core/execution/workspace_tools.py`, `core/execution/artifacts.py`, and `core/runtime_execution_tools.py` now force source mtimes forward against the previous write timestamp so repeated write/rollback/write cycles do not reuse stale Apple Python cache bytecode during verifier reruns.
+118. **Symbol-first repair diagnosis baseline**
+   Bounded validation diagnosis no longer drops straight to raw text grep when pytest exposes a repo-meaningful callable or symbol. `core/execution/planner.py` now prefers `workspace.symbol_search` after validation failure, validation inspection, and command failure when a clean symbol can be extracted, reads the first unread symbol match instead of re-reading the same failing test forever, and only falls back to `workspace.search_text` when symbol lookup comes back empty. `core/runtime_execution_tools.py` now also preserves symbol-search path hints so that followthrough step can stay bounded and file-aware instead of guessing.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1470 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1471 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
