@@ -239,6 +239,8 @@ Core lane:
 - `core/knowledge_registry.py`: shareable shard promotion, manifest registration, dense payload rehydration, and remote-holder search
 - `core/knowledge_fetcher.py`: metadata-first remote shard consult/fetch request helpers
 - `core/knowledge_transport.py`: manifest-bound shard transport response and inbound validation seam
+- `core/shard_matcher.py`: local shard candidate discovery plus remote-shard receipt/outcome attachment for cached `peer_received` candidates
+- `core/shard_ranker.py`: bounded candidate ranking that now gives proven remote-shard reuse a measurable but non-dominating boost
 - `storage/shard_fetch_receipts.py`: explicit remote shard fetch receipts and citation lookup for cached reuse
 - `storage/shard_reuse_outcomes.py`: downstream remote-shard reuse outcome persistence and per-shard success/durability summaries
 - `core/liquefy_bridge.py`: proof/archive facade over the Liquefy CLI adapter plus local fallback artifacts
