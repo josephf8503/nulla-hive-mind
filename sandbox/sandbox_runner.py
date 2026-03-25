@@ -83,7 +83,7 @@ class SandboxRunner:
         argv = parse_command(cmd)
         if not argv:
             return {"error": "Empty command.", "status": "blocked_by_policy"}
-        base_cmd = argv[0].lower()
+        base_cmd = Path(str(argv[0] or "")).name.lower()
         if base_cmd == "env":
             index = 1
             while index < len(argv):
@@ -91,13 +91,17 @@ class SandboxRunner:
                 if "=" in token and not token.startswith("-"):
                     index += 1
                     continue
-                base_cmd = str(argv[index] or "").lower() if index < len(argv) else "env"
+                base_cmd = Path(str(argv[index] or "")).name.lower() if index < len(argv) else "env"
                 break
         if base_cmd in self.ALLOWED_COMMANDS:
             allowed = True
 
         if not allowed:
-            return {"error": f"Base command '{base_cmd}' not in Sandbox whitelist.", "allowed": self.ALLOWED_COMMANDS}
+            return {
+                "error": f"Base command '{base_cmd}' not in Sandbox whitelist.",
+                "status": "blocked_by_policy",
+                "allowed": self.ALLOWED_COMMANDS,
+            }
 
         # Step 3: Proceed with execution
         try:

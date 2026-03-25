@@ -18,7 +18,7 @@ from core.execution.artifacts import (
     rollback_last_workspace_mutation,
 )
 from core.execution.git_tools import git_diff_workspace, git_status_workspace
-from core.execution.validation_tools import render_validation_result, validation_command
+from core.execution.validation_tools import render_validation_result, runtime_validation_command, validation_command
 from core.execution.workspace_tools import (
     apply_unified_diff_workspace,
     list_tree_workspace,
@@ -1175,7 +1175,7 @@ def _rollback_last_change(arguments: dict[str, Any], *, workspace_root: Path, se
 
 
 def _run_validation(intent: str, arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
-    command = validation_command(intent, arguments)
+    command = runtime_validation_command(validation_command(intent, arguments))
     command_arguments = dict(arguments)
     command_arguments["command"] = command
     command_arguments["_trusted_local_only"] = True
@@ -1344,7 +1344,7 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
     )
     result = runner.run_command(command, cwd=str(cwd))
     relative_cwd = _relative_path(cwd, workspace_root=workspace_root)
-    status = str(result.get("status") or "")
+    status = str(result.get("status") or ("blocked_by_policy" if result.get("error") else ""))
     if status and status != "executed":
         stdout = _truncate(str(result.get("stdout") or ""), limit=2400)
         stderr = _truncate(str(result.get("stderr") or ""), limit=1600)
@@ -1470,7 +1470,7 @@ def _trusted_local_network_mode(command: str, *, arguments: dict[str, Any]) -> s
     argv = parse_command(command)
     if not argv:
         return None
-    base = str(argv[0] or "").lower()
+    base = Path(str(argv[0] or "")).name.lower()
     if base in {"pytest", "ruff"}:
         return "heuristic_only"
     if base not in {"python", "python3"} or len(argv) < 3:

@@ -17,6 +17,9 @@ _SYMBOL_DEFINITION_TEMPLATES = (
     ("javascript_const", r"^\s*(?:export\s+)?(?:const|let|var)\s+{symbol}\b"),
 )
 _PATCH_TARGET_RE = re.compile(r"^(?:\+\+\+|---)\s+(?P<path>.+)$", re.MULTILINE)
+_HUNK_HEADER_RE = re.compile(
+    r"^@@\s+\-(?P<old_start>\d+)(?:,(?P<old_count>\d+))?\s+\+(?P<new_start>\d+)(?:,(?P<new_count>\d+))?\s+@@"
+)
 
 
 def resolve_workspace_path(raw_path: str | None, *, workspace_root: Path) -> Path:
@@ -215,6 +218,12 @@ def apply_unified_diff_workspace(
             else:
                 errors.append((patch_result.stderr or patch_result.stdout or "").strip())
     if not applied_with:
+        try:
+            _apply_unified_diff_python(patch_text, workspace_root=workspace_root)
+            applied_with = "python_fallback"
+        except Exception as exc:
+            errors.append(str(exc).strip())
+    if not applied_with:
         error_text = "; ".join(item for item in errors if item) or "No supported patch engine was available."
         return {
             "ok": False,
@@ -293,3 +302,89 @@ def _extract_patch_paths(patch_text: str) -> list[str]:
         if clean not in candidates:
             candidates.append(clean)
     return candidates
+
+
+def _normalize_patch_path(raw_path: str) -> str:
+    clean = str(raw_path or "").strip()
+    if clean.startswith("a/") or clean.startswith("b/"):
+        clean = clean[2:]
+    return clean
+
+
+def _apply_unified_diff_python(patch_text: str, *, workspace_root: Path) -> None:
+    lines = str(patch_text or "").splitlines()
+    index = 0
+    applied_any = False
+    while index < len(lines):
+        line = lines[index]
+        if not line.startswith("--- "):
+            index += 1
+            continue
+        old_raw = str(line[4:] or "").strip()
+        index += 1
+        if index >= len(lines) or not lines[index].startswith("+++ "):
+            raise ValueError("Malformed unified diff: missing `+++` header.")
+        new_raw = str(lines[index][4:] or "").strip()
+        index += 1
+        target_raw = new_raw if new_raw != "/dev/null" else old_raw
+        target_path = resolve_workspace_path(_normalize_patch_path(target_raw), workspace_root=workspace_root)
+        before_lines = (
+            target_path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+            if target_path.exists() and target_path.is_file()
+            else []
+        )
+        cursor = 0
+        rendered: list[str] = []
+        saw_hunk = False
+        while index < len(lines):
+            current = lines[index]
+            if current.startswith("--- "):
+                break
+            if not current.startswith("@@ "):
+                index += 1
+                continue
+            match = _HUNK_HEADER_RE.match(current)
+            if not match:
+                raise ValueError(f"Malformed unified diff hunk header: {current}")
+            saw_hunk = True
+            old_start = max(0, int(match.group("old_start") or "0") - 1)
+            if old_start < cursor:
+                raise ValueError("Malformed unified diff: overlapping hunks are not supported.")
+            rendered.extend(before_lines[cursor:old_start])
+            cursor = old_start
+            index += 1
+            while index < len(lines):
+                hunk_line = lines[index]
+                if hunk_line.startswith("@@ ") or hunk_line.startswith("--- "):
+                    break
+                if hunk_line == r"\ No newline at end of file":
+                    index += 1
+                    continue
+                prefix = hunk_line[:1]
+                body = hunk_line[1:]
+                if prefix == " ":
+                    if cursor >= len(before_lines) or before_lines[cursor].rstrip("\n") != body:
+                        raise ValueError(f"Unified diff context mismatch for `{target_path.name}`.")
+                    rendered.append(before_lines[cursor])
+                    cursor += 1
+                elif prefix == "-":
+                    if cursor >= len(before_lines) or before_lines[cursor].rstrip("\n") != body:
+                        raise ValueError(f"Unified diff removal mismatch for `{target_path.name}`.")
+                    cursor += 1
+                elif prefix == "+":
+                    rendered.append(body + "\n")
+                else:
+                    raise ValueError(f"Unsupported unified diff line: {hunk_line}")
+                index += 1
+        if not saw_hunk:
+            raise ValueError("Malformed unified diff: no hunks were found.")
+        rendered.extend(before_lines[cursor:])
+        if new_raw == "/dev/null":
+            if target_path.exists():
+                target_path.unlink()
+        else:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            target_path.write_text("".join(rendered), encoding="utf-8")
+        applied_any = True
+    if not applied_any:
+        raise ValueError("Malformed unified diff: no file headers were found.")

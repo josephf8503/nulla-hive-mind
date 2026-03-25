@@ -160,6 +160,41 @@ def test_pick_isolated_daemon_bind_port_returns_stream_safe_pair() -> None:
         tcp_sock.bind(("127.0.0.1", port + 1))
 
 
+def test_pick_isolated_daemon_bind_port_retries_when_stream_pair_is_occupied(monkeypatch) -> None:
+    scripted_udp_ports = [41000, 42000]
+    occupied_stream_ports = {41001}
+
+    class _FakeSocket:
+        def __init__(self, family: int, sock_type: int) -> None:
+            self.family = family
+            self.sock_type = sock_type
+            self.bound = ("127.0.0.1", 0)
+
+        def __enter__(self) -> _FakeSocket:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+        def bind(self, addr: tuple[str, int]) -> None:
+            host, port = addr
+            if self.sock_type == acceptance.socket.SOCK_DGRAM and port == 0:
+                if not scripted_udp_ports:
+                    raise OSError("no scripted udp ports left")
+                self.bound = (host, scripted_udp_ports.pop(0))
+                return
+            if self.sock_type == acceptance.socket.SOCK_STREAM and port in occupied_stream_ports:
+                raise OSError("occupied stream port")
+            self.bound = (host, port)
+
+        def getsockname(self) -> tuple[str, int]:
+            return self.bound
+
+    monkeypatch.setattr(acceptance.socket, "socket", _FakeSocket)
+
+    assert acceptance._pick_isolated_daemon_bind_port(host="127.0.0.1", attempts=2) == 42000
+
+
 def test_run_full_acceptance_restores_online_runtime(monkeypatch, tmp_path: Path) -> None:
     profile = acceptance.load_profile()
     calls: list[str] = []

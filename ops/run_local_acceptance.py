@@ -154,30 +154,25 @@ def _resolve_runtime_command(
     return _default_runtime_command(repo_root=repo_root, base_url=base_url)
 
 
-def _port_is_bindable(host: str, port: int, *, sock_type: int) -> bool:
-    family = socket.AF_INET6 if ":" in str(host or "") else socket.AF_INET
-    with socket.socket(family, sock_type) as sock:
-        if sock_type == socket.SOCK_STREAM:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind((host, int(port)))
-        except OSError:
-            return False
-    return True
-
-
 def _pick_isolated_daemon_bind_port(*, host: str = "127.0.0.1", attempts: int = 128) -> int:
+    family = socket.AF_INET6 if ":" in str(host or "") else socket.AF_INET
     for _ in range(max(1, int(attempts))):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        # Probe the UDP daemon port and its adjacent TCP stream port together so
+        # we do not treat a reusable or racing TCP port as safe.
+        with socket.socket(family, socket.SOCK_DGRAM) as probe:
             probe.bind((host, 0))
             candidate = int(probe.getsockname()[1])
         if candidate <= 0 or candidate >= 65534:
             continue
-        if not _port_is_bindable(host, candidate, sock_type=socket.SOCK_DGRAM):
+        try:
+            with socket.socket(family, socket.SOCK_DGRAM) as udp_sock, socket.socket(
+                family, socket.SOCK_STREAM
+            ) as tcp_sock:
+                udp_sock.bind((host, candidate))
+                tcp_sock.bind((host, candidate + 1))
+            return candidate
+        except OSError:
             continue
-        if not _port_is_bindable(host, candidate + 1, sock_type=socket.SOCK_STREAM):
-            continue
-        return candidate
     raise RuntimeError(f"Could not find an isolated daemon bind port for host {host!r}.")
 
 

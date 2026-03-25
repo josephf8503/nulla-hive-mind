@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from core.execution.validation_tools import validation_command
+from core.execution.validation_tools import runtime_validation_command, validation_command
 from core.runtime_execution_tools import execute_runtime_tool
 
 
@@ -76,6 +77,33 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertIn("restored `app.py`", rolled_back.response_text)
             self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "print('hello')\n")
 
+    def test_workspace_apply_unified_diff_has_python_fallback_when_shell_patchers_are_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            patch_text = "\n".join(
+                [
+                    "--- a/app.py",
+                    "+++ b/app.py",
+                    "@@ -1 +1 @@",
+                    "-print('hello')",
+                    "+print('goodbye')",
+                    "",
+                ]
+            )
+
+            with mock.patch("core.execution.workspace_tools.shutil.which", return_value=None):
+                applied = execute_runtime_tool(
+                    "workspace.apply_unified_diff",
+                    {"patch": patch_text},
+                    source_context={"workspace": tmpdir, "session_id": "session-fallback"},
+                )
+
+            assert applied is not None
+            self.assertTrue(applied.ok)
+            self.assertEqual(applied.details["observation"]["engine"], "python_fallback")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "print('goodbye')\n")
+
     def test_workspace_git_status_and_diff_report_real_repo_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -122,6 +150,7 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertTrue(result.ok)
             self.assertEqual(result.details["observation"]["intent"], "workspace.run_tests")
             self.assertEqual(result.details["observation"]["returncode"], 0)
+            self.assertIn(sys.executable, result.details["observation"]["command"])
 
     def test_validation_command_defaults_are_honest(self) -> None:
         with mock.patch("core.execution.validation_tools.shutil.which") as which:
@@ -130,6 +159,16 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertEqual(validation_command("workspace.run_lint", {}), "ruff check .")
             self.assertEqual(validation_command("workspace.run_formatter", {}), "ruff format --check .")
             self.assertEqual(validation_command("workspace.run_formatter", {"apply": True}), "ruff format .")
+
+    def test_runtime_validation_command_uses_current_interpreter_for_pytest_and_ruff(self) -> None:
+        self.assertEqual(
+            runtime_validation_command("python3 -m pytest -q test_sample.py"),
+            f"{sys.executable} -m pytest -q test_sample.py",
+        )
+        self.assertEqual(
+            runtime_validation_command("ruff check ."),
+            f"{sys.executable} -m ruff check .",
+        )
 
 
 if __name__ == "__main__":
