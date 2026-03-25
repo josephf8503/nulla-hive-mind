@@ -13,6 +13,12 @@ It owns:
 
 It does not own raw persistence primitives or low-level transport details. Those belong in `storage/` and `network/`.
 
+Current execution truth:
+
+- workspace/git/validation actions are explicit runtime intents, not shell-only folklore
+- `orchestration.execute_envelope` is now a real bounded runtime intent for local queen/coder/verifier execution
+- queen envelope execution now respects child dependency order instead of blindly following latency sort order
+
 ## Current Internal Zones
 
 - runtime/control plane:

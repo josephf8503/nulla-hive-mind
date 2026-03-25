@@ -28,7 +28,7 @@ The refactor-only pass is frozen. The current beta bar is execution hardening:
 
 - keep the new coding/operator lane real: workspace inspection, diff-based patching, git state, bounded validation, rollback, and emitted artifacts
 - keep typed task envelopes live in the routing path instead of letting provider/model decisions drift back to implicit guesses
-- keep local envelope execution bounded and real: coder/verifier steps must enforce runtime-tool permissions and queen merge must stay deterministic
+- keep local envelope execution bounded and real: coder/verifier steps must enforce runtime-tool permissions, queen merge must stay deterministic, dependency order must be explicit, and the bounded path should stay reachable through the real runtime intent surface instead of only direct helper calls
 - keep install-profile truth honest: profile selection, disk/RAM expectations, and provider-key requirements should come from one contract instead of installer folklore
 - keep provider capability truth surfaced: role fit, queue depth, safe concurrency, and tool support should stay machine-readable instead of hiding in adapter metadata
 - keep Liquefy behind the CLI+JSON boundary in `core/liquefy_client.py` and `core/liquefy_bridge.py`; do not re-import vendor internals

@@ -217,14 +217,14 @@ Core lane:
 - `core/runtime_install_profiles.py`: authoritative install/runtime profile selection, disk-volume checks, and provider-key readiness truth
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
-- `core/runtime_tool_contracts.py`: authoritative runtime intent contract map for workspace, git, validation, sandbox, Hive, web, and operator execution
-- `core/runtime_execution_tools.py`: coding/operator execution surface for workspace inspection, diff patching, git status/diff, bounded validation, rollback, and emitted artifacts
+- `core/runtime_tool_contracts.py`: authoritative runtime intent contract map for workspace, git, validation, envelope orchestration, sandbox, Hive, web, and operator execution
+- `core/runtime_execution_tools.py`: coding/operator execution surface for workspace inspection, diff patching, git status/diff, bounded validation, rollback, emitted artifacts, and bounded `orchestration.execute_envelope` execution
 - `core/execution/workspace_tools.py`: workspace tree, symbol search, and unified-diff patch helpers
 - `core/execution/git_tools.py`: bounded git status/diff helpers
 - `core/execution/validation_tools.py`: bounded test/lint/format command helpers and result shaping
 - `core/execution/artifacts.py`: diff, command, failure, mutation-history, and rollback/procedure-link artifacts
 - `core/orchestration/task_envelope.py`: `TaskEnvelopeV1` schema and role-default builder
-- `core/orchestration/executor.py`: bounded local queen/coder/verifier envelope executor with permission enforcement and deterministic merge
+- `core/orchestration/executor.py`: bounded local queen/coder/verifier envelope executor with permission enforcement, dependency-aware child ordering, and deterministic merge
 - `core/orchestration/role_contracts.py`: queen/coder/verifier/researcher/memory-clerk/narrator contracts
 - `core/orchestration/resource_scheduler.py`: envelope priority and provider-role scheduling helpers
 - `core/orchestration/task_graph.py`: task-graph node/status model
