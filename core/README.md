@@ -20,6 +20,7 @@ Current execution truth:
 - queen envelope execution now respects child dependency order instead of blindly following latency sort order
 - envelope-aware provider routing now fails closed for local-private or mutating coder work without a local lane, and it penalizes saturated candidates instead of blindly taking the first ranked provider
 - envelope scheduling now also understands attached provider-capability truth: queue pressure degrades lane priority, incompatible worker lanes can fail closed with `capacity_blocked`, and queen execution exposes scheduling details instead of only child order
+- configured `KIMI_API_KEY` now auto-registers a real remote Kimi queen manifest through the shared runtime bootstrap seam, so runtime backbone snapshots and API startup no longer drift between “routing says Kimi exists” and “bootstrap only registered local Ollama”
 - `task_router.py` now emits explicit model constraints for locality, structured-output pressure, long-context preference, code-complex preference, and queue-pressure strategy instead of leaving those hints implicit
 - `execution/planner.py` can now turn clear repo edit requests into bounded queen/coder/verifier `orchestration.execute_envelope` runs, including the current local baseline for search/read/patch/validate when the file path is omitted but the replacement is concrete
 - `orchestration/executor.py` now resolves step-to-step runtime references for that bounded operator lane and fails closed on ambiguous search results instead of guessing the mutation target
@@ -39,6 +40,7 @@ Current execution truth:
   - `runtime_bootstrap.py`
   - `runtime_backbone.py`
   - `runtime_install_profiles.py`
+  - `runtime_provider_defaults.py`
   - `runtime_paths.py`
   - `runtime_capabilities.py`
 - provider/model routing:
