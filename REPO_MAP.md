@@ -52,6 +52,13 @@ Core lane:
 - `tools/README.md`: explicit tool-contract boundary
 - `network/README.md`: transport/auth/routing boundary
 
+## Current WAN Transport Spine
+
+- `apps/nulla_daemon.py`: transport-mode discovery, capability advertising, and local presence broadcast entrypoint
+- `network/nat_probe.py`: local vs public NAT classification seam
+- `network/relay_fallback.py`: honest advertised transport-mode selection seam
+- `network/hole_punch.py`: hole-punch connectivity classification and attempt helpers
+
 ## Current Dashboard Spine
 
 - `core/brain_hive_dashboard.py`: stable dashboard facade
