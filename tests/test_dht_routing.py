@@ -76,6 +76,60 @@ class DhtRoutingTests(unittest.TestCase):
         self.assertEqual(len(targets[0].target_id), 64)
         self.assertNotEqual(targets[0].target_id, table.local_peer_id)
 
+    def test_add_node_does_not_evict_fresh_bucket_incumbents_when_bucket_is_full(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=2, bucket_count=16)
+        first = f"{8:064x}"
+        second = f"{9:064x}"
+        challenger = f"{10:064x}"
+        table.add_node(first, "203.0.113.10", 49001)
+        table.add_node(second, "203.0.113.11", 49002)
+
+        bucket_index = table._bucket_index(first)
+        assert bucket_index is not None
+        table.add_node(challenger, "203.0.113.12", 49003)
+
+        self.assertEqual(list(table._buckets[bucket_index].keys()), [first, second])
+        self.assertNotIn(challenger, table.nodes)
+        self.assertIn(challenger, table._replacement_caches[bucket_index])
+
+    def test_add_node_replaces_stale_bucket_incumbent_when_bucket_is_full(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=2, bucket_count=16)
+        first = f"{8:064x}"
+        second = f"{9:064x}"
+        challenger = f"{10:064x}"
+        table.add_node(first, "203.0.113.10", 49001)
+        table.add_node(second, "203.0.113.11", 49002)
+        table.nodes[first].last_seen = 0.0
+
+        bucket_index = table._bucket_index(first)
+        assert bucket_index is not None
+        table.add_node(challenger, "203.0.113.12", 49003)
+
+        self.assertNotIn(first, table.nodes)
+        self.assertIn(challenger, table.nodes)
+        self.assertEqual(list(table._buckets[bucket_index].keys()), [second, challenger])
+        self.assertNotIn(challenger, table._replacement_caches[bucket_index])
+
+    def test_prune_stale_nodes_promotes_waiting_replacement_candidate(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=2, bucket_count=16)
+        first = f"{8:064x}"
+        second = f"{9:064x}"
+        challenger = f"{10:064x}"
+        table.add_node(first, "203.0.113.10", 49001)
+        table.add_node(second, "203.0.113.11", 49002)
+        bucket_index = table._bucket_index(first)
+        assert bucket_index is not None
+        table.add_node(challenger, "203.0.113.12", 49003)
+        table.nodes[first].last_seen = 0.0
+
+        removed = table.prune_stale_nodes(max_age_seconds=10.0)
+
+        self.assertEqual(removed, 1)
+        self.assertNotIn(first, table.nodes)
+        self.assertIn(challenger, table.nodes)
+        self.assertEqual(list(table._buckets[bucket_index].keys()), [second, challenger])
+        self.assertEqual(len(table._replacement_caches[bucket_index]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

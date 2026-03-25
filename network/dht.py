@@ -31,7 +31,9 @@ class RoutingTable:
         self.k_bucket_size = max(1, int(k_bucket_size))
         self.bucket_count = max(16, int(bucket_count))
         self._buckets: list[OrderedDict[str, DHTNode]] = [OrderedDict() for _ in range(self.bucket_count)]
+        self._replacement_caches: list[OrderedDict[str, DHTNode]] = [OrderedDict() for _ in range(self.bucket_count)]
         self._bucket_touched_at: list[float] = [0.0 for _ in range(self.bucket_count)]
+        self._stale_node_age_seconds = 3600.0
         # compatibility surface for existing callers
         self.nodes: dict[str, DHTNode] = {}
 
@@ -62,6 +64,7 @@ class RoutingTable:
             return
         now = time.time()
         bucket = self._buckets[bucket_index]
+        replacements = self._replacement_caches[bucket_index]
 
         existing = self.nodes.get(peer_id)
         if existing is not None:
@@ -72,16 +75,33 @@ class RoutingTable:
                 bucket.move_to_end(peer_id, last=True)
             else:
                 bucket[peer_id] = existing
+            replacements.pop(peer_id, None)
             self._bucket_touched_at[bucket_index] = now
             return
 
         node = DHTNode(peer_id=peer_id, ip=ip, port=int(port), last_seen=now)
-        if len(bucket) >= self.k_bucket_size:
-            # Kademlia-style bounded buckets: evict oldest when saturated.
-            oldest_peer_id, _ = bucket.popitem(last=False)
-            self.nodes.pop(oldest_peer_id, None)
-        bucket[peer_id] = node
-        self.nodes[peer_id] = node
+        if peer_id in replacements:
+            cached = replacements[peer_id]
+            cached.ip = ip
+            cached.port = int(port)
+            cached.last_seen = now
+            replacements.move_to_end(peer_id, last=True)
+        elif len(bucket) >= self.k_bucket_size:
+            oldest_peer_id, oldest_node = next(iter(bucket.items()))
+            if self._node_is_stale(oldest_node, now=now):
+                bucket.pop(oldest_peer_id, None)
+                self.nodes.pop(oldest_peer_id, None)
+                bucket[peer_id] = node
+                self.nodes[peer_id] = node
+            else:
+                replacements[peer_id] = node
+                while len(replacements) > self.k_bucket_size:
+                    replacements.popitem(last=False)
+        else:
+            bucket[peer_id] = node
+            self.nodes[peer_id] = node
+        if peer_id in bucket:
+            replacements.pop(peer_id, None)
         self._bucket_touched_at[bucket_index] = now
 
     def remove_node(self, peer_id: str) -> None:
@@ -92,6 +112,7 @@ class RoutingTable:
         if bucket_index is None:
             return
         self._buckets[bucket_index].pop(peer_id, None)
+        self._promote_replacement(bucket_index, now=time.time())
         self._bucket_touched_at[bucket_index] = time.time()
 
     def find_closest_peers(self, target_id: str, count: int = 20) -> list[DHTNode]:
@@ -157,6 +178,7 @@ class RoutingTable:
 
     def prune_stale_nodes(self, *, max_age_seconds: float = 3600.0) -> int:
         now = time.time()
+        self._stale_node_age_seconds = max(1.0, float(max_age_seconds))
         stale_peer_ids = [
             peer_id
             for peer_id, node in self.nodes.items()
@@ -173,6 +195,18 @@ class RoutingTable:
         mask = (1 << (self._peer_id_width * 4)) - 1
         target_int = (self.local_peer_int ^ midpoint_distance) & mask
         return f"{target_int:0{self._peer_id_width}x}"
+
+    def _node_is_stale(self, node: DHTNode, *, now: float) -> bool:
+        return (now - float(node.last_seen)) > float(self._stale_node_age_seconds)
+
+    def _promote_replacement(self, bucket_index: int, *, now: float) -> None:
+        bucket = self._buckets[bucket_index]
+        replacements = self._replacement_caches[bucket_index]
+        while replacements and len(bucket) < self.k_bucket_size:
+            peer_id, node = replacements.popitem(last=False)
+            node.last_seen = now
+            bucket[peer_id] = node
+            self.nodes[peer_id] = node
 
 _table: RoutingTable | None = None
 
