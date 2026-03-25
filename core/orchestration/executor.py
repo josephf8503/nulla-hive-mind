@@ -353,7 +353,7 @@ def _execute_queen_envelope(
             for dependency in _child_dependencies(child)
             if dependency in child_result_map and not child_result_map[dependency].ok
         ]
-        if blocked_dependencies:
+        if blocked_dependencies and not _continue_on_dependency_failure(child):
             child_result = EnvelopeExecutionResult(
                 envelope=child,
                 ok=False,
@@ -414,6 +414,10 @@ def _child_dependencies(envelope: TaskEnvelopeV1) -> list[str]:
         for item in list(envelope.inputs.get("depends_on") or [])
         if str(item).strip()
     ]
+
+
+def _continue_on_dependency_failure(envelope: TaskEnvelopeV1) -> bool:
+    return bool(envelope.inputs.get("continue_on_dependency_failure", False))
 
 
 def _schedule_child_envelopes(children: list[TaskEnvelopeV1]) -> tuple[list[Any], dict[str, Any] | None]:

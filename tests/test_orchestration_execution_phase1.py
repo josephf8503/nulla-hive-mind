@@ -513,6 +513,92 @@ class OrchestrationExecutionPhase1Tests(unittest.TestCase):
             self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 41\n")
             self.assertEqual((workspace / "backup.py").read_text(encoding="utf-8"), "def answer_backup():\n    return 41\n")
 
+    def test_queen_envelope_can_run_fallback_child_after_failed_dependency_and_merge_last_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+            bad_coder = build_task_envelope(
+                role="coder",
+                task_id="coder-primary",
+                parent_task_id="queen-recovery",
+                goal="Try the first repair",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {
+                            "step_id": "patch-bad",
+                            "intent": "workspace.replace_in_file",
+                            "arguments": {
+                                "path": "app.py",
+                                "old_text": "return 999",
+                                "new_text": "return 40",
+                                "replace_all": True,
+                            },
+                        },
+                    ],
+                },
+                required_receipts=("tool_receipt",),
+            )
+            fallback_coder = build_task_envelope(
+                role="coder",
+                task_id="coder-fallback",
+                parent_task_id="queen-recovery",
+                goal="Recover from the failed first repair",
+                inputs={
+                    "task_class": "debugging",
+                    "depends_on": ["coder-primary"],
+                    "continue_on_dependency_failure": True,
+                    "runtime_tools": [
+                        {
+                            "step_id": "patch-fallback",
+                            "intent": "workspace.replace_in_file",
+                            "arguments": {
+                                "path": "app.py",
+                                "old_text": "return 41",
+                                "new_text": "return 42",
+                                "replace_all": True,
+                            },
+                        },
+                        {
+                            "step_id": "verify-fallback",
+                            "intent": "workspace.run_tests",
+                            "arguments": {"command": "python3 -m pytest -q test_app.py"},
+                        },
+                    ],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+            final_verifier = build_task_envelope(
+                role="verifier",
+                task_id="verify-final",
+                parent_task_id="queen-recovery",
+                goal="Confirm the recovered workspace",
+                inputs={
+                    "task_class": "file_inspection",
+                    "depends_on": ["coder-fallback"],
+                    "runtime_tools": [{"intent": "workspace.run_tests", "arguments": {"command": "python3 -m pytest -q test_app.py"}}],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+            queen = build_task_envelope(
+                role="queen",
+                task_id="queen-recovery",
+                goal="Recover from the first failed coder path",
+                merge_strategy="last_success",
+                inputs={"subtasks": [bad_coder.to_dict(), fallback_coder.to_dict(), final_verifier.to_dict()]},
+            )
+
+            result = execute_task_envelope(queen, workspace_root=tmpdir)
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertEqual(result.details["merged_result"]["winner"]["task_id"], "verify-final")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
+
     def test_successful_envelope_records_verified_reuse_metrics_for_attached_procedures(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir) / "workspace"

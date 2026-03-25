@@ -38,6 +38,10 @@ def merge_task_results(parent: TaskEnvelopeV1, results: list[dict[str, Any]]) ->
         ordered = sorted(clean_results, key=lambda item: str(item.get("task_id") or ""))
         combined = "\n\n".join(str(item.get("text") or "").strip() for item in ordered if str(item.get("text") or "").strip())
         return {"strategy": strategy, "ok": all(bool(item.get("ok", True)) for item in ordered), "text": combined, "results": ordered}
-    ordered = sorted(clean_results, key=lambda item: str(item.get("task_id") or ""))
+    ordered = list(clean_results)
+    if strategy == "last_success":
+        successful = [item for item in ordered if bool(item.get("ok", False))]
+        winner = successful[-1] if successful else ordered[-1]
+        return {"strategy": strategy, "ok": bool(winner.get("ok", False)), "winner": winner, "results": ordered}
     winner = next((item for item in ordered if bool(item.get("ok", False))), ordered[0])
     return {"strategy": strategy, "ok": bool(winner.get("ok", False)), "winner": winner, "results": ordered}
