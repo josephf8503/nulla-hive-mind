@@ -220,6 +220,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - chat-surface wording, observation shaping, and Hive status narration now also live behind `core/agent_runtime/chat_surface.py`, and the agent-facing wrapper surface now also lives behind `core/agent_runtime/chat_surface_facade.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - credit commands, capability/help responses, credit status rendering, and fast/action result shaping now also live behind `core/agent_runtime/fast_command_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - response classification, workflow/footer visibility policy, and tool-history observation shaping now also live behind `core/agent_runtime/response_policy.py`, so `apps/nulla_agent.py` no longer owns that slab directly
+- operator/chat output discipline is now tighter too: `core/agent_runtime/response_policy_visibility.py` no longer shows workflow blocks on chat surfaces unless the surface explicitly requests workflow debugging, and `core/agent_runtime/response.py` now rewrites raw task-envelope/orchestration leak text into user-safe operator language instead of exposing scheduler/permission/receipt internals
 - public-Hive capability/help wrappers, task export, footer support, public capability ledger shaping, and transport-mode helpers now also live behind `core/agent_runtime/public_hive_support.py`, so `apps/nulla_agent.py` no longer owns that outward support slab directly
 - task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence now also live behind `core/agent_runtime/task_persistence_support.py`, so `apps/nulla_agent.py` no longer owns that persistence/support slab directly
 - proceed/resume request normalization, explicit resume detection, and generic proceed-message matching now also live behind `core/agent_runtime/proceed_intent_support.py`, so `apps/nulla_agent.py` no longer owns that intent-policy slab directly
@@ -594,8 +595,12 @@ Targeted regression:
 
 ```bash
 pytest -q \
+  tests/test_agent_runtime_response.py \
   tests/test_agent_runtime_response_policy.py \
+  tests/test_agent_runtime_chat_surface.py \
   tests/test_nulla_runtime_contracts.py \
+  tests/test_openclaw_tooling_context.py \
+  tests/test_output_contracts.py \
   tests/test_nulla_router_and_state_machine.py \
   tests/test_runtime_continuity.py \
   tests/test_tiered_context_loader.py \
@@ -609,11 +614,14 @@ pytest -q \
   tests/test_runtime_context.py \
   tests/test_runtime_bootstrap.py \
   tests/test_startup_control_plane.py \
+  tests/test_agent_runtime_response.py \
   tests/test_agent_runtime_response_policy.py \
+  tests/test_agent_runtime_chat_surface.py \
   tests/test_nulla_runtime_contracts.py \
   tests/test_nulla_router_and_state_machine.py \
   tests/test_runtime_continuity.py \
   tests/test_openclaw_tooling_context.py \
+  tests/test_output_contracts.py \
   tests/test_alpha_semantic_context_smoke.py
 ```
 

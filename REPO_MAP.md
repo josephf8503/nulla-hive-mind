@@ -254,13 +254,14 @@ Core lane:
 - `core/agent_runtime/hive_review_runtime.py`: Hive review queue/action/cleanup handling split out of the agent root
 - `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive status narration moved out of the agent root
 - `core/agent_runtime/chat_surface_facade.py`: agent-facing chat-surface wrapper facade moved out of the agent root
+- `core/agent_runtime/response.py`: shared user-facing response decoration/sanitization seam for workflow suppression and orchestration-leak cleanup
 - `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help responses, credit status rendering, and fast/action result shaping moved out of the agent root
 - `core/agent_runtime/public_hive_support.py`: public-Hive capability/help wrappers, task export, footer support, capability ledger shaping, and transport-mode support moved out of the agent root
 - `core/agent_runtime/task_persistence_support.py`: task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence moved out of the agent root
 - `core/agent_runtime/proceed_intent_support.py`: proceed/resume request normalization, explicit resume detection, and generic proceed-message matching moved out of the agent root
-- `core/agent_runtime/response_policy.py`: thin response-policy facade
+- `core/agent_runtime/response_policy.py`: thin response-policy facade for response classification, workflow/footer visibility, and tool-history shaping
 - `core/agent_runtime/response_policy_classification.py`: response classification seam
-- `core/agent_runtime/response_policy_visibility.py`: workflow/footer visibility seam
+- `core/agent_runtime/response_policy_visibility.py`: workflow/footer visibility seam; chat surfaces only show internal workflow when explicitly debug-requested
 - `core/agent_runtime/response_policy_tool_history.py`: tool-history observation/payload seam
 - `core/agent_runtime/fast_path_facade.py`: agent-facing fast-path wrapper facade
 - `core/agent_runtime/presence.py`: public presence heartbeat, idle commons cadence, and autonomous Hive research loop logic moved out of the agent root

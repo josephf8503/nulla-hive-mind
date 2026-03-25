@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved ninety areas:
+The current `main` checkpoint materially improved ninety-one areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -186,12 +186,14 @@ The current `main` checkpoint materially improved ninety areas:
    `core/orchestration/executor.py` now turns `TaskEnvelopeV1` into a real local execution surface instead of pure metadata: coder envelopes can run bounded workspace patch/validate steps with required receipts, verifier envelopes fail closed on mutating intents, and queen envelopes can schedule child envelopes and merge their results deterministically.
 90. **Remote shard payload reuse baseline**
    Remote shard reuse is no longer only metadata-first. `core/knowledge_transport.py` now binds `SHARD_PAYLOAD` responses to manifest metadata plus signed origin fields, `core/daemon/messages.py` now records explicit fetch receipts and fails closed on invalid payloads, `storage/shard_fetch_receipts.py` persists those receipts, and `core/tiered_context_loader.py` now surfaces cached remote-shard citations when a fetched `peer_received` shard is reused locally.
+91. **Operator output-discipline baseline**
+   OpenClaw/channel/API replies now keep internal workflow blocks hidden unless the surface explicitly requests workflow debugging, and raw task-envelope/orchestration leak text now gets rewritten into user-safe operator language through `core/agent_runtime/response.py` and `core/agent_runtime/response_policy_visibility.py` instead of dumping scheduler/permission/receipt internals into chat.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1394 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1398 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -219,7 +221,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts and cached remote-shard reuse can surface citation metadata instead of stopping at metadata-only hints. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1394 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1398 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
@@ -255,8 +257,8 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1394 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1394 |
+| Full suite result | `1398 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1398 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |
