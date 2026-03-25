@@ -240,6 +240,7 @@ Core lane:
 - `core/knowledge_fetcher.py`: metadata-first remote shard consult/fetch request helpers
 - `core/knowledge_transport.py`: manifest-bound shard transport response and inbound validation seam
 - `storage/shard_fetch_receipts.py`: explicit remote shard fetch receipts and citation lookup for cached reuse
+- `storage/shard_reuse_outcomes.py`: downstream remote-shard reuse outcome persistence and per-shard success/durability summaries
 - `core/liquefy_bridge.py`: proof/archive facade over the Liquefy CLI adapter plus local fallback artifacts
 - `core/liquefy_client.py`: Liquefy CLI+JSON adapter
 - `core/liquefy_models.py`: NULLA-side Liquefy self-test/proof/restore/search result models

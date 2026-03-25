@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved ninety-nine areas:
+The current `main` checkpoint materially improved one hundred areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -204,12 +204,14 @@ The current `main` checkpoint materially improved ninety-nine areas:
    The bounded operator planner no longer requires the user to spoon-feed an exact file path for simple repo edits. When the request gives a concrete replacement plus validation command but omits the file path, `core/execution/planner.py` now emits a bounded search/read/replace/validate queen/coder/verifier envelope, and `core/orchestration/executor.py` now resolves those step-to-step references while failing closed if the search result is ambiguous instead of guessing and mutating the wrong file.
 99. **Measured procedure-reuse baseline**
    Procedure learning is no longer only promotion plus citation. `core/learning/procedure_shards.py` now persists reuse counters and verified-reuse counters, `core/learning/reuse_ranker.py` now prefers procedures that have actually worked before, and `core/orchestration/executor.py` now records successful envelope reuse back into the stored procedure shard instead of leaving downstream benefit completely unmeasured.
+100. **Measured remote-shard reuse baseline**
+   Hive reuse is no longer only fetch plus citation. `storage/shard_reuse_outcomes.py` now persists downstream reuse outcomes per cited remote shard, `core/agent_runtime/turn_reasoning.py` now records those outcomes after grounded turns, and `core/tiered_context_loader.py` now feeds prior success/durable counts back into future remote-shard citations instead of leaving downstream Hive impact unmeasured.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1426 passed, 13 skipped, 13 xfailed, 15 xpassed` |
+| Full suite result | `1429 passed, 13 skipped, 13 xfailed, 15 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -234,15 +236,15 @@ Current test gate on this checkpoint:
 | **Operator output discipline** | **Works (local baseline)** | Chat/openclaw/API replies now keep workflow hidden unless debug is explicit, and routing/capacity leak payloads are rewritten into terse operator language instead of exposing raw envelope JSON, queue-pressure notes, or capacity-state blobs. |
 | **Envelope-aware provider routing** | **Works (local baseline)** | Task envelopes now influence provider selection materially: local-private/mutating coder work fails closed without a local lane, task-router model constraints now carry locality/structured-output/context/code-pressure hints, saturated providers are penalized by queue depth vs safe concurrency, and capability truth now carries routing requirements/rejections instead of only exposing raw ranked candidates. |
 | **Capacity-aware envelope scheduling** | **Works (local baseline)** | When task envelopes carry provider-capability truth, scheduling now accounts for queue pressure and locality instead of only latency labels, incompatible worker lanes fail closed before mutating the workspace, and the helper-model execution lane now also backs off saturated providers instead of blindly fanning out into them. This is still local orchestration, not distributed swarm scheduling. |
-| **Remote shard fetch/reuse baseline** | **Works (bounded)** | `SHARD_PAYLOAD` now carries manifest-bound transport metadata plus signed origin fields; accepted remote payloads emit explicit fetch receipts, cache locally as `peer_received` shards, and surface reuse citations through tiered context assembly. This is still not the same thing as hardened public-internet trust or automatic global synthesis. |
+| **Remote shard fetch/reuse baseline** | **Works (bounded)** | `SHARD_PAYLOAD` now carries manifest-bound transport metadata plus signed origin fields; accepted remote payloads emit explicit fetch receipts, cache locally as `peer_received` shards, surface reuse citations through tiered context assembly, and now also persist downstream success/durable reuse outcomes that feed back into future citations. This is still not the same thing as hardened public-internet trust or automatic global synthesis. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
 | **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. Provider capability truth now also surfaces role fit, queue depth, max safe concurrency, and tool/structured-output support instead of only listing adapters, and the helper/teacher lane now records routing notes while backing off saturated candidates during execution. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
-| **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts and cached remote-shard reuse can surface citation metadata instead of stopping at metadata-only hints. |
+| **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts, cached remote-shard reuse surfaces citation metadata, and grounded turns now persist downstream reuse outcomes instead of leaving Hive value as a one-way fetch event. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1419 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1429 passed, 13 skipped, 13 xfailed, 15 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |

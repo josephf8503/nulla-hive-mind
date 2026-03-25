@@ -24,6 +24,7 @@ Current execution truth:
 - `execution/planner.py` can now turn clear repo edit requests into bounded queen/coder/verifier `orchestration.execute_envelope` runs, including the current local baseline for search/read/patch/validate when the file path is omitted but the replacement is concrete
 - `orchestration/executor.py` now resolves step-to-step runtime references for that bounded operator lane and fails closed on ambiguous search results instead of guessing the mutation target
 - local procedure shards now also accumulate reuse and verified-reuse metrics after successful bounded envelope execution, so the learning lane can prefer what has actually worked instead of treating every promoted procedure as equal
+- cached remote-shard citations now also accumulate downstream reuse outcomes: grounded turns persist success/durable results into `storage/shard_reuse_outcomes.py`, and `tiered_context_loader.py` now feeds that history back into future remote-shard citations instead of treating fetch receipts as the end of the story
 - `model_teacher_pipeline.py` now records routing requirements/rejections in provenance and backs off saturated provider lanes during execution instead of blindly fanning out across every selected candidate
 - `agent_runtime/response.py` now rewrites routing/capacity leak payloads and capacity-blocked worker failures into terse operator-safe language instead of dumping scheduler/provider JSON into chat surfaces
 
