@@ -33,6 +33,7 @@ class SandboxRunner:
         "rg", "grep", "find", "sed",
         "npm", "npx", "yarn", "pnpm",
         "cargo", "python", "python3", "pytest",
+        "ruff",
         "pip", "pip3",
         "git", "node", "nodejs", "env",
         "mkdir", "touch", "cp", "mv",

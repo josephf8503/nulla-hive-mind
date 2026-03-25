@@ -8,7 +8,30 @@ from pathlib import Path
 from typing import Any
 
 from core import policy_engine
+from core.execution.artifacts import (
+    build_command_artifact,
+    build_failure_artifact,
+    build_file_diff_artifact,
+    latest_workspace_mutation,
+    mark_workspace_mutation_promoted,
+    record_workspace_mutation,
+    rollback_last_workspace_mutation,
+)
+from core.execution.git_tools import git_diff_workspace, git_status_workspace
+from core.execution.validation_tools import render_validation_result, validation_command
+from core.execution.workspace_tools import (
+    apply_unified_diff_workspace,
+    list_tree_workspace,
+    symbol_search_workspace,
+)
+from core.execution.workspace_tools import (
+    relative_path as workspace_relative_path,
+)
+from core.execution.workspace_tools import (
+    resolve_workspace_path as resolve_workspace_path_impl,
+)
 from core.execution_gate import ExecutionGate
+from core.learning import promote_verified_procedure
 from core.runtime_paths import resolve_workspace_root
 from core.runtime_tool_contracts import runtime_tool_contract_map, runtime_tool_contracts
 from sandbox.network_guard import parse_command
@@ -182,6 +205,17 @@ def extract_observation_followup_hints(observation: dict[str, Any] | None) -> di
             "primary_line": int(primary.get("line") or 0) if str(primary.get("line") or "").strip() else 0,
             "primary_snippet": str(primary.get("snippet") or "").strip(),
         }
+    if intent == "workspace.symbol_search":
+        matches = [dict(item) for item in list(payload.get("matches") or []) if isinstance(item, dict)]
+        primary = dict((matches[:1] or [{}])[0] or {})
+        return {
+            "intent": intent,
+            "symbol": str(payload.get("symbol") or "").strip(),
+            "match_count": int(payload.get("match_count") or len(matches)),
+            "primary_path": str(primary.get("path") or "").strip(),
+            "primary_line": int(primary.get("line") or 0) if str(primary.get("line") or "").strip() else 0,
+            "primary_kind": str(primary.get("kind") or "").strip(),
+        }
     if intent == "workspace.read_file":
         lines = [dict(item) for item in list(payload.get("lines") or []) if isinstance(item, dict)]
         return {
@@ -207,11 +241,31 @@ def extract_observation_followup_hints(observation: dict[str, Any] | None) -> di
             "line_count": int(payload.get("line_count") or 0),
             "action": str(payload.get("action") or "").strip(),
         }
+    if intent == "workspace.apply_unified_diff":
+        return {
+            "intent": intent,
+            "paths": [str(item).strip() for item in list(payload.get("paths") or []) if str(item).strip()],
+            "engine": str(payload.get("engine") or "").strip(),
+        }
     if intent == "workspace.replace_in_file":
         return {
             "intent": intent,
             "path": str(payload.get("path") or "").strip(),
             "replacements": int(payload.get("replacements") or 0),
+        }
+    if intent == "workspace.rollback_last_change":
+        return {
+            "intent": intent,
+            "restored_paths": [str(item).strip() for item in list(payload.get("restored_paths") or []) if str(item).strip()],
+            "removed_paths": [str(item).strip() for item in list(payload.get("removed_paths") or []) if str(item).strip()],
+        }
+    if intent in {"workspace.git_status", "workspace.git_diff", "workspace.run_tests", "workspace.run_lint", "workspace.run_formatter"}:
+        return {
+            "intent": intent,
+            "command": str(payload.get("command") or "").strip(),
+            "cwd": str(payload.get("cwd") or "").strip(),
+            "returncode": int(payload.get("returncode") or 0),
+            "success": bool(payload.get("success", False)),
         }
     if intent == "sandbox.run_command":
         stdout = str(payload.get("stdout") or "").strip()
@@ -300,16 +354,52 @@ def execute_runtime_tool(
     try:
         if intent == "workspace.list_files":
             return _list_files(arguments, workspace_root=workspace_root)
+        if intent == "workspace.list_tree":
+            return _list_tree(arguments, workspace_root=workspace_root)
         if intent == "workspace.search_text":
             return _search_text(arguments, workspace_root=workspace_root)
+        if intent == "workspace.symbol_search":
+            return _symbol_search(arguments, workspace_root=workspace_root)
         if intent == "workspace.read_file":
             return _read_file(arguments, workspace_root=workspace_root)
         if intent == "workspace.ensure_directory":
             return _ensure_directory(arguments, workspace_root=workspace_root)
         if intent == "workspace.write_file":
-            return _write_file(arguments, workspace_root=workspace_root)
+            return _write_file(arguments, workspace_root=workspace_root, session_id=_runtime_session_id(source_context))
         if intent == "workspace.replace_in_file":
-            return _replace_in_file(arguments, workspace_root=workspace_root)
+            return _replace_in_file(arguments, workspace_root=workspace_root, session_id=_runtime_session_id(source_context))
+        if intent == "workspace.apply_unified_diff":
+            return _apply_unified_diff(arguments, workspace_root=workspace_root, session_id=_runtime_session_id(source_context))
+        if intent == "workspace.git_status":
+            return _git_status(arguments, workspace_root=workspace_root)
+        if intent == "workspace.git_diff":
+            return _git_diff(arguments, workspace_root=workspace_root)
+        if intent == "workspace.rollback_last_change":
+            return _rollback_last_change(arguments, workspace_root=workspace_root, session_id=_runtime_session_id(source_context))
+        if intent == "workspace.run_tests":
+            result = _run_validation("workspace.run_tests", arguments, workspace_root=workspace_root)
+            return _attach_procedure_learning(
+                result,
+                validation_intent="workspace.run_tests",
+                workspace_root=workspace_root,
+                source_context=source_context,
+            )
+        if intent == "workspace.run_lint":
+            result = _run_validation("workspace.run_lint", arguments, workspace_root=workspace_root)
+            return _attach_procedure_learning(
+                result,
+                validation_intent="workspace.run_lint",
+                workspace_root=workspace_root,
+                source_context=source_context,
+            )
+        if intent == "workspace.run_formatter":
+            result = _run_validation("workspace.run_formatter", arguments, workspace_root=workspace_root)
+            return _attach_procedure_learning(
+                result,
+                validation_intent="workspace.run_formatter",
+                workspace_root=workspace_root,
+                source_context=source_context,
+            )
         if intent == "sandbox.run_command":
             return _run_command(arguments, workspace_root=workspace_root)
     except Exception as exc:
@@ -351,21 +441,11 @@ def _workspace_root(source_context: dict[str, Any] | None) -> Path:
 
 
 def _resolve_workspace_path(raw_path: str | None, *, workspace_root: Path) -> Path:
-    raw = str(raw_path or "").strip()
-    if not raw:
-        return workspace_root
-    candidate = Path(raw)
-    candidate = (workspace_root / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
-    if candidate != workspace_root and workspace_root not in candidate.parents:
-        raise ValueError("Path escapes the active workspace.")
-    return candidate
+    return resolve_workspace_path_impl(raw_path, workspace_root=workspace_root)
 
 
 def _relative_path(path: Path, *, workspace_root: Path) -> str:
-    try:
-        return str(path.relative_to(workspace_root)) or "."
-    except Exception:
-        return str(path)
+    return workspace_relative_path(path, workspace_root=workspace_root)
 
 
 def _truncate(text: str, *, limit: int = 1800) -> str:
@@ -373,6 +453,27 @@ def _truncate(text: str, *, limit: int = 1800) -> str:
     if len(value) <= limit:
         return value
     return value[:limit].rstrip() + "\n...[truncated]"
+
+
+def _runtime_session_id(source_context: dict[str, Any] | None) -> str:
+    return str((source_context or {}).get("session_id") or "").strip()
+
+
+def _result_from_payload(
+    *,
+    handled: bool = True,
+    ok: bool,
+    status: str,
+    response_text: str,
+    details: dict[str, Any],
+) -> RuntimeExecutionResult:
+    return RuntimeExecutionResult(
+        handled=handled,
+        ok=ok,
+        status=status,
+        response_text=response_text,
+        details=details,
+    )
 
 
 def _iter_workspace_files(
@@ -460,6 +561,26 @@ def _list_files(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeEx
     )
 
 
+def _list_tree(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+    payload = list_tree_workspace(arguments, workspace_root=workspace_root)
+    details = dict(payload.get("details") or {})
+    details["observation"] = _tool_observation(
+        intent="workspace.list_tree",
+        tool_surface="workspace",
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        path=str(details.get("path") or "").strip(),
+        entries=list(details.get("entries") or []),
+        truncated=bool(details.get("truncated", False)),
+    )
+    return _result_from_payload(
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        response_text=str(payload.get("response_text") or ""),
+        details=details,
+    )
+
+
 def _search_text(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
     query = str(arguments.get("query") or "").strip()
     if not query:
@@ -540,6 +661,26 @@ def _search_text(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
                 matches=match_rows,
             ),
         },
+    )
+
+
+def _symbol_search(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+    payload = symbol_search_workspace(arguments, workspace_root=workspace_root)
+    details = dict(payload.get("details") or {})
+    details["observation"] = _tool_observation(
+        intent="workspace.symbol_search",
+        tool_surface="workspace",
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        symbol=str(details.get("symbol") or "").strip(),
+        match_count=int(details.get("match_count") or len(list(details.get("matches") or []))),
+        matches=list(details.get("matches") or []),
+    )
+    return _result_from_payload(
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        response_text=str(payload.get("response_text") or ""),
+        details=details,
     )
 
 
@@ -692,7 +833,7 @@ def _ensure_directory(arguments: dict[str, Any], *, workspace_root: Path) -> Run
     )
 
 
-def _write_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+def _write_file(arguments: dict[str, Any], *, workspace_root: Path, session_id: str) -> RuntimeExecutionResult:
     if not policy_engine.get("filesystem.allow_write_workspace", False):
         return RuntimeExecutionResult(
             handled=True,
@@ -716,13 +857,28 @@ def _write_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeEx
     target.write_text(content, encoding="utf-8")
     line_count = len(content.splitlines()) or (1 if content else 0)
     relative_path = _relative_path(target, workspace_root=workspace_root)
-    diff_artifact = {
-        "artifact_type": "file_diff",
-        "path": relative_path,
-        "action": "updated" if existed else "created",
-        "line_count": line_count,
-        "diff_preview": _diff_preview(before=previous, after=content, path=relative_path),
-    }
+    diff_artifact = build_file_diff_artifact(
+        path=relative_path,
+        action="updated" if existed else "created",
+        before=previous,
+        after=content,
+        extra={"line_count": line_count},
+    )
+    mutation_record = record_workspace_mutation(
+        session_id=session_id,
+        workspace_root=workspace_root,
+        intent="workspace.write_file",
+        changes=[
+            {
+                "path": relative_path,
+                "action": "updated" if existed else "created",
+                "existed_before": existed,
+                "existed_after": True,
+                "before_text": previous,
+                "after_text": content,
+            }
+        ],
+    )
     return RuntimeExecutionResult(
         handled=True,
         ok=True,
@@ -736,6 +892,10 @@ def _write_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeEx
             "line_count": line_count,
             "action": "updated" if existed else "created",
             "artifacts": [diff_artifact],
+            "mutation_record": {
+                "mutation_id": str(mutation_record.get("mutation_id") or "").strip(),
+                "session_key": str(mutation_record.get("session_key") or "").strip(),
+            },
             "observation": _tool_observation(
                 intent="workspace.write_file",
                 tool_surface="workspace",
@@ -750,7 +910,7 @@ def _write_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeEx
     )
 
 
-def _replace_in_file(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+def _replace_in_file(arguments: dict[str, Any], *, workspace_root: Path, session_id: str) -> RuntimeExecutionResult:
     if not policy_engine.get("filesystem.allow_write_workspace", False):
         return RuntimeExecutionResult(
             handled=True,
@@ -833,15 +993,32 @@ def _replace_in_file(arguments: dict[str, Any], *, workspace_root: Path) -> Runt
         replaced = 1
     target.write_text(updated, encoding="utf-8")
     relative_path = _relative_path(target, workspace_root=workspace_root)
-    diff_artifact = {
-        "artifact_type": "file_diff",
-        "path": relative_path,
-        "action": "replaced",
-        "replacements": replaced,
-        "old_text_preview": _truncate(old_text, limit=180),
-        "new_text_preview": _truncate(new_text, limit=180),
-        "diff_preview": _diff_preview(before=content, after=updated, path=relative_path),
-    }
+    diff_artifact = build_file_diff_artifact(
+        path=relative_path,
+        action="replaced",
+        before=content,
+        after=updated,
+        extra={
+            "replacements": replaced,
+            "old_text_preview": _truncate(old_text, limit=180),
+            "new_text_preview": _truncate(new_text, limit=180),
+        },
+    )
+    mutation_record = record_workspace_mutation(
+        session_id=session_id,
+        workspace_root=workspace_root,
+        intent="workspace.replace_in_file",
+        changes=[
+            {
+                "path": relative_path,
+                "action": "replaced",
+                "existed_before": True,
+                "existed_after": True,
+                "before_text": content,
+                "after_text": updated,
+            }
+        ],
+    )
     return RuntimeExecutionResult(
         handled=True,
         ok=True,
@@ -854,6 +1031,10 @@ def _replace_in_file(arguments: dict[str, Any], *, workspace_root: Path) -> Runt
             "path": relative_path,
             "replacements": replaced,
             "artifacts": [diff_artifact],
+            "mutation_record": {
+                "mutation_id": str(mutation_record.get("mutation_id") or "").strip(),
+                "session_key": str(mutation_record.get("session_key") or "").strip(),
+            },
             "observation": _tool_observation(
                 intent="workspace.replace_in_file",
                 tool_surface="workspace",
@@ -865,6 +1046,274 @@ def _replace_in_file(arguments: dict[str, Any], *, workspace_root: Path) -> Runt
             ),
         },
     )
+
+
+def _apply_unified_diff(arguments: dict[str, Any], *, workspace_root: Path, session_id: str) -> RuntimeExecutionResult:
+    if not policy_engine.get("filesystem.allow_write_workspace", False):
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="disabled",
+            response_text="Workspace writes are disabled by policy.",
+            details={
+                "observation": _tool_observation(
+                    intent="workspace.apply_unified_diff",
+                    tool_surface="workspace",
+                    ok=False,
+                    status="disabled",
+                ),
+            },
+        )
+    payload = apply_unified_diff_workspace(arguments, workspace_root=workspace_root, session_id=session_id)
+    details = dict(payload.get("details") or {})
+    details["observation"] = _tool_observation(
+        intent="workspace.apply_unified_diff",
+        tool_surface="workspace",
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        paths=list(details.get("paths") or []),
+        engine=str(details.get("engine") or ""),
+    )
+    return _result_from_payload(
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        response_text=str(payload.get("response_text") or ""),
+        details=details,
+    )
+
+
+def _git_status(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+    payload = git_status_workspace(arguments, workspace_root=workspace_root)
+    details = dict(payload.get("details") or {})
+    details["observation"] = _tool_observation(
+        intent="workspace.git_status",
+        tool_surface="workspace",
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        cwd=str(details.get("cwd") or ""),
+        stdout=str(details.get("stdout") or ""),
+        stderr=str(details.get("stderr") or ""),
+        returncode=int(details.get("returncode") or 0),
+    )
+    return _result_from_payload(
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        response_text=str(payload.get("response_text") or ""),
+        details=details,
+    )
+
+
+def _git_diff(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+    payload = git_diff_workspace(arguments, workspace_root=workspace_root)
+    details = dict(payload.get("details") or {})
+    details["observation"] = _tool_observation(
+        intent="workspace.git_diff",
+        tool_surface="workspace",
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        cwd=str(details.get("cwd") or ""),
+        stdout=str(details.get("stdout") or ""),
+        stderr=str(details.get("stderr") or ""),
+        returncode=int(details.get("returncode") or 0),
+    )
+    return _result_from_payload(
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        response_text=str(payload.get("response_text") or ""),
+        details=details,
+    )
+
+
+def _rollback_last_change(arguments: dict[str, Any], *, workspace_root: Path, session_id: str) -> RuntimeExecutionResult:
+    del arguments
+    rollback = rollback_last_workspace_mutation(session_id=session_id, workspace_root=workspace_root)
+    if rollback is None:
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="no_tracked_change",
+            response_text="There is no NULLA-tracked workspace mutation to roll back in this session.",
+            details={
+                "restored_paths": [],
+                "removed_paths": [],
+                "observation": _tool_observation(
+                    intent="workspace.rollback_last_change",
+                    tool_surface="workspace",
+                    ok=False,
+                    status="no_tracked_change",
+                    restored_paths=[],
+                    removed_paths=[],
+                ),
+            },
+        )
+    restored_paths = [str(item).strip() for item in list(rollback.get("restored_paths") or []) if str(item).strip()]
+    removed_paths = [str(item).strip() for item in list(rollback.get("removed_paths") or []) if str(item).strip()]
+    lines = ["Rolled back the last NULLA-tracked workspace change."]
+    for path in restored_paths:
+        lines.append(f"- restored `{path}`")
+    for path in removed_paths:
+        lines.append(f"- removed `{path}`")
+    return RuntimeExecutionResult(
+        handled=True,
+        ok=True,
+        status="executed",
+        response_text="\n".join(lines),
+        details={
+            "restored_paths": restored_paths,
+            "removed_paths": removed_paths,
+            "mutation_id": str(rollback.get("mutation_id") or "").strip(),
+            "observation": _tool_observation(
+                intent="workspace.rollback_last_change",
+                tool_surface="workspace",
+                ok=True,
+                status="executed",
+                restored_paths=restored_paths,
+                removed_paths=removed_paths,
+            ),
+        },
+    )
+
+
+def _run_validation(intent: str, arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
+    command = validation_command(intent, arguments)
+    command_arguments = dict(arguments)
+    command_arguments["command"] = command
+    command_arguments["_trusted_local_only"] = True
+    runtime_result = _run_command(command_arguments, workspace_root=workspace_root)
+    payload = render_validation_result(
+        intent,
+        command=command,
+        cwd=str(runtime_result.details.get("cwd") or "."),
+        runner_result={
+            "status": runtime_result.status,
+            "stdout": runtime_result.details.get("stdout"),
+            "stderr": runtime_result.details.get("stderr"),
+            "returncode": runtime_result.details.get("returncode"),
+            "success": runtime_result.details.get("success"),
+        },
+        label={
+            "workspace.run_tests": "Validation test run",
+            "workspace.run_lint": "Validation lint run",
+            "workspace.run_formatter": "Validation formatter run",
+        }[intent],
+    )
+    details = dict(payload.get("details") or {})
+    details["observation"] = _tool_observation(
+        intent=intent,
+        tool_surface="workspace",
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        command=str(details.get("command") or ""),
+        cwd=str(details.get("cwd") or ""),
+        returncode=int(details.get("returncode") or 0),
+        success=bool(details.get("success", False)),
+        failure_summary=str(details.get("failure_summary") or ""),
+    )
+    return _result_from_payload(
+        ok=bool(payload.get("ok")),
+        status=str(payload.get("status") or ""),
+        response_text=str(payload.get("response_text") or ""),
+        details=details,
+    )
+
+
+def _attach_procedure_learning(
+    result: RuntimeExecutionResult,
+    *,
+    validation_intent: str,
+    workspace_root: Path,
+    source_context: dict[str, Any] | None,
+) -> RuntimeExecutionResult:
+    if not result.ok:
+        return result
+    session_id = _runtime_session_id(source_context)
+    mutation = latest_workspace_mutation(
+        session_id=session_id,
+        workspace_root=workspace_root,
+        require_unpromoted=True,
+    )
+    if not mutation:
+        return result
+    changed_paths = [str(item.get("path") or "").strip() for item in list(mutation.get("changes") or []) if str(item.get("path") or "").strip()]
+    validation_details = dict(result.details or {})
+    task_envelope = dict((source_context or {}).get("task_envelope") or {})
+    envelope_inputs = dict(task_envelope.get("inputs") or {})
+    task_class = str(
+        (source_context or {}).get("task_class")
+        or (source_context or {}).get("execution_task_class")
+        or envelope_inputs.get("task_class")
+        or "coding_operator"
+    ).strip() or "coding_operator"
+    shard = promote_verified_procedure(
+        task_class=task_class,
+        title=_procedure_title(task_class=task_class, validation_intent=validation_intent, changed_paths=changed_paths),
+        preconditions=[
+            "workspace is writable",
+            "NULLA tracked a mutation in the active session",
+        ],
+        steps=[
+            _procedure_step_for_intent(str(mutation.get("intent") or "").strip()),
+            _procedure_step_for_intent(validation_intent),
+        ],
+        tool_receipts=[
+            {
+                "intent": str(mutation.get("intent") or "").strip(),
+                "mutation_id": str(mutation.get("mutation_id") or "").strip(),
+                "paths": changed_paths,
+            },
+            {
+                "intent": validation_intent,
+                "command": str(validation_details.get("command") or "").strip(),
+                "returncode": int(validation_details.get("returncode") or 0),
+            },
+        ],
+        validation={
+            "ok": True,
+            "tool": validation_intent,
+            "command": str(validation_details.get("command") or "").strip(),
+            "returncode": int(validation_details.get("returncode") or 0),
+        },
+        rollback={
+            "intent": "workspace.rollback_last_change",
+            "mutation_id": str(mutation.get("mutation_id") or "").strip(),
+        },
+        privacy_class="local_private",
+        shareability="local_only",
+        liquefy_bundle_ref=str((source_context or {}).get("liquefy_bundle_ref") or "").strip(),
+    )
+    if shard is None:
+        return result
+    mark_workspace_mutation_promoted(
+        session_id=session_id,
+        workspace_root=workspace_root,
+        mutation_id=str(mutation.get("mutation_id") or "").strip(),
+        procedure_id=shard.procedure_id,
+    )
+    result.details["procedure_shard"] = shard.to_dict()
+    result.details["procedure_reuse"] = {
+        "procedure_id": shard.procedure_id,
+        "title": shard.title,
+        "task_class": shard.task_class,
+    }
+    return result
+
+
+def _procedure_title(*, task_class: str, validation_intent: str, changed_paths: list[str]) -> str:
+    if changed_paths:
+        return f"{task_class}: validate {', '.join(changed_paths[:2])} with {validation_intent}"
+    return f"{task_class}: verify workspace mutation with {validation_intent}"
+
+
+def _procedure_step_for_intent(intent: str) -> str:
+    mapping = {
+        "workspace.write_file": "write the target file",
+        "workspace.replace_in_file": "replace the targeted text in place",
+        "workspace.apply_unified_diff": "apply the code patch as a unified diff",
+        "workspace.run_tests": "run the bounded test command",
+        "workspace.run_lint": "run the linter for the workspace",
+        "workspace.run_formatter": "run the formatter check for the workspace",
+    }
+    return mapping.get(str(intent or "").strip(), str(intent or "").strip() or "run the verified workflow step")
 
 
 def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeExecutionResult:
@@ -899,15 +1348,14 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
     if status and status != "executed":
         stdout = _truncate(str(result.get("stdout") or ""), limit=2400)
         stderr = _truncate(str(result.get("stderr") or ""), limit=1600)
-        command_artifact = {
-            "artifact_type": "command_output",
-            "command": command,
-            "cwd": relative_cwd,
-            "returncode": int(result.get("returncode", 0) or 0),
-            "stdout": stdout,
-            "stderr": stderr,
-            "status": status,
-        }
+        command_artifact = build_command_artifact(
+            command=command,
+            cwd=relative_cwd,
+            returncode=int(result.get("returncode", 0) or 0),
+            stdout=stdout,
+            stderr=stderr,
+            status=status,
+        )
         failure_summary = _extract_failure_summary(
             command=command,
             stdout=stdout,
@@ -917,15 +1365,14 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
         failure_artifacts = []
         if failure_summary:
             failure_artifacts.append(
-                {
-                    "artifact_type": "failure",
-                    "command": command,
-                    "cwd": relative_cwd,
-                    "returncode": int(result.get("returncode", 0) or 0),
-                    "summary": failure_summary,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                }
+                build_failure_artifact(
+                    command=command,
+                    cwd=relative_cwd,
+                    returncode=int(result.get("returncode", 0) or 0),
+                    stdout=stdout,
+                    stderr=stderr,
+                    summary=failure_summary,
+                )
             )
         return RuntimeExecutionResult(
             handled=True,
@@ -952,15 +1399,14 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
         )
     stdout = _truncate(str(result.get("stdout") or ""), limit=2400)
     stderr = _truncate(str(result.get("stderr") or ""), limit=1600)
-    command_artifact = {
-        "artifact_type": "command_output",
-        "command": command,
-        "cwd": relative_cwd,
-        "returncode": int(result.get("returncode", 0) or 0),
-        "stdout": stdout,
-        "stderr": stderr,
-        "status": "executed",
-    }
+    command_artifact = build_command_artifact(
+        command=command,
+        cwd=relative_cwd,
+        returncode=int(result.get("returncode", 0) or 0),
+        stdout=stdout,
+        stderr=stderr,
+        status="executed",
+    )
     failure_summary = _extract_failure_summary(
         command=command,
         stdout=stdout,
@@ -970,15 +1416,14 @@ def _run_command(arguments: dict[str, Any], *, workspace_root: Path) -> RuntimeE
     failure_artifacts = []
     if failure_summary:
         failure_artifacts.append(
-            {
-                "artifact_type": "failure",
-                "command": command,
-                "cwd": relative_cwd,
-                "returncode": int(result.get("returncode", 0) or 0),
-                "summary": failure_summary,
-                "stdout": stdout,
-                "stderr": stderr,
-            }
+            build_failure_artifact(
+                command=command,
+                cwd=relative_cwd,
+                returncode=int(result.get("returncode", 0) or 0),
+                stdout=stdout,
+                stderr=stderr,
+                summary=failure_summary,
+            )
         )
     lines = [
         f"Command executed in `{relative_cwd}`:",
@@ -1023,10 +1468,18 @@ def _trusted_local_network_mode(command: str, *, arguments: dict[str, Any]) -> s
     if not bool(arguments.get("_trusted_local_only", False)):
         return None
     argv = parse_command(command)
-    if len(argv) < 4:
+    if not argv:
         return None
-    if argv[0] not in {"python", "python3"}:
+    base = str(argv[0] or "").lower()
+    if base in {"pytest", "ruff"}:
+        return "heuristic_only"
+    if base not in {"python", "python3"} or len(argv) < 3:
         return None
-    if argv[1:4] != ["-m", "compileall", "-q"]:
+    if argv[1] != "-m":
         return None
-    return "heuristic_only"
+    module = str(argv[2] or "").lower()
+    if module in {"pytest", "ruff"}:
+        return "heuristic_only"
+    if len(argv) >= 4 and argv[1:4] == ["-m", "compileall", "-q"]:
+        return "heuristic_only"
+    return None

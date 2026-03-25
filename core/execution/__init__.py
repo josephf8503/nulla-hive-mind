@@ -1,9 +1,6 @@
+from __future__ import annotations
+
 from .models import ToolIntentExecution, WorkflowPlannerDecision
-from .planner import (
-    _looks_like_workspace_bootstrap_request,
-    plan_tool_workflow,
-    should_attempt_tool_intent,
-)
 
 __all__ = [
     "ToolIntentExecution",
@@ -12,3 +9,11 @@ __all__ = [
     "plan_tool_workflow",
     "should_attempt_tool_intent",
 ]
+
+
+def __getattr__(name: str):
+    if name in {"_looks_like_workspace_bootstrap_request", "plan_tool_workflow", "should_attempt_tool_intent"}:
+        from . import planner
+
+        return getattr(planner, name)
+    raise AttributeError(name)
