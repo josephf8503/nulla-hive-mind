@@ -9,6 +9,7 @@ from core.model_registry import ModelRegistry, ProviderAuditRow
 from core.provider_routing import ProviderCapabilityTruth, provider_capability_truth_for_manifest
 from core.runtime_bootstrap import BootstrappedRuntime, bootstrap_runtime_mode
 from core.runtime_install_profiles import InstallProfileTruth, build_install_profile_truth
+from core.runtime_provider_defaults import ensure_default_runtime_providers
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ def build_provider_registry_snapshot(
     registry: ModelRegistry | None = None,
 ) -> ProviderRegistrySnapshot:
     active_registry = registry or ModelRegistry()
+    ensure_default_runtime_providers(active_registry)
     manifests: tuple[Any, ...]
     try:
         manifests = tuple(active_registry.list_manifests(enabled_only=True))

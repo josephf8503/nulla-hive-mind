@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from unittest import mock
 
@@ -36,6 +37,44 @@ def test_build_provider_registry_snapshot_collects_rows_and_warnings_from_regist
 
     assert snapshot.warnings == ("missing health path",)
     assert snapshot.audit_rows == (row,)
+
+
+def test_build_provider_registry_snapshot_auto_registers_kimi_when_configured() -> None:
+    manifests = {}
+
+    def _get_manifest(provider_name: str, model_name: str):
+        return manifests.get((provider_name, model_name))
+
+    def _register_manifest(manifest):
+        manifests[(manifest.provider_name, manifest.model_name)] = manifest
+        return manifest
+
+    def _list_manifests(*, enabled_only: bool = False, limit: int = 256):
+        return list(manifests.values())[:limit]
+
+    registry = mock.Mock()
+    registry.startup_warnings.return_value = []
+    registry.provider_audit_rows.return_value = []
+    registry.get_manifest.side_effect = _get_manifest
+    registry.register_manifest.side_effect = _register_manifest
+    registry.list_manifests.side_effect = _list_manifests
+
+    with mock.patch.dict(
+        os.environ,
+        {
+            "KIMI_API_KEY": "test-key",
+            "KIMI_BASE_URL": "https://kimi.example/v1",
+            "NULLA_KIMI_MODEL": "kimi-latest",
+        },
+        clear=False,
+    ):
+        snapshot = build_provider_registry_snapshot(registry)
+
+    kimi_manifest = manifests[("kimi-remote", "kimi-latest")]
+    assert kimi_manifest.adapter_type == "openai_compatible"
+    assert kimi_manifest.runtime_config["base_url"] == "https://kimi.example/v1"
+    assert kimi_manifest.runtime_config["api_key_env"] == "KIMI_API_KEY"
+    assert any(item.provider_id == "kimi-remote:kimi-latest" for item in snapshot.capability_truth)
 
 
 def test_build_runtime_backbone_reuses_bootstrap_probe_and_provider_facades() -> None:

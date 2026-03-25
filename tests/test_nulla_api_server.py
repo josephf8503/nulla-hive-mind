@@ -12,6 +12,7 @@ from apps.nulla_api_server import (
     PROJECT_ROOT,
     NullaAPIHandler,
     _daemon_runtime_config,
+    _ensure_default_provider,
     _format_runtime_event_text,
     _normalize_chat_history,
     _parameter_count_for_model,
@@ -106,6 +107,35 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
     def test_parameter_count_for_model_handles_fractional_billion_sizes(self) -> None:
         self.assertEqual(_parameter_count_for_model("qwen2.5:32b"), 32_000_000_000)
         self.assertEqual(_parameter_count_for_model("qwen2.5:0.5b"), 500_000_000)
+
+    def test_ensure_default_provider_registers_kimi_when_key_is_present(self) -> None:
+        manifests = {}
+        registry = mock.Mock()
+
+        def _get_manifest(provider_name: str, model_name: str):
+            return manifests.get((provider_name, model_name))
+
+        def _register_manifest(manifest):
+            manifests[(manifest.provider_name, manifest.model_name)] = manifest
+            return manifest
+
+        registry.get_manifest.side_effect = _get_manifest
+        registry.register_manifest.side_effect = _register_manifest
+
+        with mock.patch.dict(
+            os.environ,
+            {
+                "KIMI_API_KEY": "test-key",
+                "KIMI_BASE_URL": "https://kimi.example/v1",
+                "NULLA_KIMI_MODEL": "kimi-latest",
+            },
+            clear=False,
+        ):
+            _ensure_default_provider(registry, "qwen2.5:14b")
+
+        self.assertIn(("ollama-local", "qwen2.5:14b"), manifests)
+        self.assertIn(("kimi-remote", "kimi-latest"), manifests)
+        self.assertEqual(manifests[("kimi-remote", "kimi-latest")].runtime_config["base_url"], "https://kimi.example/v1")
 
     def test_normalize_chat_history_keeps_full_user_assistant_sequence(self) -> None:
         history = _normalize_chat_history(

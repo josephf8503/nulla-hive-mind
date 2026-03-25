@@ -32,6 +32,7 @@ from core.public_hive_bridge import ensure_public_hive_auth
 from core.release_channel import release_manifest_snapshot
 from core.runtime_bootstrap import bootstrap_runtime_mode
 from core.runtime_paths import resolve_workspace_root
+from core.runtime_provider_defaults import ensure_default_runtime_providers
 from core.runtime_task_events import (
     new_runtime_event_stream_id,
     register_runtime_event_sink,
@@ -175,47 +176,8 @@ def ensure_ollama_model(model_tag: str = "qwen2.5:7b") -> None:
 
 
 def ensure_default_provider(registry: ModelRegistry, model_tag: str) -> None:
-    from storage.model_provider_manifest import ModelProviderManifest, get_provider_manifest
-
-    existing = get_provider_manifest("ollama-local", model_tag)
-    existing_caps = {str(item).strip().lower() for item in list(getattr(existing, "capabilities", []) or [])}
-    has_license = bool(
-        str(getattr(existing, "license_name", None) or "").strip()
-        and str(getattr(existing, "resolved_license_reference", None) or "").strip()
-    )
-    if existing and existing.enabled and "tool_intent" in existing_caps and has_license:
-        return
-    parameter_size = parameter_size_for_model(model_tag)
-    manifest = ModelProviderManifest(
-        provider_name="ollama-local",
-        model_name=model_tag,
-        source_type="http",
-        adapter_type="local_qwen_provider",
-        license_name="Apache-2.0",
-        license_reference="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/main/LICENSE",
-        license_url_or_reference="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct/blob/main/LICENSE",
-        weight_location="external",
-        runtime_dependency="ollama",
-        notes=f"Local Qwen via Ollama ({parameter_size}) — auto-registered by NULLA API server",
-        capabilities=["summarize", "classify", "format", "extract", "code_basic", "structured_json", "tool_intent"],
-        runtime_config={
-            "base_url": "http://127.0.0.1:11434",
-            "api_path": "/v1/chat/completions",
-            "health_path": "/v1/models",
-            "timeout_seconds": 180,
-            "health_timeout_seconds": 10,
-            "temperature": 0.7,
-            "supports_json_mode": False,
-        },
-        metadata={
-            "runtime_family": "ollama",
-            "confidence_baseline": 0.65,
-            "parameter_count": parameter_size,
-        },
-        enabled=True,
-    )
-    registry.register_manifest(manifest)
-    logger.info("Auto-registered default provider: %s", manifest.provider_id)
+    for provider_id in ensure_default_runtime_providers(registry, model_tag=model_tag):
+        logger.info("Auto-registered default provider: %s", provider_id)
 
 
 def bootstrap_runtime_services(*, project_root: Path, workstation_version: str) -> RuntimeServices:
