@@ -13,13 +13,25 @@ class DHTNode:
     port: int
     last_seen: float
 
+
+@dataclass(frozen=True)
+class DHTRefreshTarget:
+    bucket_index: int
+    target_id: str
+    node_count: int
+    last_touched: float
+    age_seconds: float
+
+
 class RoutingTable:
     def __init__(self, local_peer_id: str, k_bucket_size: int = 20, bucket_count: int = 256):
         self.local_peer_id = local_peer_id
         self.local_peer_int = self._peer_int(local_peer_id)
+        self._peer_id_width = max(64, len(str(local_peer_id or "").strip()))
         self.k_bucket_size = max(1, int(k_bucket_size))
         self.bucket_count = max(16, int(bucket_count))
         self._buckets: list[OrderedDict[str, DHTNode]] = [OrderedDict() for _ in range(self.bucket_count)]
+        self._bucket_touched_at: list[float] = [0.0 for _ in range(self.bucket_count)]
         # compatibility surface for existing callers
         self.nodes: dict[str, DHTNode] = {}
 
@@ -60,6 +72,7 @@ class RoutingTable:
                 bucket.move_to_end(peer_id, last=True)
             else:
                 bucket[peer_id] = existing
+            self._bucket_touched_at[bucket_index] = now
             return
 
         node = DHTNode(peer_id=peer_id, ip=ip, port=int(port), last_seen=now)
@@ -69,6 +82,7 @@ class RoutingTable:
             self.nodes.pop(oldest_peer_id, None)
         bucket[peer_id] = node
         self.nodes[peer_id] = node
+        self._bucket_touched_at[bucket_index] = now
 
     def remove_node(self, peer_id: str) -> None:
         node = self.nodes.pop(peer_id, None)
@@ -78,6 +92,7 @@ class RoutingTable:
         if bucket_index is None:
             return
         self._buckets[bucket_index].pop(peer_id, None)
+        self._bucket_touched_at[bucket_index] = time.time()
 
     def find_closest_peers(self, target_id: str, count: int = 20) -> list[DHTNode]:
         """
@@ -96,6 +111,47 @@ class RoutingTable:
         # Return top N nodes
         return [item[1] for item in distances[: max(1, int(count))]]
 
+    def find_lookup_candidates(
+        self,
+        target_id: str,
+        *,
+        count: int = 20,
+        exclude_peer_ids: set[str] | None = None,
+    ) -> list[DHTNode]:
+        excluded = {str(item).strip() for item in set(exclude_peer_ids or set()) if str(item).strip()}
+        candidates = [node for node in self.find_closest_peers(target_id, count=max(1, int(count) + len(excluded))) if node.peer_id not in excluded]
+        return candidates[: max(1, int(count))]
+
+    def refresh_targets(
+        self,
+        *,
+        max_age_seconds: float = 900.0,
+        limit: int | None = None,
+        now: float | None = None,
+    ) -> list[DHTRefreshTarget]:
+        current_time = float(time.time() if now is None else now)
+        stale_targets: list[DHTRefreshTarget] = []
+        for bucket_index, bucket in enumerate(self._buckets):
+            if not bucket:
+                continue
+            last_touched = float(self._bucket_touched_at[bucket_index] or 0.0)
+            age_seconds = current_time - last_touched if last_touched > 0.0 else current_time
+            if age_seconds < float(max_age_seconds):
+                continue
+            stale_targets.append(
+                DHTRefreshTarget(
+                    bucket_index=bucket_index,
+                    target_id=self._refresh_target_id(bucket_index),
+                    node_count=len(bucket),
+                    last_touched=last_touched,
+                    age_seconds=age_seconds,
+                )
+            )
+        stale_targets.sort(key=lambda item: (-item.age_seconds, item.bucket_index))
+        if limit is not None:
+            stale_targets = stale_targets[: max(0, int(limit))]
+        return stale_targets
+
     def get_all_nodes(self) -> list[DHTNode]:
         return list(self.nodes.values())
 
@@ -109,6 +165,14 @@ class RoutingTable:
         for peer_id in stale_peer_ids:
             self.remove_node(peer_id)
         return len(stale_peer_ids)
+
+    def _refresh_target_id(self, bucket_index: int) -> str:
+        lower = 1 << max(0, int(bucket_index))
+        upper = (1 << (max(0, int(bucket_index)) + 1)) - 1
+        midpoint_distance = lower + ((upper - lower) // 2)
+        mask = (1 << (self._peer_id_width * 4)) - 1
+        target_int = (self.local_peer_int ^ midpoint_distance) & mask
+        return f"{target_int:0{self._peer_id_width}x}"
 
 _table: RoutingTable | None = None
 

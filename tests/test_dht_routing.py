@@ -40,7 +40,42 @@ class DhtRoutingTests(unittest.TestCase):
         self.assertNotIn(stale_peer, {n.peer_id for n in table.get_all_nodes()})
         self.assertIn(fresh_peer, {n.peer_id for n in table.get_all_nodes()})
 
+    def test_find_lookup_candidates_excludes_contacted_peers(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=64)
+        near = "0" * 63 + "1"
+        mid = "0" * 62 + "10"
+        far = "f" * 64
+        table.add_node(near, "203.0.113.10", 49001)
+        table.add_node(mid, "203.0.113.11", 49002)
+        table.add_node(far, "203.0.113.12", 49003)
+
+        out = table.find_lookup_candidates("0" * 64, count=2, exclude_peer_ids={near})
+        self.assertEqual(len(out), 2)
+        self.assertNotIn(near, {item.peer_id for item in out})
+        self.assertEqual(out[0].peer_id, mid)
+
+    def test_refresh_targets_returns_stale_buckets_in_age_order(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=16)
+        near = "0" * 63 + "1"
+        mid = "0" * 60 + "0010"
+        table.add_node(near, "203.0.113.10", 49001)
+        table.add_node(mid, "203.0.113.11", 49002)
+
+        near_bucket = table._bucket_index(near)
+        mid_bucket = table._bucket_index(mid)
+        assert near_bucket is not None
+        assert mid_bucket is not None
+        table._bucket_touched_at[near_bucket] = 985.0
+        table._bucket_touched_at[mid_bucket] = 960.0
+
+        targets = table.refresh_targets(max_age_seconds=10.0, limit=2, now=1000.0)
+
+        self.assertEqual(len(targets), 2)
+        self.assertEqual(targets[0].bucket_index, mid_bucket)
+        self.assertEqual(targets[1].bucket_index, near_bucket)
+        self.assertEqual(len(targets[0].target_id), 64)
+        self.assertNotEqual(targets[0].target_id, table.local_peer_id)
+
 
 if __name__ == "__main__":
     unittest.main()
-
