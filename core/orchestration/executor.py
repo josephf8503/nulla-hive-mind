@@ -252,16 +252,32 @@ def _execute_worker_envelope(
                 }
             )
         if not runtime_result.ok and not allow_failure:
+            rollback_step = _maybe_rollback_after_failure(
+                envelope,
+                failed_intent=intent,
+                active_context=active_context,
+                execute_tool=execute_tool,
+                receipts=receipts,
+                step_results=step_results,
+                step_id=step_id,
+                tool_contract=tool_contract,
+            )
+            output_text = str(runtime_result.response_text or "").strip()
+            if rollback_step is not None:
+                rollback_text = str(rollback_step.get("response_text") or "").strip()
+                if rollback_text:
+                    output_text = f"{output_text}\n\n{rollback_text}".strip()
             return EnvelopeExecutionResult(
                 envelope=envelope,
                 ok=False,
                 status=runtime_result.status,
-                output_text=runtime_result.response_text,
+                output_text=output_text,
                 receipts=tuple(receipts),
                 details={
                     "failed_step": index,
                     "failed_intent": intent,
                     "step_results": step_results,
+                    "failure_rollback": rollback_step,
                 },
             )
 
@@ -418,6 +434,46 @@ def _child_dependencies(envelope: TaskEnvelopeV1) -> list[str]:
 
 def _continue_on_dependency_failure(envelope: TaskEnvelopeV1) -> bool:
     return bool(envelope.inputs.get("continue_on_dependency_failure", False))
+
+
+def _maybe_rollback_after_failure(
+    envelope: TaskEnvelopeV1,
+    *,
+    failed_intent: str,
+    active_context: dict[str, Any],
+    execute_tool: Callable[[str, dict[str, Any], dict[str, Any] | None], RuntimeExecutionResult],
+    receipts: list[dict[str, Any]],
+    step_results: list[dict[str, Any]],
+    step_id: str,
+    tool_contract: Any,
+) -> dict[str, Any] | None:
+    if not bool(envelope.inputs.get("rollback_on_failure", False)):
+        return None
+    if tool_contract is None or tool_contract.capability_id != "workspace.validate":
+        return None
+    rollback_result = execute_tool("workspace.rollback_last_change", {}, active_context)
+    rollback_step = {
+        "step_id": f"rollback-after-{step_id}",
+        "intent": "workspace.rollback_last_change",
+        "ok": rollback_result.ok,
+        "status": rollback_result.status,
+        "response_text": rollback_result.response_text,
+        "arguments": {},
+        "details": dict(rollback_result.details or {}),
+        "triggered_by": failed_intent,
+    }
+    step_results.append(rollback_step)
+    if "observation" in rollback_result.details:
+        receipts.append(
+            {
+                "receipt_type": "tool_receipt",
+                "step_id": rollback_step["step_id"],
+                "intent": "workspace.rollback_last_change",
+                "status": rollback_result.status,
+                "observation": dict(rollback_result.details.get("observation") or {}),
+            }
+        )
+    return rollback_step
 
 
 def _schedule_child_envelopes(children: list[TaskEnvelopeV1]) -> tuple[list[Any], dict[str, Any] | None]:

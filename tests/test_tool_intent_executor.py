@@ -1011,6 +1011,7 @@ class ToolIntentExecutorTests(unittest.TestCase):
         self.assertEqual(preflight["inputs"]["runtime_tools"][0]["intent"], "workspace.run_tests")
         self.assertEqual(coder["inputs"]["depends_on"], [preflight["task_id"]])
         self.assertEqual(postverify["inputs"]["depends_on"], [coder["task_id"]])
+        self.assertTrue(postverify["inputs"]["rollback_on_failure"])
 
     def test_workflow_planner_can_emit_unified_diff_envelope(self) -> None:
         decision = plan_tool_workflow(

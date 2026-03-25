@@ -840,6 +840,7 @@ def _planned_orchestrated_operator_payload(
         inputs={
             "task_class": "file_inspection",
             "depends_on": final_verifier_dependencies,
+            "rollback_on_failure": True,
             "runtime_tools": [validation_step],
         },
         required_receipts=("tool_receipt", "validation_result"),

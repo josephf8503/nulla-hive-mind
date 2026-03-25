@@ -434,6 +434,68 @@ class OrchestrationExecutionPhase1Tests(unittest.TestCase):
             self.assertTrue(result.details["step_results"][0]["failure_allowed"])
             self.assertTrue(result.details["step_results"][2]["ok"])
 
+    def test_verifier_envelope_can_rollback_tracked_change_after_failed_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_id = "rollback-session"
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+
+            coder = build_task_envelope(
+                role="coder",
+                task_id="coder-rollback-setup",
+                goal="Apply a bad patch first",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {
+                            "step_id": "patch-bad",
+                            "intent": "workspace.replace_in_file",
+                            "arguments": {
+                                "path": "app.py",
+                                "old_text": "return 41",
+                                "new_text": "return 40",
+                                "replace_all": True,
+                            },
+                        },
+                    ],
+                },
+                required_receipts=("tool_receipt",),
+            )
+            coder_result = execute_task_envelope(coder, workspace_root=tmpdir, session_id=session_id)
+            self.assertTrue(coder_result.ok)
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 40\n")
+
+            verifier = build_task_envelope(
+                role="verifier",
+                task_id="verify-rollback",
+                goal="Fail validation and restore the last tracked mutation",
+                inputs={
+                    "task_class": "file_inspection",
+                    "rollback_on_failure": True,
+                    "runtime_tools": [
+                        {
+                            "step_id": "verify-bad-patch",
+                            "intent": "workspace.run_tests",
+                            "arguments": {"command": "python3 -m pytest -q test_app.py"},
+                        }
+                    ],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+
+            result = execute_task_envelope(verifier, workspace_root=tmpdir, session_id=session_id)
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.status, "executed")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 41\n")
+            rollback = dict(result.details["failure_rollback"] or {})
+            self.assertEqual(rollback["intent"], "workspace.rollback_last_change")
+            self.assertTrue(rollback["ok"])
+
     def test_worker_envelope_rejects_allow_failure_on_non_validation_step(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

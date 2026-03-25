@@ -532,6 +532,46 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
                 "def increment(value):\n    return value + 1\n",
             )
 
+    def test_planned_repair_rolls_back_workspace_when_final_verifier_stays_red(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+
+            decision = plan_tool_workflow(
+                user_text=(
+                    "tests are failing. replace `return 41` with `return 40` in app.py, "
+                    "then run `python3 -m pytest -q test_app.py`"
+                ),
+                task_class="debugging",
+                executed_steps=[],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(decision.handled)
+            result = execute_runtime_tool(
+                decision.next_payload["intent"],
+                dict(decision.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-failed-repair-rollback"},
+            )
+
+            assert result is not None
+            self.assertFalse(result.ok)
+            self.assertEqual(result.status, "merge_failed")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 41\n")
+            verifier_result = next(
+                item
+                for item in result.details["merged_result"]["results"]
+                if item["task_id"].startswith("verify-")
+            )
+            self.assertFalse(verifier_result["ok"])
+            rollback = dict(verifier_result["details"]["failure_rollback"] or {})
+            self.assertEqual(rollback["intent"], "workspace.rollback_last_change")
+            self.assertTrue(rollback["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()
