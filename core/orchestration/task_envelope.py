@@ -85,3 +85,27 @@ def build_task_envelope(
         cancellation_policy=str(cancellation_policy or "cancel_children_first"),
         privacy_class=str(privacy_class or "local_only"),
     )
+
+
+def task_envelope_from_dict(payload: dict[str, Any]) -> TaskEnvelopeV1:
+    data = dict(payload or {})
+    return TaskEnvelopeV1(
+        task_id=str(data.get("task_id") or "").strip(),
+        parent_task_id=str(data.get("parent_task_id") or "").strip(),
+        role=str(data.get("role") or "").strip(),  # type: ignore[arg-type]
+        goal=str(data.get("goal") or "").strip(),
+        inputs=dict(data.get("inputs") or {}),
+        tool_permissions=tuple(str(item).strip() for item in list(data.get("tool_permissions") or []) if str(item).strip()),
+        model_constraints=dict(data.get("model_constraints") or {}),
+        latency_budget=str(data.get("latency_budget") or "balanced"),
+        quality_target=str(data.get("quality_target") or "standard"),
+        allowed_side_effects=tuple(
+            str(item).strip() for item in list(data.get("allowed_side_effects") or []) if str(item).strip()
+        ),
+        required_receipts=tuple(
+            str(item).strip() for item in list(data.get("required_receipts") or []) if str(item).strip()
+        ),
+        merge_strategy=str(data.get("merge_strategy") or "first_success"),
+        cancellation_policy=str(data.get("cancellation_policy") or "cancel_children_first"),
+        privacy_class=str(data.get("privacy_class") or "local_only"),
+    )

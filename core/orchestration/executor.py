@@ -1,0 +1,338 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any
+
+from core.runtime_execution_tools import RuntimeExecutionResult, execute_runtime_tool
+from core.runtime_tool_contracts import runtime_tool_contract_map
+
+from .resource_scheduler import schedule_task_envelopes
+from .result_merge import merge_task_results
+from .role_contracts import get_role_contract
+from .task_envelope import TaskEnvelopeV1, task_envelope_from_dict
+from .task_graph import TaskGraph
+
+
+@dataclass(frozen=True)
+class EnvelopeExecutionResult:
+    envelope: TaskEnvelopeV1
+    ok: bool
+    status: str
+    output_text: str
+    receipts: tuple[dict[str, Any], ...] = ()
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def merge_payload(self) -> dict[str, Any]:
+        return {
+            "task_id": self.envelope.task_id,
+            "ok": self.ok,
+            "status": self.status,
+            "text": self.output_text,
+            "score": float(self.details.get("score") or (1.0 if self.ok else 0.0)),
+            "role": self.envelope.role,
+            "receipts": [dict(item) for item in self.receipts],
+            "details": dict(self.details or {}),
+        }
+
+
+def execute_task_envelope(
+    envelope: TaskEnvelopeV1,
+    *,
+    workspace_root: str | None = None,
+    session_id: str | None = None,
+    source_context: dict[str, Any] | None = None,
+    graph: TaskGraph | None = None,
+    runtime_tool_executor: Callable[[str, dict[str, Any], dict[str, Any] | None], RuntimeExecutionResult] | None = None,
+    child_executor: Callable[[TaskEnvelopeV1], EnvelopeExecutionResult] | None = None,
+) -> EnvelopeExecutionResult:
+    active_graph = graph or TaskGraph()
+    if active_graph.get(envelope.task_id) is None:
+        active_graph.add_task(envelope)
+    active_graph.mark_status(envelope.task_id, "running")
+    if envelope.role == "queen":
+        result = _execute_queen_envelope(
+            envelope,
+            graph=active_graph,
+            workspace_root=workspace_root,
+            session_id=session_id,
+            source_context=source_context,
+            runtime_tool_executor=runtime_tool_executor,
+            child_executor=child_executor,
+        )
+    else:
+        result = _execute_worker_envelope(
+            envelope,
+            workspace_root=workspace_root,
+            session_id=session_id,
+            source_context=source_context,
+            runtime_tool_executor=runtime_tool_executor,
+        )
+    active_graph.mark_status(envelope.task_id, "completed" if result.ok else "failed", result=result.merge_payload())
+    if "graph" in result.details:
+        result.details["graph"] = _graph_snapshot(active_graph)
+    return result
+
+
+def _execute_worker_envelope(
+    envelope: TaskEnvelopeV1,
+    *,
+    workspace_root: str | None,
+    session_id: str | None,
+    source_context: dict[str, Any] | None,
+    runtime_tool_executor: Callable[[str, dict[str, Any], dict[str, Any] | None], RuntimeExecutionResult] | None,
+) -> EnvelopeExecutionResult:
+    contract = get_role_contract(envelope.role)
+    steps = [dict(step) for step in list(envelope.inputs.get("runtime_tools") or []) if isinstance(step, dict)]
+    if not steps:
+        return EnvelopeExecutionResult(
+            envelope=envelope,
+            ok=False,
+            status="missing_runtime_tools",
+            output_text=f"{envelope.role} envelope `{envelope.task_id}` has no runtime tool steps.",
+            details={"steps": []},
+        )
+
+    execute_tool = runtime_tool_executor or _runtime_tool_executor
+    receipts: list[dict[str, Any]] = []
+    step_results: list[dict[str, Any]] = []
+    active_context = {
+        **dict(source_context or {}),
+        "workspace": workspace_root or str((source_context or {}).get("workspace") or ""),
+        "session_id": str(session_id or envelope.task_id),
+        "task_id": envelope.task_id,
+        "task_role": envelope.role,
+        "task_class": str(envelope.inputs.get("task_class") or ""),
+        "task_envelope": envelope.to_dict(),
+    }
+    for index, step in enumerate(steps):
+        intent = str(step.get("intent") or "").strip()
+        arguments = dict(step.get("arguments") or {})
+        permission_error = _check_step_permission(envelope, intent=intent)
+        if permission_error is not None:
+            return EnvelopeExecutionResult(
+                envelope=envelope,
+                ok=False,
+                status=permission_error["status"],
+                output_text=permission_error["message"],
+                receipts=tuple(receipts),
+                details={
+                    "failed_step": index,
+                    "failed_intent": intent,
+                    "role_contract": contract.role,
+                    "step_results": step_results,
+                },
+            )
+        runtime_result = execute_tool(intent, arguments, active_context)
+        step_payload = {
+            "intent": intent,
+            "ok": runtime_result.ok,
+            "status": runtime_result.status,
+            "response_text": runtime_result.response_text,
+            "details": dict(runtime_result.details or {}),
+        }
+        step_results.append(step_payload)
+        if "observation" in runtime_result.details:
+            receipts.append(
+                {
+                    "receipt_type": "tool_receipt",
+                    "intent": intent,
+                    "status": runtime_result.status,
+                    "observation": dict(runtime_result.details.get("observation") or {}),
+                }
+            )
+        contract_map = runtime_tool_contract_map()
+        tool_contract = contract_map.get(intent)
+        if tool_contract is not None and tool_contract.capability_id == "workspace.validate":
+            receipts.append(
+                {
+                    "receipt_type": "validation_result",
+                    "intent": intent,
+                    "status": runtime_result.status,
+                    "ok": runtime_result.ok,
+                    "returncode": runtime_result.details.get("returncode"),
+                }
+            )
+        if not runtime_result.ok:
+            return EnvelopeExecutionResult(
+                envelope=envelope,
+                ok=False,
+                status=runtime_result.status,
+                output_text=runtime_result.response_text,
+                receipts=tuple(receipts),
+                details={
+                    "failed_step": index,
+                    "failed_intent": intent,
+                    "step_results": step_results,
+                },
+            )
+
+    missing_receipts = _missing_required_receipts(envelope, receipts)
+    if missing_receipts:
+        return EnvelopeExecutionResult(
+            envelope=envelope,
+            ok=False,
+            status="missing_required_receipts",
+            output_text=(
+                f"{envelope.role} envelope `{envelope.task_id}` completed its steps but did not emit "
+                f"required receipts: {', '.join(missing_receipts)}."
+            ),
+            receipts=tuple(receipts),
+            details={
+                "missing_receipts": missing_receipts,
+                "step_results": step_results,
+            },
+        )
+
+    final_response = str(step_results[-1].get("response_text") or f"{envelope.role} envelope completed.").strip()
+    return EnvelopeExecutionResult(
+        envelope=envelope,
+        ok=True,
+        status="completed",
+        output_text=final_response,
+        receipts=tuple(receipts),
+        details={
+            "score": 1.0,
+            "step_results": step_results,
+        },
+    )
+
+
+def _execute_queen_envelope(
+    envelope: TaskEnvelopeV1,
+    *,
+    graph: TaskGraph,
+    workspace_root: str | None,
+    session_id: str | None,
+    source_context: dict[str, Any] | None,
+    runtime_tool_executor: Callable[[str, dict[str, Any], dict[str, Any] | None], RuntimeExecutionResult] | None,
+    child_executor: Callable[[TaskEnvelopeV1], EnvelopeExecutionResult] | None,
+) -> EnvelopeExecutionResult:
+    children = _child_envelopes(envelope)
+    if not children:
+        return EnvelopeExecutionResult(
+            envelope=envelope,
+            ok=False,
+            status="missing_subtasks",
+            output_text=f"queen envelope `{envelope.task_id}` has no child envelopes to coordinate.",
+            details={"graph": _graph_snapshot(graph)},
+        )
+    for child in children:
+        if graph.get(child.task_id) is None:
+            graph.add_task(child)
+
+    scheduled = schedule_task_envelopes(children)
+    ordered_children = {child.task_id: child for child in children}
+    child_results: list[EnvelopeExecutionResult] = []
+    execute_child = child_executor or (
+        lambda child: execute_task_envelope(
+            child,
+            workspace_root=workspace_root,
+            session_id=session_id,
+            source_context=source_context,
+            graph=graph,
+            runtime_tool_executor=runtime_tool_executor,
+            child_executor=child_executor,
+        )
+    )
+    for scheduled_child in scheduled:
+        child = ordered_children[scheduled_child.task_id]
+        child_result = execute_child(child)
+        graph.mark_status(child.task_id, "completed" if child_result.ok else "failed", result=child_result.merge_payload())
+        child_results.append(child_result)
+
+    merged = merge_task_results(envelope, [item.merge_payload() for item in child_results])
+    ok = bool(merged.get("ok", False))
+    if "winner" in merged:
+        output_text = str(merged["winner"].get("text") or "").strip()
+    else:
+        output_text = str(merged.get("text") or "").strip()
+    if not output_text:
+        output_text = "queen envelope completed merge." if ok else "queen envelope failed to merge child results."
+    return EnvelopeExecutionResult(
+        envelope=envelope,
+        ok=ok,
+        status="completed" if ok else "merge_failed",
+        output_text=output_text,
+        receipts=tuple({"receipt_type": "merge_result", "strategy": merged.get("strategy"), "ok": ok} for _ in [0]),
+        details={
+            "graph": _graph_snapshot(graph),
+            "scheduled_children": [item.task_id for item in scheduled],
+            "child_results": [item.merge_payload() for item in child_results],
+            "merged_result": merged,
+            "score": float(merged.get("winner", {}).get("score") or (1.0 if ok else 0.0)),
+        },
+    )
+
+
+def _child_envelopes(envelope: TaskEnvelopeV1) -> list[TaskEnvelopeV1]:
+    out: list[TaskEnvelopeV1] = []
+    for item in list(envelope.inputs.get("subtasks") or []):
+        if isinstance(item, TaskEnvelopeV1):
+            out.append(item)
+            continue
+        if isinstance(item, dict):
+            payload = dict(item)
+            payload.setdefault("parent_task_id", envelope.task_id)
+            out.append(task_envelope_from_dict(payload))
+    return out
+
+
+def _check_step_permission(envelope: TaskEnvelopeV1, *, intent: str) -> dict[str, str] | None:
+    contract_map = runtime_tool_contract_map()
+    tool_contract = contract_map.get(intent)
+    if tool_contract is None:
+        return {
+            "status": "unsupported_intent",
+            "message": f"{envelope.role} envelope `{envelope.task_id}` requested unwired runtime intent `{intent}`.",
+        }
+    if tool_contract.capability_id not in envelope.tool_permissions:
+        return {
+            "status": "permission_denied",
+            "message": (
+                f"{envelope.role} envelope `{envelope.task_id}` is not allowed to run `{intent}` "
+                f"because `{tool_contract.capability_id}` is missing from its tool permissions."
+            ),
+        }
+    if tool_contract.side_effect_class in {"read_only", "validation_command"}:
+        return None
+    if tool_contract.side_effect_class not in envelope.allowed_side_effects:
+        return {
+            "status": "side_effect_denied",
+            "message": (
+                f"{envelope.role} envelope `{envelope.task_id}` is not allowed to trigger "
+                f"`{tool_contract.side_effect_class}` side effects via `{intent}`."
+            ),
+        }
+    return None
+
+
+def _missing_required_receipts(envelope: TaskEnvelopeV1, receipts: list[dict[str, Any]]) -> list[str]:
+    seen = {str(item.get("receipt_type") or "").strip() for item in receipts if str(item.get("receipt_type") or "").strip()}
+    return [item for item in envelope.required_receipts if item not in seen]
+
+
+def _graph_snapshot(graph: TaskGraph) -> list[dict[str, Any]]:
+    return [
+        {
+            "task_id": node.envelope.task_id,
+            "parent_task_id": node.envelope.parent_task_id,
+            "role": node.envelope.role,
+            "status": node.status,
+            "children": sorted(node.children),
+        }
+        for node in graph.nodes()
+    ]
+
+
+def _runtime_tool_executor(intent: str, arguments: dict[str, Any], source_context: dict[str, Any] | None) -> RuntimeExecutionResult:
+    result = execute_runtime_tool(intent, arguments, source_context=source_context)
+    if result is None:
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="unsupported_intent",
+            response_text=f"Runtime intent `{intent}` is not wired.",
+            details={},
+        )
+    return result
