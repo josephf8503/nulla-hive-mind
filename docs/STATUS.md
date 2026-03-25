@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved one hundred and seven areas:
+The current `main` checkpoint materially improved one hundred and eight areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -220,12 +220,14 @@ The current `main` checkpoint materially improved one hundred and seven areas:
    The first local OpenAI-compatible backend is no longer a doc-only aspiration. `core/runtime_provider_defaults.py` now auto-registers a local `vllm-local` manifest whenever `VLLM_BASE_URL` is configured, `core/runtime_backbone.py` surfaces that same local queen-capable lane through provider snapshots, and `core/web/api/runtime.py` now keeps API bootstrap aligned with that shared local-vs-remote provider truth instead of pretending Ollama is the only real local runtime lane.
 107. **Fallback recovery merge baseline**
    The bounded queen/coder/verifier lane can now recover from a failed child without pretending the whole workflow is dead or hiding failure behind a bad merge rule. `core/orchestration/executor.py` now lets explicitly-marked fallback children continue after a failed dependency, and `core/orchestration/result_merge.py` now supports ordered `last_success` recovery merges so a later clean verifier result can win a bounded local recovery flow when the parent envelope explicitly opts into that behavior.
+108. **Configured local llama.cpp bootstrap baseline**
+   The second local OpenAI-compatible backend is no longer only install-profile theory. `core/runtime_provider_defaults.py` now auto-registers a local `llamacpp-local` manifest whenever `LLAMACPP_BASE_URL` is configured, `core/runtime_backbone.py` surfaces that same local drone-capable lane through provider snapshots, and `core/web/api/runtime.py` now keeps API bootstrap aligned with that shared local-backend truth instead of pretending Ollama and vLLM are the only real local runtime lanes.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1448 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1451 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -252,7 +254,7 @@ Current test gate on this checkpoint:
 | **Capacity-aware envelope scheduling** | **Works (local baseline)** | When task envelopes carry provider-capability truth, scheduling now accounts for queue pressure and locality instead of only latency labels, incompatible worker lanes fail closed before mutating the workspace, and the helper-model execution lane now also backs off saturated providers instead of blindly fanning out into them. This is still local orchestration, not distributed swarm scheduling. |
 | **Remote shard fetch/reuse baseline** | **Works (bounded)** | `SHARD_PAYLOAD` now carries manifest-bound transport metadata plus signed origin fields; accepted remote payloads emit explicit fetch receipts, cache locally as `peer_received` shards, surface reuse citations through tiered context assembly, persist downstream success/durable reuse outcomes, and now rank cached remote shards with bounded preference for proven successful reuse instead of treating every remote cache entry as a static trust score. This is still not the same thing as hardened public-internet trust or automatic global synthesis. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
-| **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. Provider capability truth now also surfaces role fit, queue depth, max safe concurrency, and tool/structured-output support instead of only listing adapters, the helper/teacher lane now records routing notes while backing off saturated candidates during execution, a configured `KIMI_API_KEY` now auto-registers a real remote Kimi queen manifest through the shared runtime bootstrap path, and a configured `VLLM_BASE_URL` now auto-registers a real local `vllm-local` queen lane instead of leaving local OpenAI-compatible backends as TDL. |
+| **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. Provider capability truth now also surfaces role fit, queue depth, max safe concurrency, and tool/structured-output support instead of only listing adapters, the helper/teacher lane now records routing notes while backing off saturated candidates during execution, a configured `KIMI_API_KEY` now auto-registers a real remote Kimi queen manifest through the shared runtime bootstrap path, a configured `VLLM_BASE_URL` now auto-registers a real local `vllm-local` queen lane, and a configured `LLAMACPP_BASE_URL` now auto-registers a real local `llamacpp-local` drone lane instead of leaving local OpenAI-compatible backends as TDL. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
