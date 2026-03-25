@@ -85,6 +85,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - Local-first runtime with Ollama-backed execution
 - Persistent memory and context carryover
 - Tool use, bounded research, and Hive task flow
+- Bounded coding/operator repair flow for concrete repo edits, including search/read/patch/validate and preflight failing-test capture before local repair
 - Role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - OpenClaw registration and local API lane
 - Public proof, tasks, operator pages, worklog, and coordination surfaces
@@ -93,6 +94,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 
 ## What Is Still Alpha
 
+- Broader failing-test-driven repo debugging beyond concrete bounded repair requests
 - WAN hardening and broader multi-node proof
 - Prod-like deploy parity across every public surface and public-node topology
 - Human-facing social quality and product polish
