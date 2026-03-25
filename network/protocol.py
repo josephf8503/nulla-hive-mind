@@ -197,6 +197,8 @@ class ShardPayloadBody(BaseModel):
     summary: str = Field(min_length=1, max_length=4096)
     resolution_pattern: list[str] = Field(default_factory=list, max_length=64)
     environment_tags: dict[str, str] = Field(default_factory=dict)
+    source_type: str = Field(default="unknown", max_length=64)
+    source_node_id: str = Field(default="", max_length=256)
     quality_score: float = Field(ge=0.0, le=1.0)
     trust_score: float = Field(ge=0.0, le=1.0)
     risk_flags: list[str] = Field(default_factory=list, max_length=32)
@@ -209,6 +211,10 @@ class ShardPayloadPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query_id: str = Field(min_length=8, max_length=128)
+    manifest_id: Optional[str] = Field(default=None, min_length=8, max_length=128)
+    content_hash: Optional[str] = Field(default=None, min_length=8, max_length=256)
+    version: Optional[int] = Field(default=None, ge=1, le=128)
+    summary_digest: Optional[str] = Field(default=None, min_length=8, max_length=128)
     shard: ShardPayloadBody
 
 

@@ -6,6 +6,7 @@ from typing import Any
 
 from core.shard_synthesizer import build_generalized_query
 from storage.db import get_connection
+from storage.shard_fetch_receipts import latest_receipts_for_shards
 
 
 def _get(obj: Any, key: str, default: Any = None) -> Any:
@@ -89,11 +90,13 @@ def find_local_candidates(task: Any, classification: dict[str, Any]) -> list[dic
     finally:
         conn.close()
 
+    receipt_map = latest_receipts_for_shards([str(row["shard_id"]) for row in rows])
     candidates: list[dict] = []
 
     for row in rows:
         env_tags = json.loads(row["environment_tags_json"])
         risk_flags = json.loads(row["risk_flags_json"])
+        receipt = receipt_map.get(str(row["shard_id"]))
 
         if _is_expired(row["expires_ts"]):
             continue
@@ -122,6 +125,7 @@ def find_local_candidates(task: Any, classification: dict[str, Any]) -> list[dic
                 "freshness_ts": row["freshness_ts"],
                 "expires_ts": row["expires_ts"],
                 "signature": row["signature"],
+                "retrieval_receipt": dict(receipt or {}),
                 "semantic_match": semantic,
                 "environment_match": env_match,
             }

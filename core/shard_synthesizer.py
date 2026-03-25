@@ -42,6 +42,32 @@ def _problem_signature(problem_class: str, summary: str, env_tags: dict[str, Any
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def shard_signable_body(payload: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": int(_get(payload, "schema_version", 1) or 1),
+        "problem_class": str(_get(payload, "problem_class", "unknown") or "unknown"),
+        "problem_signature": str(_get(payload, "problem_signature", "") or ""),
+        "summary": str(_get(payload, "summary", "") or ""),
+        "resolution_pattern": [str(step) for step in list(_get(payload, "resolution_pattern", []) or []) if str(step).strip()],
+        "environment_tags": dict(_get(payload, "environment_tags", {}) or {}),
+        "source_type": str(_get(payload, "source_type", "unknown") or "unknown"),
+        "source_node_id": str(_get(payload, "source_node_id", "") or ""),
+        "quality_score": float(_get(payload, "quality_score", 0.0) or 0.0),
+        "trust_score": float(_get(payload, "trust_score", 0.0) or 0.0),
+        "risk_flags": [str(flag) for flag in list(_get(payload, "risk_flags", []) or []) if str(flag).strip()],
+        "freshness_ts": str(_get(payload, "freshness_ts", "") or ""),
+        "expires_ts": _get(payload, "expires_ts", None),
+    }
+
+
+def shard_signable_bytes(payload: dict[str, Any]) -> bytes:
+    return json.dumps(
+        shard_signable_body(payload),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 def _extract_resolution_pattern(plan: Any) -> list[str]:
     raw = _get(plan, "abstract_steps", None) or _get(plan, "steps", None) or []
     out: list[str] = []
@@ -120,7 +146,7 @@ def from_task_result(task: Any, plan: Any, outcome: Any) -> dict[str, Any]:
         "expires_ts": _iso(expires_at),
     }
 
-    canonical = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    canonical = shard_signable_bytes(body)
     shard_id = hashlib.sha256(canonical).hexdigest()
     signature = sign(canonical)
 

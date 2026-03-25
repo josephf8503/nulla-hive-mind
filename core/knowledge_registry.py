@@ -44,6 +44,10 @@ def _summary_digest(summary: str) -> str:
     return hashlib.sha256((summary or "").strip().lower().encode("utf-8")).hexdigest()[:24]
 
 
+def summary_digest_for_text(summary: str) -> str:
+    return _summary_digest(summary)
+
+
 def _topic_tags(problem_class: str, summary: str) -> list[str]:
     tags = {problem_class.strip().lower()} if problem_class else set()
     for token in _TAG_TOKEN_RE.findall((summary or "").lower()):
@@ -528,7 +532,7 @@ def local_manifest(shard_id: str) -> dict[str, Any] | None:
     return manifest_for_shard(shard_id)
 
 
-def load_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
+def load_canonical_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
     row = _shard_row(shard_id)
     if row:
         if str(row.get("quarantine_status") or "active") != "active":
@@ -540,7 +544,7 @@ def load_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
             return None
         if not any(holder.get("holder_peer_id") == get_local_peer_id() for holder in holders_for_shard(shard_id, active_only=True)):
             return None
-        return _shard_payload_from_row(row)
+        return _canonical_payload_from_row(row)
     if not any(holder.get("holder_peer_id") == get_local_peer_id() for holder in holders_for_shard(shard_id, active_only=True)):
         return None
     manifest = manifest_for_shard(shard_id)
@@ -561,7 +565,7 @@ def load_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
         return None
     if not isinstance(payload, dict):
         return None
-    shard = {
+    return {
         "shard_id": str(payload.get("shard_id") or shard_id),
         "schema_version": int(payload.get("schema_version") or 1),
         "problem_class": str(payload.get("problem_class") or "unknown"),
@@ -569,6 +573,35 @@ def load_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
         "summary": str(payload.get("summary") or ""),
         "resolution_pattern": list(payload.get("resolution_pattern") or []),
         "environment_tags": payload.get("environment_tags") or {},
+        "source_type": str(payload.get("source_type") or ""),
+        "source_node_id": str(payload.get("source_node_id") or ""),
+        "quality_score": float(payload.get("quality_score") or 0.0),
+        "trust_score": float(payload.get("trust_score") or 0.0),
+        "risk_flags": list(payload.get("risk_flags") or []),
+        "freshness_ts": str(payload.get("freshness_ts") or ""),
+        "expires_ts": payload.get("expires_ts"),
+        "signature": str(payload.get("signature") or ""),
+        "origin_task_id": str(payload.get("origin_task_id") or ""),
+        "origin_session_id": str(payload.get("origin_session_id") or ""),
+        "share_scope": normalize_share_scope(str(payload.get("share_scope") or "local_only")),
+        "restricted_terms": tokenize_restricted_terms(list(payload.get("restricted_terms") or [])),
+    }
+
+
+def load_transportable_shard_payload(shard_id: str) -> dict[str, Any] | None:
+    payload = load_canonical_shareable_shard_payload(shard_id)
+    if not payload:
+        return None
+    return {
+        "shard_id": str(payload.get("shard_id") or shard_id),
+        "schema_version": int(payload.get("schema_version") or 1),
+        "problem_class": str(payload.get("problem_class") or "unknown"),
+        "problem_signature": str(payload.get("problem_signature") or ""),
+        "summary": str(payload.get("summary") or ""),
+        "resolution_pattern": list(payload.get("resolution_pattern") or []),
+        "environment_tags": dict(payload.get("environment_tags") or {}),
+        "source_type": str(payload.get("source_type") or ""),
+        "source_node_id": str(payload.get("source_node_id") or ""),
         "quality_score": float(payload.get("quality_score") or 0.0),
         "trust_score": float(payload.get("trust_score") or 0.0),
         "risk_flags": list(payload.get("risk_flags") or []),
@@ -576,7 +609,27 @@ def load_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
         "expires_ts": payload.get("expires_ts"),
         "signature": str(payload.get("signature") or ""),
     }
-    return shard
+
+
+def load_shareable_shard_payload(shard_id: str) -> dict[str, Any] | None:
+    payload = load_transportable_shard_payload(shard_id)
+    if not payload:
+        return None
+    return {
+        "shard_id": str(payload.get("shard_id") or shard_id),
+        "schema_version": int(payload.get("schema_version") or 1),
+        "problem_class": str(payload.get("problem_class") or "unknown"),
+        "problem_signature": str(payload.get("problem_signature") or ""),
+        "summary": str(payload.get("summary") or ""),
+        "resolution_pattern": list(payload.get("resolution_pattern") or []),
+        "environment_tags": dict(payload.get("environment_tags") or {}),
+        "quality_score": float(payload.get("quality_score") or 0.0),
+        "trust_score": float(payload.get("trust_score") or 0.0),
+        "risk_flags": list(payload.get("risk_flags") or []),
+        "freshness_ts": str(payload.get("freshness_ts") or ""),
+        "expires_ts": payload.get("expires_ts"),
+        "signature": str(payload.get("signature") or ""),
+    }
 
 
 def _tokenize(text: str) -> set[str]:

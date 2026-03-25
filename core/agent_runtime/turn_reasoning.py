@@ -265,6 +265,11 @@ def execute_grounded_turn(
         "external_media_evidence": media_analysis.evidence_items or media_evidence,
         "web_notes": web_notes,
     }
+    swarm_reuse_citations = [
+        dict(snippet.get("citation") or {})
+        for snippet in evidence["context_snippets"]
+        if isinstance(snippet, dict) and isinstance(snippet.get("citation"), dict) and snippet.get("citation")
+    ]
 
     plan = build_plan_fn(
         task=task,
@@ -410,6 +415,7 @@ def execute_grounded_turn(
             "input_quality_flags": interpreted.quality_flags,
             "context_retrieval_confidence": context_result.report.retrieval_confidence,
             "context_budget_used": context_result.report.total_tokens_used(),
+            "swarm_reuse_citation_count": len(swarm_reuse_citations),
             "model_execution_source": model_execution.source,
             "model_provider_id": model_execution.provider_id,
             "media_analysis_reason": media_analysis.reason,
@@ -465,4 +471,5 @@ def execute_grounded_turn(
         "source_context": dict(source_context or {}),
         "workflow_summary": workflow_summary,
         "response_class": turn_result.response_class.value,
+        "swarm_reuse_citations": swarm_reuse_citations,
     }

@@ -12,7 +12,8 @@ from core.discovery_index import (
     same_host_group_suspect,
     upsert_peer_minimal,
 )
-from core.knowledge_registry import load_shareable_shard_payload, register_local_shard
+from core.knowledge_registry import register_local_shard
+from core.knowledge_transport import build_transport_shard_response, validate_incoming_transport_shard
 from network.assist_router import handle_incoming_assist_message
 from network.knowledge_models import validate_knowledge_payload
 from network.knowledge_router import handle_knowledge_message
@@ -22,6 +23,7 @@ from network.rate_limiter import allow as rate_allow
 from network.signer import get_local_peer_id as local_peer_id
 from retrieval.swarm_query import request_specific_shard
 from storage.db import get_connection
+from storage.shard_fetch_receipts import record_fetch_receipt
 
 
 def on_message(daemon: Any, raw: bytes, addr: tuple[str, int]) -> None:
@@ -393,8 +395,8 @@ def handle_request_shard(daemon: Any, payload: dict[str, Any], addr: tuple[str, 
     if not shard_id:
         return
 
-    shard = load_shareable_shard_payload(shard_id)
-    if not shard:
+    response_payload = build_transport_shard_response(query_id=query_id, shard_id=shard_id)
+    if not response_payload:
         return
 
     raw = encode_message(
@@ -402,7 +404,7 @@ def handle_request_shard(daemon: Any, payload: dict[str, Any], addr: tuple[str, 
         msg_type="SHARD_PAYLOAD",
         sender_peer_id=local_peer_id(),
         nonce=uuid.uuid4().hex,
-        payload={"query_id": query_id, "shard": shard},
+        payload=response_payload,
     )
     daemon._send_or_log(addr[0], int(addr[1]), raw, message_type="SHARD_PAYLOAD", target_id=shard_id)
 
@@ -412,26 +414,37 @@ def handle_shard_payload(_daemon: Any, payload: dict[str, Any], sender_peer_id: 
     if not isinstance(shard, dict):
         return
 
-    required = {
-        "shard_id",
-        "schema_version",
-        "problem_class",
-        "problem_signature",
-        "summary",
-        "resolution_pattern",
-        "environment_tags",
-        "quality_score",
-        "trust_score",
-        "risk_flags",
-        "freshness_ts",
-        "signature",
-    }
-    if not required.issubset(set(shard.keys())):
-        return
-
     risk_flags = shard.get("risk_flags") or []
     blocked = set(policy_engine.get("shards.quarantine_if_risk_flags_include", []))
     if any(flag in blocked for flag in risk_flags):
+        return
+
+    validation = validate_incoming_transport_shard(payload)
+    receipt_id = record_fetch_receipt(
+        shard_id=str(shard.get("shard_id") or "").strip(),
+        source_peer_id=sender_peer_id,
+        source_node_id=str(shard.get("source_node_id") or "").strip() or None,
+        query_id=str(payload.get("query_id") or "").strip() or None,
+        manifest_id=str(payload.get("manifest_id") or "").strip() or None,
+        content_hash=str(payload.get("content_hash") or "").strip() or None,
+        version=payload.get("version"),
+        summary_digest=str(payload.get("summary_digest") or "").strip() or None,
+        validation_state=str(validation.get("validation_state") or "validation_failed"),
+        accepted=bool(validation.get("accepted")),
+        details=dict(validation.get("details") or {}),
+    )
+    if not bool(validation.get("accepted")):
+        audit_logger.log(
+            "peer_shard_rejected",
+            target_id=str(shard.get("shard_id") or "unknown"),
+            target_type="shard",
+            details={
+                "source_peer": sender_peer_id,
+                "validation_state": validation.get("validation_state"),
+                "receipt_id": receipt_id,
+                "errors": list((validation.get("details") or {}).get("errors") or []),
+            },
+        )
         return
 
     conn = get_connection()
@@ -462,7 +475,7 @@ def handle_shard_payload(_daemon: Any, payload: dict[str, Any], sender_peer_id: 
                 shard["summary"],
                 json.dumps(shard["resolution_pattern"], sort_keys=True),
                 json.dumps(shard["environment_tags"], sort_keys=True),
-                sender_peer_id,
+                str(shard.get("source_node_id") or sender_peer_id),
                 max(0.0, min(1.0, float(shard["quality_score"]))),
                 min(max(0.0, incoming_trust_cap), max(0.0, float(shard["trust_score"]))),
                 json.dumps(risk_flags, sort_keys=True),
@@ -480,7 +493,11 @@ def handle_shard_payload(_daemon: Any, payload: dict[str, Any], sender_peer_id: 
         "peer_shard_cached",
         target_id=shard["shard_id"],
         target_type="shard",
-        details={"source_peer": sender_peer_id},
+        details={
+            "source_peer": sender_peer_id,
+            "receipt_id": receipt_id,
+            "validation_state": validation.get("validation_state"),
+        },
     )
     manifest = register_local_shard(str(shard["shard_id"]))
     if not manifest:

@@ -57,6 +57,9 @@ class TieredContextResult:
             observation = _observation_payload_from_item(item)
             if observation is not None:
                 payload["observation"] = observation
+            citation = dict(item.metadata or {}).get("reuse_citation")
+            if isinstance(citation, dict) and citation:
+                payload["citation"] = dict(citation)
             snippets.append(payload)
         return snippets
 
@@ -99,6 +102,23 @@ def _observation_payload_from_item(item: ContextItem) -> dict[str, Any] | None:
     return dict(loaded) if isinstance(loaded, dict) else None
 
 
+def _remote_shard_citation(candidate: dict[str, Any]) -> dict[str, Any] | None:
+    receipt = dict(candidate.get("retrieval_receipt") or {})
+    if str(candidate.get("source_type") or "") != "peer_received" or not receipt:
+        return None
+    return {
+        "kind": "remote_shard",
+        "shard_id": str(candidate.get("shard_id") or "").strip(),
+        "source_peer_id": str(receipt.get("source_peer_id") or "").strip(),
+        "source_node_id": str(candidate.get("source_node_id") or "").strip(),
+        "manifest_id": str(receipt.get("manifest_id") or "").strip(),
+        "content_hash": str(receipt.get("content_hash") or "").strip(),
+        "receipt_id": str(receipt.get("receipt_id") or "").strip(),
+        "validation_state": str(receipt.get("validation_state") or "").strip(),
+        "fetched_at": str(receipt.get("created_at") or "").strip(),
+    }
+
+
 def _render_context_sections(label: str, items: list[ContextItem]) -> list[str]:
     if not items:
         return []
@@ -124,26 +144,42 @@ def _local_candidate_items(task: Any, classification: dict[str, Any]) -> tuple[l
     items: list[ContextItem] = []
     for candidate in ranked[:8]:
         pattern = list(candidate.get("resolution_pattern") or [])[:4]
-        content = (
-            f"{candidate.get('summary', '')} "
-            f"Pattern: {', '.join(str(step) for step in pattern) or 'n/a'}."
-        ).strip()
+        citation = _remote_shard_citation(candidate)
+        if citation:
+            content = (
+                f"Cached remote shard from {citation.get('source_peer_id', 'unknown peer')[:12]}... "
+                f"with validation {citation.get('validation_state', 'unknown')}. "
+                f"{candidate.get('summary', '')} "
+                f"Pattern: {', '.join(str(step) for step in pattern) or 'n/a'}."
+            ).strip()
+            source_type = "remote_shard_cache"
+            include_reason = "remote_shard_reuse"
+        else:
+            content = (
+                f"{candidate.get('summary', '')} "
+                f"Pattern: {', '.join(str(step) for step in pattern) or 'n/a'}."
+            ).strip()
+            source_type = "local_shard"
+            include_reason = "local_shard_match"
+        metadata = {
+            "shard_id": candidate["shard_id"],
+            "problem_class": candidate["problem_class"],
+            "freshness_ts": candidate.get("freshness_ts"),
+            "trust_score": candidate.get("trust_score"),
+        }
+        if citation:
+            metadata["reuse_citation"] = citation
         items.append(
             ContextItem(
                 item_id=f"local-shard-{candidate['shard_id']}",
                 layer="relevant",
-                source_type="local_shard",
+                source_type=source_type,
                 title=f"Local shard {candidate['problem_class']}",
                 content=content[:420],
                 priority=float(candidate.get("score") or 0.0),
                 confidence=float(candidate.get("score") or 0.0),
-                include_reason="local_shard_match",
-                metadata={
-                    "shard_id": candidate["shard_id"],
-                    "problem_class": candidate["problem_class"],
-                    "freshness_ts": candidate.get("freshness_ts"),
-                    "trust_score": candidate.get("trust_score"),
-                },
+                include_reason=include_reason,
+                metadata=metadata,
                 provenance={"source_node_id": candidate.get("source_node_id")},
             )
         )
