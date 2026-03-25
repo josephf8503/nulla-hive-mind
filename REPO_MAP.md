@@ -255,7 +255,7 @@ Core lane:
 - `core/agent_runtime/hive_review_runtime.py`: Hive review queue/action/cleanup handling split out of the agent root
 - `core/agent_runtime/chat_surface.py`: lower-level chat-surface wording, observation shaping, and Hive status narration moved out of the agent root
 - `core/agent_runtime/chat_surface_facade.py`: agent-facing chat-surface wrapper facade moved out of the agent root
-- `core/agent_runtime/response.py`: shared user-facing response decoration/sanitization seam for workflow suppression and orchestration-leak cleanup
+- `core/agent_runtime/response.py`: shared user-facing response decoration/sanitization seam for workflow suppression plus orchestration/routing/capacity leak cleanup
 - `core/agent_runtime/fast_command_surface.py`: credit commands, capability/help responses, credit status rendering, and fast/action result shaping moved out of the agent root
 - `core/agent_runtime/public_hive_support.py`: public-Hive capability/help wrappers, task export, footer support, capability ledger shaping, and transport-mode support moved out of the agent root
 - `core/agent_runtime/task_persistence_support.py`: task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence moved out of the agent root

@@ -22,6 +22,7 @@ Current execution truth:
 - envelope scheduling now also understands attached provider-capability truth: queue pressure degrades lane priority, incompatible worker lanes can fail closed with `capacity_blocked`, and queen execution exposes scheduling details instead of only child order
 - `task_router.py` now emits explicit model constraints for locality, structured-output pressure, long-context preference, code-complex preference, and queue-pressure strategy instead of leaving those hints implicit
 - `model_teacher_pipeline.py` now records routing requirements/rejections in provenance and backs off saturated provider lanes during execution instead of blindly fanning out across every selected candidate
+- `agent_runtime/response.py` now rewrites routing/capacity leak payloads and capacity-blocked worker failures into terse operator-safe language instead of dumping scheduler/provider JSON into chat surfaces
 
 ## Current Internal Zones
 

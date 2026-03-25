@@ -35,6 +35,7 @@ The refactor-only pass is frozen. The current beta bar is execution hardening:
 - keep Liquefy behind the CLI+JSON boundary in `core/liquefy_client.py` and `core/liquefy_bridge.py`; do not re-import vendor internals
 - keep verified procedure promotion local-first and citation-backed instead of narrating “learning” without proof
 - keep shard payload reuse real: remote fetches must carry manifest-bound transport metadata, signature validation, explicit fetch receipts, and citation-backed local reuse instead of stopping at metadata-only hints
+- keep operator output disciplined: `core/agent_runtime/response.py` and `core/agent_runtime/response_policy_visibility.py` should keep workflow/routing/capacity internals off chat surfaces unless debug is explicit
 
 ## Verified Current Risk Snapshot
 
@@ -228,6 +229,7 @@ These are the current blast-radius centers. Split these before inventing more la
 - credit commands, capability/help responses, credit status rendering, and fast/action result shaping now also live behind `core/agent_runtime/fast_command_surface.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - response classification, workflow/footer visibility policy, and tool-history observation shaping now also live behind `core/agent_runtime/response_policy.py`, so `apps/nulla_agent.py` no longer owns that slab directly
 - operator/chat output discipline is now tighter too: `core/agent_runtime/response_policy_visibility.py` no longer shows workflow blocks on chat surfaces unless the surface explicitly requests workflow debugging, and `core/agent_runtime/response.py` now rewrites raw task-envelope/orchestration leak text into user-safe operator language instead of exposing scheduler/permission/receipt internals
+- that operator leak cleanup now also covers newer routing/capacity payloads: capacity-blocked worker failures, routing requirement blobs, rejected-candidate JSON, and helper-lane backoff markers now resolve to terse user-safe operator wording instead of raw scheduler/provider payloads
 - public-Hive capability/help wrappers, task export, footer support, public capability ledger shaping, and transport-mode helpers now also live behind `core/agent_runtime/public_hive_support.py`, so `apps/nulla_agent.py` no longer owns that outward support slab directly
 - task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence now also live behind `core/agent_runtime/task_persistence_support.py`, so `apps/nulla_agent.py` no longer owns that persistence/support slab directly
 - proceed/resume request normalization, explicit resume detection, and generic proceed-message matching now also live behind `core/agent_runtime/proceed_intent_support.py`, so `apps/nulla_agent.py` no longer owns that intent-policy slab directly
