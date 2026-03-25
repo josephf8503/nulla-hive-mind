@@ -153,6 +153,25 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertEqual(result.details["observation"]["returncode"], 0)
             self.assertIn(sys.executable, result.details["observation"]["command"])
 
+    def test_workspace_run_tests_bypasses_linux_isolation_backends_for_trusted_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "test_sample.py").write_text(
+                "def test_truth():\n    assert 2 + 2 == 4\n",
+                encoding="utf-8",
+            )
+            with mock.patch("sandbox.job_runner.os.name", "posix"), mock.patch(
+                "sandbox.job_runner.sys.platform", "linux"
+            ), mock.patch("sandbox.job_runner.shutil.which", return_value="/usr/bin/unshare"):
+                result = execute_runtime_tool(
+                    "workspace.run_tests",
+                    {"command": "python3 -m pytest -q test_sample.py"},
+                    source_context={"workspace": tmpdir},
+                )
+            assert result is not None
+            self.assertTrue(result.ok)
+            self.assertEqual(result.details["observation"]["returncode"], 0)
+
     def test_validation_command_defaults_are_honest(self) -> None:
         with mock.patch("core.execution.validation_tools.shutil.which") as which:
             which.side_effect = lambda name: "/usr/bin/" + name if name in {"pytest", "ruff"} else None

@@ -62,6 +62,8 @@ class JobRunner:
         mode = (self.policy.network_isolation_mode or "auto").strip().lower()
         if mode not in {"auto", "os_enforced", "heuristic_only"}:
             mode = "auto"
+        if mode == "heuristic_only":
+            return argv
         isolated = self._kernel_network_isolation_prefix(argv)
         if isolated is not None:
             return isolated

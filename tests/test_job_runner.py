@@ -62,8 +62,8 @@ class JobRunnerTests(unittest.TestCase):
                     network_isolation_mode="heuristic_only",
                 )
             )
-            with patch("sandbox.job_runner.os.name", "posix"), patch("sandbox.job_runner.sys.platform", "darwin"), patch(
-                "sandbox.job_runner.shutil.which", return_value=None
+            with patch("sandbox.job_runner.os.name", "posix"), patch("sandbox.job_runner.sys.platform", "linux"), patch(
+                "sandbox.job_runner.shutil.which", return_value="/usr/bin/unshare"
             ):
                 argv = runner._with_network_isolation(["python3", "-c", "print('x')"])
                 self.assertEqual(argv, ["python3", "-c", "print('x')"])
