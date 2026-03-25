@@ -28,6 +28,7 @@ The refactor-only pass is frozen. The current beta bar is execution hardening:
 
 - keep the new coding/operator lane real: workspace inspection, diff-based patching, git state, bounded validation, rollback, and emitted artifacts
 - keep typed task envelopes live in the routing path instead of letting provider/model decisions drift back to implicit guesses
+- keep local envelope execution bounded and real: coder/verifier steps must enforce runtime-tool permissions and queen merge must stay deterministic
 - keep install-profile truth honest: profile selection, disk/RAM expectations, and provider-key requirements should come from one contract instead of installer folklore
 - keep provider capability truth surfaced: role fit, queue depth, safe concurrency, and tool support should stay machine-readable instead of hiding in adapter metadata
 - keep Liquefy behind the CLI+JSON boundary in `core/liquefy_client.py` and `core/liquefy_bridge.py`; do not re-import vendor internals
@@ -54,7 +55,8 @@ The current trunk still has a short list of blast-radius centers plus a few newl
 | `core/liquefy_bridge.py` | 351 | the proof/archive bridge is now a facade over the CLI client and local fallbacks; do not let Liquefy vendor-specific logic leak back into this file |
 | `core/liquefy_client.py` | 234 | new CLI+JSON proof adapter; keep it stable and machine-readable instead of turning it into heuristic subprocess glue |
 | `installer/doctor.py` | 201 | doctor now reports install-profile readiness and single-volume free-space truth; do not let it drift into a second install-profile implementation |
-| `core/orchestration/task_envelope.py` | 87 | typed task-envelope contract is now real and live in routing metadata; preserve the schema and role defaults as the stable subtask boundary |
+| `core/orchestration/task_envelope.py` | 111 | typed task-envelope contract is now real and live in routing metadata plus bounded local execution; preserve the schema, role defaults, and permission fields as the stable subtask boundary |
+| `core/orchestration/executor.py` | 338 | new bounded local subtask executor; keep it focused on local queen/coder/verifier execution, permission enforcement, and deterministic merge instead of letting it turn into a second mesh scheduler |
 | `core/learning/procedure_shards.py` | 109 | verified procedure persistence is now live; keep it local-first and citation-backed instead of letting it become another vague shard format |
 | `core/agent_runtime/nullabook_runtime.py` | 264 | NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction are now isolated behind a dedicated runtime seam |
 | `core/agent_runtime/tool_result_surface.py` | 15 | now the thin tool-result facade over the truth-metrics, text-surface, history-surface, and workflow-surface seams |

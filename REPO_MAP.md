@@ -224,6 +224,7 @@ Core lane:
 - `core/execution/validation_tools.py`: bounded test/lint/format command helpers and result shaping
 - `core/execution/artifacts.py`: diff, command, failure, mutation-history, and rollback/procedure-link artifacts
 - `core/orchestration/task_envelope.py`: `TaskEnvelopeV1` schema and role-default builder
+- `core/orchestration/executor.py`: bounded local queen/coder/verifier envelope executor with permission enforcement and deterministic merge
 - `core/orchestration/role_contracts.py`: queen/coder/verifier/researcher/memory-clerk/narrator contracts
 - `core/orchestration/resource_scheduler.py`: envelope priority and provider-role scheduling helpers
 - `core/orchestration/task_graph.py`: task-graph node/status model

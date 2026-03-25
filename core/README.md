@@ -35,6 +35,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `execution/artifacts.py`
 - typed orchestration:
   - `orchestration/task_envelope.py`
+  - `orchestration/executor.py`
   - `orchestration/role_contracts.py`
   - `orchestration/resource_scheduler.py`
   - `orchestration/task_graph.py`
