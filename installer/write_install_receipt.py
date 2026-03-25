@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+from core.runtime_install_profiles import build_install_profile_truth
 
 
 def build_receipt(
@@ -19,11 +22,17 @@ def build_receipt(
     ollama_binary: str,
 ) -> dict:
     project = Path(project_root).resolve()
+    install_profile = build_install_profile_truth(
+        requested_profile=os.environ.get("NULLA_INSTALL_PROFILE"),
+        selected_model=model_tag,
+        runtime_home=runtime_home,
+    )
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "project_root": str(project),
         "runtime_home": runtime_home,
         "selected_model": model_tag,
+        "install_profile": install_profile.to_dict(),
         "api_url": "http://127.0.0.1:11435",
         "openclaw_url": "http://127.0.0.1:18789",
         "trace_url": "http://127.0.0.1:11435/trace",

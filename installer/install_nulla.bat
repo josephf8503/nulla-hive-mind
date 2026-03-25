@@ -246,8 +246,22 @@ if "%MODEL_TAG%"=="" set "MODEL_TAG=qwen2.5:7b"
 set "HARDWARE_SUMMARY="
 set /p HARDWARE_SUMMARY=<"%TEMP%\nulla_hw.txt"
 del /f /q "%TEMP%\nulla_hw.txt" >nul 2>&1
+set "INSTALL_PROFILE=local-only"
+"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_install_profiles import build_install_profile_truth; print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%').profile_id)" 2>nul > "%TEMP%\nulla_install_profile.txt"
+if exist "%TEMP%\nulla_install_profile.txt" (
+  set /p INSTALL_PROFILE=<"%TEMP%\nulla_install_profile.txt"
+  del /f /q "%TEMP%\nulla_install_profile.txt" >nul 2>&1
+)
+set "INSTALL_PROFILE_SUMMARY=%INSTALL_PROFILE% -> %MODEL_TAG%"
+"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_install_profiles import build_install_profile_truth; print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%').display_summary())" 2>nul > "%TEMP%\nulla_install_profile_summary.txt"
+if exist "%TEMP%\nulla_install_profile_summary.txt" (
+  set /p INSTALL_PROFILE_SUMMARY=<"%TEMP%\nulla_install_profile_summary.txt"
+  del /f /q "%TEMP%\nulla_install_profile_summary.txt" >nul 2>&1
+)
 echo Detected: %HARDWARE_SUMMARY%
 echo Selected model: %MODEL_TAG%
+echo Install profile: %INSTALL_PROFILE%
+echo Profile summary: %INSTALL_PROFILE_SUMMARY%
 
 echo Step 7/14: Creating launchers...
 (

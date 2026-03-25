@@ -148,7 +148,7 @@ def resolve_provider_routing_plan(
         preferred_model=preferred_model,
         selected=candidates[0] if candidates else None,
         candidates=candidates,
-        capability_truth=tuple(_provider_capability_truth(manifest) for manifest in candidates),
+        capability_truth=tuple(provider_capability_truth_for_manifest(manifest) for manifest in candidates),
         task_envelope=dict(task_envelope or {}),
     )
 
@@ -270,7 +270,7 @@ def _is_local_http(manifest: ModelProviderManifest) -> bool:
     return base_url.startswith("http://127.0.0.1") or base_url.startswith("http://localhost")
 
 
-def _provider_capability_truth(manifest: ModelProviderManifest) -> ProviderCapabilityTruth:
+def provider_capability_truth_for_manifest(manifest: ModelProviderManifest) -> ProviderCapabilityTruth:
     metadata = dict(manifest.metadata or {})
     runtime_config = dict(manifest.runtime_config or {})
     capabilities = {str(item).strip().lower() for item in list(manifest.capabilities or []) if str(item).strip()}
@@ -306,6 +306,7 @@ __all__ = [
     "ProviderCapabilityTruth",
     "ProviderRole",
     "ProviderRoutingPlan",
+    "provider_capability_truth_for_manifest",
     "rank_provider_candidates",
     "resolve_provider_routing_plan",
     "resolve_provider_routing_plan_for_envelope",

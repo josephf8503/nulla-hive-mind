@@ -21,6 +21,7 @@ def test_install_receipt_exposes_doctor_report_path() -> None:
     )
 
     assert receipt["doctor_report_path"].endswith("/nulla/install_doctor.json")
+    assert receipt["install_profile"]["schema"] == "nulla.install_profile.v1"
 
 
 def test_build_report_marks_missing_components_as_degraded() -> None:
@@ -51,6 +52,7 @@ def test_build_report_marks_missing_components_as_degraded() -> None:
     assert report["components"]["launchers"]["ok"] is True
     assert report["components"]["public_hive"]["ok"] is True
     assert report["components"]["public_hive"]["enabled"] is False
+    assert report["install_profile"]["schema"] == "nulla.install_profile.v1"
 
 
 def test_build_report_flags_missing_public_hive_write_auth() -> None:

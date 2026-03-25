@@ -12,6 +12,7 @@ from core.runtime_backbone import (
     build_runtime_backbone,
 )
 from core.runtime_bootstrap import BootstrappedRuntime, RuntimeBackendSelection
+from core.runtime_install_profiles import InstallProfileTruth
 
 
 def test_build_provider_registry_snapshot_collects_rows_and_warnings_from_registry() -> None:
@@ -29,6 +30,7 @@ def test_build_provider_registry_snapshot_collects_rows_and_warnings_from_regist
     registry = mock.Mock()
     registry.startup_warnings.return_value = ["missing health path"]
     registry.provider_audit_rows.return_value = [row]
+    registry.list_manifests.return_value = []
 
     snapshot = build_provider_registry_snapshot(registry)
 
@@ -54,7 +56,24 @@ def test_build_runtime_backbone_reuses_bootstrap_probe_and_provider_facades() ->
             hardware=SimpleNamespace(os_name="linux", machine="x86_64"),
         ),
     )
-    provider_snapshot = ProviderRegistrySnapshot(warnings=("warn",), audit_rows=tuple())
+    provider_snapshot = ProviderRegistrySnapshot(warnings=("warn",), audit_rows=tuple(), capability_truth=tuple())
+    install_profile = InstallProfileTruth(
+        profile_id="local-only",
+        label="Local only",
+        summary="Single local Ollama lane with no remote provider dependency.",
+        selection_source="auto",
+        selected_model="qwen2.5:32b",
+        provider_mix=tuple(),
+        estimated_download_gb=36.0,
+        estimated_disk_footprint_gb=41.0,
+        minimum_free_space_gb=39.0,
+        ram_expectation_gb=48.0,
+        vram_expectation_gb=20.0,
+        ready=True,
+        single_volume_ready=True,
+        reasons=tuple(),
+        volume_checks=tuple(),
+    )
 
     with mock.patch(
         "core.runtime_backbone.bootstrap_runtime_mode",
@@ -71,7 +90,10 @@ def test_build_runtime_backbone_reuses_bootstrap_probe_and_provider_facades() ->
     ) as tier_summary_fn, mock.patch(
         "core.runtime_backbone.build_provider_registry_snapshot",
         return_value=provider_snapshot,
-    ) as provider_fn:
+    ) as provider_snapshot_fn, mock.patch(
+        "core.runtime_backbone.build_install_profile_truth",
+        return_value=install_profile,
+    ) as install_profile_fn:
         backbone = build_runtime_backbone(
             mode="chat",
             force_policy_reload=True,
@@ -91,13 +113,15 @@ def test_build_runtime_backbone_reuses_bootstrap_probe_and_provider_facades() ->
     probe_machine.assert_called_once_with()
     select_tier.assert_called_once_with(probe)
     tier_summary_fn.assert_called_once_with(probe)
-    provider_fn.assert_called_once_with(None)
+    provider_snapshot_fn.assert_called_once_with(None)
+    install_profile_fn.assert_called_once()
     assert backbone.boot is fake_boot
     assert backbone.local_model_profile.probe is probe
     assert backbone.local_model_profile.tier is tier
     assert backbone.local_model_profile.summary["backend_name"] == "TorchCUDABackend"
     assert backbone.local_model_profile.summary["backend_device"] == "cuda"
     assert backbone.provider_snapshot is provider_snapshot
+    assert backbone.install_profile is install_profile
 
 
 def test_cmd_providers_renders_provider_snapshot_from_runtime_backbone_facade(capsys) -> None:
@@ -112,7 +136,7 @@ def test_cmd_providers_renders_provider_snapshot_from_runtime_backbone_facade(ca
         redistribution_allowed=True,
         warnings=[],
     )
-    snapshot = ProviderRegistrySnapshot(warnings=tuple(), audit_rows=(row,))
+    snapshot = ProviderRegistrySnapshot(warnings=tuple(), audit_rows=(row,), capability_truth=tuple())
 
     with mock.patch("apps.nulla_cli._bootstrap_cli_storage") as bootstrap_storage, mock.patch(
         "apps.nulla_cli.build_provider_registry_snapshot",

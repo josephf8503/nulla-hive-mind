@@ -83,6 +83,7 @@ def build_runtime_context(
         key: str(env_map.get(key) or "").strip()
         for key in (
             "NULLA_HOME",
+            "NULLA_INSTALL_PROFILE",
             "NULLA_WORKSPACE_ROOT",
             "NULLA_PROJECT_ROOT",
             "NULLA_PUBLIC_HIVE_ENABLED",

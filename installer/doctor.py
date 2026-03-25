@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
+
+from core.runtime_install_profiles import build_install_profile_truth
 
 
 def _status(ok: bool, detail: str, **extra: Any) -> dict[str, Any]:
@@ -100,6 +103,11 @@ def build_report(
     venv = project / ".venv"
     receipt = project / "install_receipt.json"
     liquefy_config = Path.home() / ".liquefy" / "config.json"
+    install_profile = build_install_profile_truth(
+        requested_profile=os.environ.get("NULLA_INSTALL_PROFILE"),
+        selected_model=model_tag,
+        runtime_home=runtime,
+    )
 
     launchers = {
         "start": project / "Start_NULLA.sh",
@@ -126,6 +134,7 @@ def build_report(
         "project_root": str(project),
         "runtime_home": str(runtime),
         "selected_model": str(model_tag or "").strip(),
+        "install_profile": install_profile.to_dict(),
         "components": {
             "project_root": _status(project.exists(), "project root found" if project.exists() else "project root missing", path=str(project)),
             "runtime_home": _status(runtime.exists(), "runtime home found" if runtime.exists() else "runtime home missing", path=str(runtime)),
@@ -152,6 +161,8 @@ def build_report(
     }
 
     degraded = []
+    if not install_profile.ready:
+        degraded.append("install_profile")
     for key, value in report["components"].items():
         if isinstance(value, dict) and "ok" in value and not bool(value["ok"]):
             degraded.append(key)

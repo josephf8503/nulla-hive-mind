@@ -4,7 +4,10 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 from core.feature_flags import flag_map
+from core.hardware_tier import probe_machine, select_qwen_tier
+from core.runtime_backbone import build_provider_registry_snapshot
 from core.runtime_context import RuntimeContext, build_runtime_context
+from core.runtime_install_profiles import build_install_profile_truth
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,15 @@ def runtime_capability_statuses(context: RuntimeContext | None = None) -> list[R
 
 def runtime_capability_snapshot(context: RuntimeContext | None = None) -> dict[str, Any]:
     runtime = context or build_runtime_context(mode="runtime_capabilities")
+    probe = probe_machine()
+    tier = select_qwen_tier(probe)
+    provider_snapshot = build_provider_registry_snapshot()
+    install_profile = build_install_profile_truth(
+        probe=probe,
+        tier=tier,
+        provider_capability_truth=provider_snapshot.capability_truth,
+        runtime_home=runtime.paths.runtime_home,
+    )
     statuses = runtime_capability_statuses(runtime)
     return {
         "mode": runtime.mode,
@@ -120,5 +132,7 @@ def runtime_capability_snapshot(context: RuntimeContext | None = None) -> dict[s
             "allow_sandbox_execution": runtime.feature_flags.allow_sandbox_execution,
             "allow_remote_only_without_backend": runtime.feature_flags.allow_remote_only_without_backend,
         },
+        "provider_capability_truth": [item.to_dict() for item in provider_snapshot.capability_truth],
+        "install_profile": install_profile.to_dict(),
         "capabilities": [asdict(item) for item in statuses],
     }

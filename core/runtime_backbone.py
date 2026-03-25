@@ -6,13 +6,16 @@ from typing import Any
 from core.backend_manager import BackendManager
 from core.hardware_tier import MachineProbe, QwenTier, probe_machine, select_qwen_tier, tier_summary
 from core.model_registry import ModelRegistry, ProviderAuditRow
+from core.provider_routing import ProviderCapabilityTruth, provider_capability_truth_for_manifest
 from core.runtime_bootstrap import BootstrappedRuntime, bootstrap_runtime_mode
+from core.runtime_install_profiles import InstallProfileTruth, build_install_profile_truth
 
 
 @dataclass(frozen=True)
 class ProviderRegistrySnapshot:
     warnings: tuple[str, ...]
     audit_rows: tuple[ProviderAuditRow, ...]
+    capability_truth: tuple[ProviderCapabilityTruth, ...]
 
 
 @dataclass(frozen=True)
@@ -27,15 +30,22 @@ class RuntimeBackbone:
     boot: BootstrappedRuntime
     local_model_profile: LocalModelProfile
     provider_snapshot: ProviderRegistrySnapshot
+    install_profile: InstallProfileTruth
 
 
 def build_provider_registry_snapshot(
     registry: ModelRegistry | None = None,
 ) -> ProviderRegistrySnapshot:
     active_registry = registry or ModelRegistry()
+    manifests: tuple[Any, ...]
+    try:
+        manifests = tuple(active_registry.list_manifests(enabled_only=True))
+    except Exception:
+        manifests = tuple()
     return ProviderRegistrySnapshot(
         warnings=tuple(active_registry.startup_warnings()),
         audit_rows=tuple(active_registry.provider_audit_rows()),
+        capability_truth=tuple(provider_capability_truth_for_manifest(manifest) for manifest in manifests),
     )
 
 
@@ -70,6 +80,14 @@ def build_runtime_backbone(
         summary["backend_device"] = boot.backend_selection.device
         summary["backend_reason"] = boot.backend_selection.reason
     provider_snapshot = build_provider_registry_snapshot(registry)
+    install_profile = build_install_profile_truth(
+        probe=probe,
+        tier=tier,
+        provider_capability_truth=provider_snapshot.capability_truth,
+        runtime_home=getattr(getattr(boot, "context", None), "paths", None).runtime_home
+        if getattr(getattr(boot, "context", None), "paths", None) is not None
+        else None,
+    )
     return RuntimeBackbone(
         boot=boot,
         local_model_profile=LocalModelProfile(
@@ -78,6 +96,7 @@ def build_runtime_backbone(
             summary=summary,
         ),
         provider_snapshot=provider_snapshot,
+        install_profile=install_profile,
     )
 
 

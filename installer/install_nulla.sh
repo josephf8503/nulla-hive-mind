@@ -297,6 +297,28 @@ print(json.dumps(tier_summary(), ensure_ascii=False))
 }
 
 
+detect_install_profile() {
+  local runtime_home="$1"
+  local model_tag="$2"
+  NULLA_HOME="${runtime_home}" "${VENV_DIR}/bin/python" -c "
+from core.runtime_install_profiles import build_install_profile_truth
+profile = build_install_profile_truth(selected_model='${model_tag}', runtime_home='${runtime_home}')
+print(profile.profile_id)
+" 2>/dev/null || echo "local-only"
+}
+
+
+detect_install_profile_summary() {
+  local runtime_home="$1"
+  local model_tag="$2"
+  NULLA_HOME="${runtime_home}" "${VENV_DIR}/bin/python" -c "
+from core.runtime_install_profiles import build_install_profile_truth
+profile = build_install_profile_truth(selected_model='${model_tag}', runtime_home='${runtime_home}')
+print(profile.display_summary())
+" 2>/dev/null || echo "local-only -> ${model_tag}"
+}
+
+
 install_playwright_runtime() {
   say "Step 3/14: Installing Playwright browser runtime..."
   if "${VENV_DIR}/bin/python" -m playwright install "${DEFAULT_BROWSER_ENGINE}" >/tmp/nulla_playwright_install.log 2>&1; then
@@ -818,11 +840,17 @@ main() {
 
   local hardware_summary
   local model_tag
+  local install_profile
+  local install_profile_summary
   hardware_summary="$(detect_hardware_summary)"
   model_tag="$(detect_model_tag)"
+  install_profile="$(detect_install_profile "${runtime_home}" "${model_tag}")"
+  install_profile_summary="$(detect_install_profile_summary "${runtime_home}" "${model_tag}")"
   say "Step 6/14: Hardware probe complete."
   say "Detected: ${hardware_summary}"
   say "Selected model: ${model_tag}"
+  say "Install profile: ${install_profile}"
+  say "Profile summary: ${install_profile_summary}"
 
   say "Step 7/14: Creating launchers..."
   write_launcher "${PROJECT_ROOT}/Start_NULLA.sh" "${runtime_home}"
