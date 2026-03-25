@@ -21,7 +21,8 @@ Current execution truth:
 - envelope-aware provider routing now fails closed for local-private or mutating coder work without a local lane, and it penalizes saturated candidates instead of blindly taking the first ranked provider
 - envelope scheduling now also understands attached provider-capability truth: queue pressure degrades lane priority, incompatible worker lanes can fail closed with `capacity_blocked`, and queen execution exposes scheduling details instead of only child order
 - `task_router.py` now emits explicit model constraints for locality, structured-output pressure, long-context preference, code-complex preference, and queue-pressure strategy instead of leaving those hints implicit
-- `execution/planner.py` can now turn explicit replace-and-validate repo requests into a bounded queen/coder/verifier `orchestration.execute_envelope` run instead of only emitting flat tool chains
+- `execution/planner.py` can now turn clear repo edit requests into bounded queen/coder/verifier `orchestration.execute_envelope` runs, including the current local baseline for search/read/patch/validate when the file path is omitted but the replacement is concrete
+- `orchestration/executor.py` now resolves step-to-step runtime references for that bounded operator lane and fails closed on ambiguous search results instead of guessing the mutation target
 - `model_teacher_pipeline.py` now records routing requirements/rejections in provenance and backs off saturated provider lanes during execution instead of blindly fanning out across every selected candidate
 - `agent_runtime/response.py` now rewrites routing/capacity leak payloads and capacity-blocked worker failures into terse operator-safe language instead of dumping scheduler/provider JSON into chat surfaces
 
