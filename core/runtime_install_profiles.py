@@ -254,6 +254,10 @@ def _provider_mix(
     env: Mapping[str, str],
 ) -> tuple[tuple[InstallProfileProvider, ...], list[str]]:
     local_provider_id = _find_local_provider_id(provider_capability_truth, model_tag=model_tag)
+    secondary_local_provider_id = _find_secondary_local_provider_id(
+        provider_capability_truth,
+        primary_provider_id=local_provider_id,
+    )
     kimi_provider_id = _find_remote_provider_id(provider_capability_truth, hint="kimi")
     fallback_provider_id = _find_remote_provider_id(provider_capability_truth, hint=None, exclude={kimi_provider_id})
     providers: list[InstallProfileProvider] = []
@@ -272,12 +276,16 @@ def _provider_mix(
     if profile_id in {"local-max", "full-orchestrated"}:
         providers.append(
             InstallProfileProvider(
-                provider_id=local_provider_id,
+                provider_id=secondary_local_provider_id,
                 role="verifier",
                 locality="local",
                 required=True,
                 configured=True,
-                notes="Secondary local verification lane.",
+                notes=(
+                    "Secondary local verification lane."
+                    if secondary_local_provider_id != local_provider_id
+                    else "Secondary local verification lane on the primary local backend."
+                ),
             )
         )
     if profile_id == "hybrid-kimi":
@@ -352,6 +360,25 @@ def _find_local_provider_id(
         if item.locality == "local":
             return item.provider_id
     return f"ollama-local:{model_tag}"
+
+
+def _find_secondary_local_provider_id(
+    provider_capability_truth: tuple[ProviderCapabilityTruth, ...],
+    *,
+    primary_provider_id: str,
+) -> str:
+    preferred_provider_id = ""
+    fallback_provider_id = ""
+    for item in provider_capability_truth:
+        if item.locality != "local" or item.provider_id == primary_provider_id:
+            continue
+        if not fallback_provider_id:
+            fallback_provider_id = item.provider_id
+        lowered = item.provider_id.lower()
+        if item.role_fit == "verifier" or lowered.startswith("vllm-local:") or lowered.startswith("llamacpp-local:"):
+            preferred_provider_id = item.provider_id
+            break
+    return preferred_provider_id or fallback_provider_id or primary_provider_id
 
 
 def _find_remote_provider_id(

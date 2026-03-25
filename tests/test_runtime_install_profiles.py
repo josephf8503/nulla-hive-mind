@@ -91,3 +91,64 @@ def test_explicit_full_orchestrated_profile_fails_closed_when_keys_and_space_are
     assert any("single target volume" in reason for reason in profile.reasons)
     assert profile.volume_checks
     assert profile.volume_checks[0].required_gb > profile.volume_checks[0].free_gb
+
+
+def test_local_max_profile_prefers_distinct_local_verifier_lane_when_llamacpp_is_available() -> None:
+    probe = MachineProbe(
+        cpu_cores=16,
+        ram_gb=32.0,
+        gpu_name="Apple Silicon",
+        vram_gb=18.0,
+        accelerator="mps",
+    )
+    tier = QwenTier("mid", "qwen2.5:14b", 14.0, 10.0, 24.0)
+    profile = build_install_profile_truth(
+        requested_profile="local-max",
+        probe=probe,
+        tier=tier,
+        selected_model="qwen2.5:14b",
+        env={},
+        provider_capability_truth=(
+            ProviderCapabilityTruth(
+                provider_id="ollama-local:qwen2.5:14b",
+                model_id="qwen2.5:14b",
+                role_fit="coder",
+                context_window=32768,
+                tool_support=("structured_json",),
+                structured_output_support=True,
+                tokens_per_second=16.0,
+                ram_budget_gb=24.0,
+                vram_budget_gb=0.0,
+                quantization="Q4_K_M",
+                locality="local",
+                privacy_class="local_private",
+                queue_depth=0,
+                max_safe_concurrency=1,
+            ),
+            ProviderCapabilityTruth(
+                provider_id="llamacpp-local:qwen2.5:14b-gguf",
+                model_id="qwen2.5:14b-gguf",
+                role_fit="verifier",
+                context_window=16384,
+                tool_support=("structured_json",),
+                structured_output_support=True,
+                tokens_per_second=22.0,
+                ram_budget_gb=20.0,
+                vram_budget_gb=0.0,
+                quantization="Q6_K",
+                locality="local",
+                privacy_class="local_private",
+                queue_depth=0,
+                max_safe_concurrency=1,
+            ),
+        ),
+        runtime_home="/tmp/nulla-runtime",
+    )
+
+    assert profile.profile_id == "local-max"
+    assert profile.ready is True
+    assert any(item.provider_id == "ollama-local:qwen2.5:14b" and item.role == "coder" for item in profile.provider_mix)
+    assert any(
+        item.provider_id == "llamacpp-local:qwen2.5:14b-gguf" and item.role == "verifier"
+        for item in profile.provider_mix
+    )
