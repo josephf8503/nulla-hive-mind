@@ -247,6 +247,7 @@ def extract_observation_followup_hints(observation: dict[str, Any] | None) -> di
             "intent": intent,
             "symbol": str(payload.get("symbol") or "").strip(),
             "match_count": int(payload.get("match_count") or len(matches)),
+            "paths": [str(item.get("path") or "").strip() for item in matches if str(item.get("path") or "").strip()],
             "primary_path": str(primary.get("path") or "").strip(),
             "primary_line": int(primary.get("line") or 0) if str(primary.get("line") or "").strip() else 0,
             "primary_kind": str(primary.get("kind") or "").strip(),

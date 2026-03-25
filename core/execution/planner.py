@@ -586,6 +586,48 @@ def _latest_read_file_hints(steps: list[dict[str, Any]], *, path: str) -> dict[s
     return {}
 
 
+def _diagnostic_symbol_query(query: str) -> str:
+    normalized = str(query or "").strip()
+    if not normalized:
+        return ""
+    call_match = re.search(r"([A-Za-z_][A-Za-z0-9_\.]*)\s*\(", normalized)
+    candidate = str(call_match.group(1) or "").strip() if call_match else ""
+    if not candidate:
+        full_match = re.fullmatch(r"[A-Za-z_][A-Za-z0-9_\.]*", normalized)
+        candidate = str(full_match.group(0) or "").strip() if full_match else ""
+    if not candidate:
+        return ""
+    symbol = candidate.split(".")[-1].strip()
+    if not symbol:
+        return ""
+    if symbol.lower() in {"assertionerror", "traceback", "exception", "error", "failed"}:
+        return ""
+    return symbol
+
+
+def _planned_diagnostic_lookup_followup(
+    *,
+    steps: list[dict[str, Any]],
+    diagnostic_query: str,
+    symbol_reason: str,
+    search_reason: str,
+) -> WorkflowPlannerDecision | None:
+    symbol = _diagnostic_symbol_query(diagnostic_query)
+    if symbol and not _workflow_step_exists(steps, "workspace.symbol_search", key="symbol", value=symbol):
+        return WorkflowPlannerDecision(
+            handled=True,
+            reason=symbol_reason,
+            next_payload={"intent": "workspace.symbol_search", "arguments": {"symbol": symbol, "limit": 10}},
+        )
+    if diagnostic_query and not _workflow_step_exists(steps, "workspace.search_text", key="query", value=diagnostic_query):
+        return WorkflowPlannerDecision(
+            handled=True,
+            reason=search_reason,
+            next_payload={"intent": "workspace.search_text", "arguments": {"query": diagnostic_query, "limit": 10}},
+        )
+    return None
+
+
 def _infer_literal_candidate_repair(
     *,
     user_text: str,
@@ -1265,6 +1307,48 @@ def plan_tool_workflow(
             )
         return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_search", stop_after=True)
 
+    if last_intent == "workspace.symbol_search":
+        path = str(hints.get("primary_path") or "").strip()
+        line = int(hints.get("primary_line") or 0)
+        candidate_paths = []
+        for candidate in [path, *list(hints.get("paths") or [])]:
+            normalized = str(candidate or "").strip()
+            if normalized and normalized not in candidate_paths:
+                candidate_paths.append(normalized)
+        next_path = ""
+        next_line = 0
+        for candidate in candidate_paths:
+            if _workflow_step_exists(steps, "workspace.read_file", key="path", value=candidate):
+                continue
+            next_path = candidate
+            next_line = line if candidate == path else 0
+            break
+        if next_path:
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_read_after_symbol_search",
+                next_payload={
+                    "intent": "workspace.read_file",
+                    "arguments": {
+                        "path": next_path,
+                        "start_line": max(1, next_line - 8) if next_line else 1,
+                        "max_lines": 60,
+                    },
+                },
+            )
+        latest_validation_hints = _latest_failed_validation_hints(steps)
+        diagnostic_query = str(latest_validation_hints.get("diagnostic_query") or "").strip()
+        if diagnostic_query:
+            fallback = _planned_diagnostic_lookup_followup(
+                steps=steps,
+                diagnostic_query=diagnostic_query,
+                symbol_reason="planned_symbol_search_after_validation_inspection",
+                search_reason="planned_search_after_symbol_search",
+            )
+            if fallback is not None and fallback.next_payload["intent"] == "workspace.search_text":
+                return fallback
+        return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_symbol_search", stop_after=True)
+
     if last_intent == "workspace.read_file":
         read_path = str(hints.get("path") or "").strip()
         latest_validation_hints = _latest_failed_validation_hints(steps)
@@ -1341,12 +1425,15 @@ def plan_tool_workflow(
                     next_payload=next_payload,
                 )
         diagnostic_query = str(latest_validation_hints.get("diagnostic_query") or "").strip()
-        if diagnostic_query and not _workflow_step_exists(steps, "workspace.search_text", key="query", value=diagnostic_query):
-            return WorkflowPlannerDecision(
-                handled=True,
-                reason="planned_search_after_validation_inspection",
-                next_payload={"intent": "workspace.search_text", "arguments": {"query": diagnostic_query, "limit": 10}},
+        if diagnostic_query:
+            lookup_followup = _planned_diagnostic_lookup_followup(
+                steps=steps,
+                diagnostic_query=diagnostic_query,
+                symbol_reason="planned_symbol_search_after_validation_inspection",
+                search_reason="planned_search_after_validation_inspection",
             )
+            if lookup_followup is not None:
+                return lookup_followup
         return WorkflowPlannerDecision(handled=True, reason="workspace_stop_after_read", stop_after=True)
 
     if last_intent == "workspace.ensure_directory":
@@ -1451,12 +1538,15 @@ def plan_tool_workflow(
                     next_payload={"intent": "workspace.read_file", "arguments": {"path": target_path, "start_line": 1, "max_lines": 120}},
                 )
         diagnostic_query = str(hints.get("diagnostic_query") or "").strip()
-        if diagnostic_query and not _workflow_step_exists(steps, "workspace.search_text", key="query", value=diagnostic_query):
-            return WorkflowPlannerDecision(
-                handled=True,
-                reason="planned_search_after_command_failure",
-                next_payload={"intent": "workspace.search_text", "arguments": {"query": diagnostic_query, "limit": 10}},
+        if diagnostic_query:
+            lookup_followup = _planned_diagnostic_lookup_followup(
+                steps=steps,
+                diagnostic_query=diagnostic_query,
+                symbol_reason="planned_symbol_search_after_command_failure",
+                search_reason="planned_search_after_command_failure",
             )
+            if lookup_followup is not None:
+                return lookup_followup
         return WorkflowPlannerDecision(handled=True, reason="command_stop_after_failure", stop_after=True)
 
     if last_intent in {"workspace.run_tests", "workspace.run_lint", "workspace.run_formatter"}:
@@ -1479,12 +1569,15 @@ def plan_tool_workflow(
                 },
             )
         diagnostic_query = str(hints.get("diagnostic_query") or "").strip()
-        if diagnostic_query and not _workflow_step_exists(steps, "workspace.search_text", key="query", value=diagnostic_query):
-            return WorkflowPlannerDecision(
-                handled=True,
-                reason="planned_search_after_validation_failure",
-                next_payload={"intent": "workspace.search_text", "arguments": {"query": diagnostic_query, "limit": 10}},
+        if diagnostic_query:
+            lookup_followup = _planned_diagnostic_lookup_followup(
+                steps=steps,
+                diagnostic_query=diagnostic_query,
+                symbol_reason="planned_symbol_search_after_validation_failure",
+                search_reason="planned_search_after_validation_failure",
             )
+            if lookup_followup is not None:
+                return lookup_followup
         return WorkflowPlannerDecision(handled=True, reason="validation_stop_after_failure", stop_after=True)
 
     return WorkflowPlannerDecision(handled=False, reason="no_followup_plan")

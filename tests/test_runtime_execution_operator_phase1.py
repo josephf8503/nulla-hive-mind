@@ -494,8 +494,8 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             )
 
             self.assertTrue(third.handled)
-            self.assertEqual(third.next_payload["intent"], "workspace.search_text")
-            self.assertIn("answer", third.next_payload["arguments"]["query"])
+            self.assertEqual(third.next_payload["intent"], "workspace.symbol_search")
+            self.assertEqual(third.next_payload["arguments"]["symbol"], "answer")
 
             fourth = plan_tool_workflow(
                 user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
@@ -524,18 +524,18 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
                         },
                     },
                     {
-                        "tool_name": "workspace.search_text",
+                        "tool_name": "workspace.symbol_search",
                         "arguments": dict(third.next_payload["arguments"]),
                         "observation": {
-                            "intent": "workspace.search_text",
+                            "intent": "workspace.symbol_search",
                             "tool_surface": "workspace",
                             "ok": True,
                             "status": "executed",
-                            "query": str(third.next_payload["arguments"]["query"]),
+                            "symbol": str(third.next_payload["arguments"]["symbol"]),
                             "match_count": 2,
                             "matches": [
-                                {"path": "test_app.py", "line": 4, "snippet": "assert answer() == 42"},
-                                {"path": "app.py", "line": 1, "snippet": "def answer():"},
+                                {"path": "test_app.py", "line": 1, "kind": "reference", "snippet": "from app import answer"},
+                                {"path": "app.py", "line": 1, "kind": "function_definition", "snippet": "def answer():"},
                             ],
                         },
                     },
@@ -574,18 +574,18 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
                         },
                     },
                     {
-                        "tool_name": "workspace.search_text",
+                        "tool_name": "workspace.symbol_search",
                         "arguments": dict(third.next_payload["arguments"]),
                         "observation": {
-                            "intent": "workspace.search_text",
+                            "intent": "workspace.symbol_search",
                             "tool_surface": "workspace",
                             "ok": True,
                             "status": "executed",
-                            "query": str(third.next_payload["arguments"]["query"]),
+                            "symbol": str(third.next_payload["arguments"]["symbol"]),
                             "match_count": 2,
                             "matches": [
-                                {"path": "test_app.py", "line": 4, "snippet": "assert answer() == 42"},
-                                {"path": "app.py", "line": 1, "snippet": "def answer():"},
+                                {"path": "test_app.py", "line": 1, "kind": "reference", "snippet": "from app import answer"},
+                                {"path": "app.py", "line": 1, "kind": "function_definition", "snippet": "def answer():"},
                             ],
                         },
                     },

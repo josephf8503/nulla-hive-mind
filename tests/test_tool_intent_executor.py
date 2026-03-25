@@ -946,9 +946,9 @@ class ToolIntentExecutorTests(unittest.TestCase):
         )
 
         self.assertTrue(decision.handled)
-        self.assertEqual(decision.reason, "planned_search_after_validation_failure")
-        self.assertEqual(decision.next_payload["intent"], "workspace.search_text")
-        self.assertEqual(decision.next_payload["arguments"]["query"], "AssertionError: answer() == 42")
+        self.assertEqual(decision.reason, "planned_symbol_search_after_validation_failure")
+        self.assertEqual(decision.next_payload["intent"], "workspace.symbol_search")
+        self.assertEqual(decision.next_payload["arguments"]["symbol"], "answer")
 
     def test_workflow_planner_can_continue_from_validation_inspection_into_diagnostic_search(self) -> None:
         decision = plan_tool_workflow(
@@ -994,11 +994,11 @@ class ToolIntentExecutorTests(unittest.TestCase):
         )
 
         self.assertTrue(decision.handled)
-        self.assertEqual(decision.reason, "planned_search_after_validation_inspection")
-        self.assertEqual(decision.next_payload["intent"], "workspace.search_text")
-        self.assertEqual(decision.next_payload["arguments"]["query"], "AssertionError: answer() == 42")
+        self.assertEqual(decision.reason, "planned_symbol_search_after_validation_inspection")
+        self.assertEqual(decision.next_payload["intent"], "workspace.symbol_search")
+        self.assertEqual(decision.next_payload["arguments"]["symbol"], "answer")
 
-    def test_workflow_planner_reads_first_unseen_match_after_validation_search(self) -> None:
+    def test_workflow_planner_reads_first_unseen_match_after_validation_symbol_search(self) -> None:
         decision = plan_tool_workflow(
             user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
             task_class="debugging",
@@ -1038,18 +1038,18 @@ class ToolIntentExecutorTests(unittest.TestCase):
                     },
                 },
                 {
-                    "tool_name": "workspace.search_text",
-                    "arguments": {"query": "answer(", "limit": 10},
+                    "tool_name": "workspace.symbol_search",
+                    "arguments": {"symbol": "answer", "limit": 10},
                     "observation": {
-                        "intent": "workspace.search_text",
+                        "intent": "workspace.symbol_search",
                         "tool_surface": "workspace",
                         "ok": True,
                         "status": "executed",
-                        "query": "answer(",
+                        "symbol": "answer",
                         "match_count": 2,
                         "matches": [
-                            {"path": "test_app.py", "line": 4, "snippet": "assert answer() == 42"},
-                            {"path": "app.py", "line": 1, "snippet": "def answer():"},
+                            {"path": "test_app.py", "line": 1, "kind": "reference", "snippet": "from app import answer"},
+                            {"path": "app.py", "line": 1, "kind": "function_definition", "snippet": "def answer():"},
                         ],
                     },
                 },
@@ -1058,10 +1058,71 @@ class ToolIntentExecutorTests(unittest.TestCase):
         )
 
         self.assertTrue(decision.handled)
-        self.assertEqual(decision.reason, "planned_read_after_search")
+        self.assertEqual(decision.reason, "planned_read_after_symbol_search")
         self.assertEqual(decision.next_payload["intent"], "workspace.read_file")
         self.assertEqual(decision.next_payload["arguments"]["path"], "app.py")
         self.assertEqual(decision.next_payload["arguments"]["start_line"], 1)
+
+    def test_workflow_planner_falls_back_to_text_search_after_empty_symbol_search(self) -> None:
+        decision = plan_tool_workflow(
+            user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
+            task_class="debugging",
+            executed_steps=[
+                {
+                    "tool_name": "workspace.run_tests",
+                    "arguments": {"command": "python3 -m pytest -q test_app.py"},
+                    "observation": {
+                        "intent": "workspace.run_tests",
+                        "tool_surface": "workspace",
+                        "ok": False,
+                        "status": "executed",
+                        "command": "python3 -m pytest -q test_app.py",
+                        "cwd": ".",
+                        "returncode": 1,
+                        "success": False,
+                        "error_path": "test_app.py",
+                        "error_line": 4,
+                        "diagnostic_query": "answer(",
+                    },
+                },
+                {
+                    "tool_name": "workspace.read_file",
+                    "arguments": {"path": "test_app.py", "start_line": 1, "max_lines": 60},
+                    "observation": {
+                        "intent": "workspace.read_file",
+                        "tool_surface": "workspace",
+                        "ok": True,
+                        "status": "executed",
+                        "path": "test_app.py",
+                        "start_line": 1,
+                        "line_count": 4,
+                        "lines": [
+                            {"line_number": 1, "text": "from app import answer"},
+                            {"line_number": 4, "text": "    assert answer() == 42"},
+                        ],
+                    },
+                },
+                {
+                    "tool_name": "workspace.symbol_search",
+                    "arguments": {"symbol": "answer", "limit": 10},
+                    "observation": {
+                        "intent": "workspace.symbol_search",
+                        "tool_surface": "workspace",
+                        "ok": True,
+                        "status": "no_results",
+                        "symbol": "answer",
+                        "match_count": 0,
+                        "matches": [],
+                    },
+                },
+            ],
+            source_context={"surface": "openclaw", "platform": "openclaw", "workspace": "/tmp/nulla-acceptance"},
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_search_after_symbol_search")
+        self.assertEqual(decision.next_payload["intent"], "workspace.search_text")
+        self.assertEqual(decision.next_payload["arguments"]["query"], "answer(")
 
     def test_workflow_planner_can_emit_candidate_repair_after_validation_diagnosis(self) -> None:
         decision = plan_tool_workflow(
@@ -1103,18 +1164,18 @@ class ToolIntentExecutorTests(unittest.TestCase):
                     },
                 },
                 {
-                    "tool_name": "workspace.search_text",
-                    "arguments": {"query": "answer(", "limit": 10},
+                    "tool_name": "workspace.symbol_search",
+                    "arguments": {"symbol": "answer", "limit": 10},
                     "observation": {
-                        "intent": "workspace.search_text",
+                        "intent": "workspace.symbol_search",
                         "tool_surface": "workspace",
                         "ok": True,
                         "status": "executed",
-                        "query": "answer(",
+                        "symbol": "answer",
                         "match_count": 2,
                         "matches": [
-                            {"path": "test_app.py", "line": 4, "snippet": "assert answer() == 42"},
-                            {"path": "app.py", "line": 1, "snippet": "def answer():"},
+                            {"path": "test_app.py", "line": 1, "kind": "reference", "snippet": "from app import answer"},
+                            {"path": "app.py", "line": 1, "kind": "function_definition", "snippet": "def answer():"},
                         ],
                     },
                 },
