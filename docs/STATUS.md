@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved eighty-six areas:
+The current `main` checkpoint materially improved eighty-eight areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -178,12 +178,16 @@ The current `main` checkpoint materially improved eighty-six areas:
    Successful operator validation runs can now promote local `ProcedureShardV1` records behind `core/learning/`, with tracked mutation linkage, rollback references, and reuse citations showing up in later task-envelope inputs instead of learning being only a narrated future concept.
 86. **Liquefy proof-boundary cleanup**
    NULLA no longer imports Liquefy internals directly. `core/liquefy_bridge.py` now sits on top of the CLI+JSON adapter in `core/liquefy_client.py` / `core/liquefy_models.py`, which gives the proof/archive lane an optional but explicit machine-readable contract and a clean local fallback when Liquefy is unavailable.
+87. **Install-profile truth baseline**
+   NULLA now has an explicit install/runtime profile contract behind `core/runtime_install_profiles.py`. Auto-recommended vs local-only/local-max vs hybrid/full profiles are now selected from actual hardware tier plus configured provider keys, and the profile includes honest download/disk/RAM expectations instead of the installer pretending every machine is the same.
+88. **Provider/install capability surfacing**
+   `core/runtime_backbone.py`, `core/runtime_capabilities.py`, `installer/write_install_receipt.py`, and `installer/doctor.py` now surface provider capability truth plus single-volume free-space checks, so the runtime/installer can say when a profile is not actually ready instead of only reporting the chosen model tag.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1383 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1385 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -203,13 +207,13 @@ Current test gate on this checkpoint:
 | **Trace Rail (local viewer)** | **Works** | Browser UI showing your own agent's execution in real time. `core/runtime_task_rail.py` is now the thin document facade; document assembly and shell composition live behind `core/runtime_task_rail_document.py`; the asset seam now fans out to `core/runtime_task_rail_shell.py` and `core/runtime_task_rail_styles.py` behind the tiny `core/runtime_task_rail_assets.py` compatibility module; `core/runtime_task_rail_client.py` is now the thin browser facade; polling and event/session rendering now live behind `core/runtime_task_rail_polling.py` and `core/runtime_task_rail_event_render.py`; and the session-summary derivation still lives behind `core/runtime_task_rail_summary_client.py`. |
 | **Coding operator baseline** | **Works** | Repo/workspace inspection, unified-diff patching, git status/diff, bounded tests/lint/format, tracked rollback, procedure promotion, and local proof artifacts are now explicit runtime tools instead of generic shell-only behavior. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
-| **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. |
+| **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. Provider capability truth now also surfaces role fit, queue depth, max safe concurrency, and tool/structured-output support instead of only listing adapters. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
-| **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1383 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1385 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |

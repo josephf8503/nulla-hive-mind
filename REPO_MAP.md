@@ -36,12 +36,13 @@ Core lane:
 2. `docs/SYSTEM_SPINE.md`
 3. `docs/CONTROL_PLANE.md`
 4. `core/runtime_backbone.py`
-5. `core/provider_routing.py`
-6. `core/memory_first_router.py`
-7. `docs/PLATFORM_REFACTOR_PLAN.md`
-8. `docs/PROOF_PATH.md`
-9. `docs/STATUS.md`
-10. `CONTRIBUTING.md`
+5. `core/runtime_install_profiles.py`
+6. `core/provider_routing.py`
+7. `core/memory_first_router.py`
+8. `docs/PLATFORM_REFACTOR_PLAN.md`
+9. `docs/PROOF_PATH.md`
+10. `docs/STATUS.md`
+11. `CONTRIBUTING.md`
 
 ## Package Maps
 
@@ -212,6 +213,8 @@ Core lane:
 ## Current Agent Runtime Spine
 
 - `apps/nulla_agent.py`: thin runtime composition root
+- `core/runtime_backbone.py`: startup/runtime/provider snapshot facade for hardware tier, provider audit rows, and install-profile truth
+- `core/runtime_install_profiles.py`: authoritative install/runtime profile selection, disk-volume checks, and provider-key readiness truth
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
 - `core/runtime_tool_contracts.py`: authoritative runtime intent contract map for workspace, git, validation, sandbox, Hive, web, and operator execution

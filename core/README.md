@@ -19,6 +19,7 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `runtime_context.py`
   - `runtime_bootstrap.py`
   - `runtime_backbone.py`
+  - `runtime_install_profiles.py`
   - `runtime_paths.py`
   - `runtime_capabilities.py`
 - provider/model routing:

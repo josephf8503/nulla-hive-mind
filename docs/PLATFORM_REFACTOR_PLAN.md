@@ -12,6 +12,7 @@ The rule for every phase:
 - reduce blast radius instead of adding more mixed logic
 - preserve behavior through facades and shims where needed
 - run cumulative regression at each step
+- keep install/runtime profile truth in one place instead of cloning selection logic into shell scripts and doctor payloads
 
 ## Why This Exists
 
@@ -27,6 +28,8 @@ The refactor-only pass is frozen. The current beta bar is execution hardening:
 
 - keep the new coding/operator lane real: workspace inspection, diff-based patching, git state, bounded validation, rollback, and emitted artifacts
 - keep typed task envelopes live in the routing path instead of letting provider/model decisions drift back to implicit guesses
+- keep install-profile truth honest: profile selection, disk/RAM expectations, and provider-key requirements should come from one contract instead of installer folklore
+- keep provider capability truth surfaced: role fit, queue depth, safe concurrency, and tool support should stay machine-readable instead of hiding in adapter metadata
 - keep Liquefy behind the CLI+JSON boundary in `core/liquefy_client.py` and `core/liquefy_bridge.py`; do not re-import vendor internals
 - keep verified procedure promotion local-first and citation-backed instead of narrating “learning” without proof
 
@@ -47,8 +50,10 @@ The current trunk still has a short list of blast-radius centers plus a few newl
 | `core/agent_runtime/runtime_gate_policy.py` | 38 | runtime approval/gate policy now lives behind a dedicated gate seam |
 | `core/runtime_execution_tools.py` | 1485 | this is the real feature hotspot again after Phase 1: it now owns the coding/operator execution baseline, mutation tracking, rollback, and validation flow; split it only along behavior seams, not for line-count theater |
 | `core/runtime_tool_contracts.py` | 312 | the operator surface is now explicit here; keep the contract map authoritative and do not let new workspace/git/validation actions bypass it |
+| `core/runtime_install_profiles.py` | 488 | new install/runtime truth hotspot; it now owns profile selection, disk-volume checks, provider-key gating, and download/footprint estimates, so keep it as the one authoritative install-profile contract instead of duplicating logic in installers or dashboards |
 | `core/liquefy_bridge.py` | 351 | the proof/archive bridge is now a facade over the CLI client and local fallbacks; do not let Liquefy vendor-specific logic leak back into this file |
 | `core/liquefy_client.py` | 234 | new CLI+JSON proof adapter; keep it stable and machine-readable instead of turning it into heuristic subprocess glue |
+| `installer/doctor.py` | 201 | doctor now reports install-profile readiness and single-volume free-space truth; do not let it drift into a second install-profile implementation |
 | `core/orchestration/task_envelope.py` | 87 | typed task-envelope contract is now real and live in routing metadata; preserve the schema and role defaults as the stable subtask boundary |
 | `core/learning/procedure_shards.py` | 109 | verified procedure persistence is now live; keep it local-first and citation-backed instead of letting it become another vague shard format |
 | `core/agent_runtime/nullabook_runtime.py` | 264 | NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction are now isolated behind a dedicated runtime seam |
