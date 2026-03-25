@@ -7,7 +7,7 @@ from typing import Any
 from core.runtime_execution_tools import RuntimeExecutionResult, execute_runtime_tool
 from core.runtime_tool_contracts import runtime_tool_contract_map
 
-from .resource_scheduler import schedule_task_envelopes
+from .resource_scheduler import evaluate_task_envelope_capacity, schedule_task_envelopes
 from .result_merge import merge_task_results
 from .role_contracts import get_role_contract
 from .task_envelope import TaskEnvelopeV1, task_envelope_from_dict
@@ -83,6 +83,22 @@ def _execute_worker_envelope(
     runtime_tool_executor: Callable[[str, dict[str, Any], dict[str, Any] | None], RuntimeExecutionResult] | None,
 ) -> EnvelopeExecutionResult:
     contract = get_role_contract(envelope.role)
+    capacity_state = evaluate_task_envelope_capacity(envelope)
+    if capacity_state.availability_state == "blocked":
+        reason = ", ".join(capacity_state.notes) or "provider capacity gate blocked this task"
+        return EnvelopeExecutionResult(
+            envelope=envelope,
+            ok=False,
+            status="capacity_blocked",
+            output_text=(
+                f"{envelope.role} envelope `{envelope.task_id}` is blocked by provider-capacity policy: {reason}."
+            ),
+            details={
+                "capacity_state": capacity_state.to_dict(),
+                "steps": [],
+                "role_contract": contract.role,
+            },
+        )
     steps = [dict(step) for step in list(envelope.inputs.get("runtime_tools") or []) if isinstance(step, dict)]
     if not steps:
         return EnvelopeExecutionResult(
@@ -193,6 +209,7 @@ def _execute_worker_envelope(
         receipts=tuple(receipts),
         details={
             "score": 1.0,
+            "capacity_state": capacity_state.to_dict(),
             "step_results": step_results,
         },
     )
@@ -288,6 +305,7 @@ def _execute_queen_envelope(
         details={
             "graph": _graph_snapshot(graph),
             "scheduled_children": [item.task_id for item in scheduled],
+            "scheduled_details": [item.to_dict() for item in scheduled],
             "child_results": [item.merge_payload() for item in child_results],
             "merged_result": merged,
             "score": float(merged.get("winner", {}).get("score") or (1.0 if ok else 0.0)),

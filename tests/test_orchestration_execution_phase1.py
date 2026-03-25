@@ -107,6 +107,48 @@ class OrchestrationExecutionPhase1Tests(unittest.TestCase):
             self.assertEqual(result.status, "permission_denied")
             self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "print('hello')\n")
 
+    def test_coder_envelope_fails_closed_when_attached_provider_lane_is_remote_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("print('hello')\n", encoding="utf-8")
+            patch_text = "\n".join(
+                [
+                    "--- a/app.py",
+                    "+++ b/app.py",
+                    "@@ -1 +1 @@",
+                    "-print('hello')",
+                    "+print('goodbye')",
+                    "",
+                ]
+            )
+            envelope = build_task_envelope(
+                role="coder",
+                task_id="coder-remote-lane",
+                goal="Patch through remote-only lane",
+                model_constraints={
+                    "provider_capability_truth": [
+                        {
+                            "provider_id": "kimi:k2",
+                            "role_fit": "queen",
+                            "locality": "remote",
+                            "tool_support": ["structured_json", "code_complex"],
+                            "structured_output_support": True,
+                            "queue_depth": 0,
+                            "max_safe_concurrency": 4,
+                        }
+                    ]
+                },
+                inputs={"runtime_tools": [{"intent": "workspace.apply_unified_diff", "arguments": {"patch": patch_text}}]},
+                required_receipts=("tool_receipt",),
+            )
+
+            result = execute_task_envelope(envelope, workspace_root=tmpdir)
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.status, "capacity_blocked")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "print('hello')\n")
+            self.assertEqual(result.details["capacity_state"]["availability_state"], "blocked")
+
     def test_queen_envelope_executes_children_and_merges_results_deterministically(self) -> None:
         coder = build_task_envelope(
             role="coder",

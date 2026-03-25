@@ -9,6 +9,7 @@ from core.model_teacher_pipeline import ModelTeacherPipeline
 from core.orchestration import (
     TaskGraph,
     build_task_envelope,
+    evaluate_task_envelope_capacity,
     get_role_contract,
     merge_task_results,
     request_cancellation,
@@ -83,6 +84,75 @@ class OrchestrationPhase1Tests(unittest.TestCase):
         scheduled = schedule_task_envelopes([slow, fast])
 
         self.assertEqual(scheduled[0].task_id, "fast")
+
+    def test_scheduler_deprioritizes_saturated_lane_when_capacity_truth_is_present(self) -> None:
+        saturated = build_task_envelope(
+            role="coder",
+            goal="Implement on busy lane",
+            task_id="busy",
+            model_constraints={
+                "provider_capability_truth": [
+                    {
+                        "provider_id": "local-busy:qwen",
+                        "role_fit": "drone",
+                        "locality": "local",
+                        "tool_support": ["structured_json", "code_complex"],
+                        "structured_output_support": True,
+                        "queue_depth": 3,
+                        "max_safe_concurrency": 1,
+                    }
+                ]
+            },
+        )
+        ready = build_task_envelope(
+            role="coder",
+            goal="Implement on ready lane",
+            task_id="ready",
+            model_constraints={
+                "provider_capability_truth": [
+                    {
+                        "provider_id": "local-ready:qwen",
+                        "role_fit": "drone",
+                        "locality": "local",
+                        "tool_support": ["structured_json", "code_complex"],
+                        "structured_output_support": True,
+                        "queue_depth": 0,
+                        "max_safe_concurrency": 2,
+                    }
+                ]
+            },
+        )
+
+        scheduled = schedule_task_envelopes([saturated, ready])
+
+        self.assertEqual(scheduled[0].task_id, "ready")
+        self.assertEqual(scheduled[1].availability_state, "degraded")
+        self.assertGreater(scheduled[1].queue_pressure, 1.0)
+
+    def test_capacity_evaluator_blocks_local_writer_without_local_lane(self) -> None:
+        envelope = build_task_envelope(
+            role="coder",
+            goal="Patch on remote-only lane",
+            task_id="remote-writer",
+            model_constraints={
+                "provider_capability_truth": [
+                    {
+                        "provider_id": "kimi:k2",
+                        "role_fit": "queen",
+                        "locality": "remote",
+                        "tool_support": ["structured_json", "code_complex"],
+                        "structured_output_support": True,
+                        "queue_depth": 0,
+                        "max_safe_concurrency": 4,
+                    }
+                ]
+            },
+        )
+
+        capacity = evaluate_task_envelope_capacity(envelope)
+
+        self.assertEqual(capacity.availability_state, "blocked")
+        self.assertIn("requires_local_provider", capacity.notes)
 
     def test_build_task_envelope_for_request_attaches_reusable_procedure_citations(self) -> None:
         shard = ProcedureShardV1.create(
