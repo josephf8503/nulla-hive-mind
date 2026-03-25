@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +48,16 @@ def is_probably_text(path: Path) -> bool:
     except Exception:
         return False
     return b"\x00" not in sample
+
+
+def force_fresh_source_timestamp(path: Path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+    stat_result = path.stat()
+    current_second = int(stat_result.st_mtime)
+    target_second = max(current_second + 1, int(time.time()))
+    target_ns = target_second * 1_000_000_000
+    os.utime(path, ns=(target_ns, target_ns))
 
 
 def iter_workspace_files(
@@ -241,6 +253,8 @@ def apply_unified_diff_workspace(
         if exists_after and snapshot["before_text"].endswith("\n") and after_text and not after_text.endswith("\n"):
             after_text = after_text + "\n"
             target.write_text(after_text, encoding="utf-8")
+        if exists_after and target.is_file():
+            force_fresh_source_timestamp(target)
         action = "updated"
         if not snapshot["existed_before"] and exists_after:
             action = "created"

@@ -638,6 +638,34 @@ def _validation_step_from_request(*, user_text: str, explicit_command: str) -> d
     return None
 
 
+def _looks_like_failing_test_repair_request(
+    user_text: str,
+    *,
+    validation_step: dict[str, Any] | None,
+) -> bool:
+    if not isinstance(validation_step, dict):
+        return False
+    if str(validation_step.get("intent") or "").strip() != "workspace.run_tests":
+        return False
+    lowered = re.sub(r"[^a-z0-9]+", " ", str(user_text or "").lower())
+    lowered = f" {' '.join(lowered.split())} "
+    failure_markers = (
+        " failing test ",
+        " failing tests ",
+        " tests are failing ",
+        " test is failing ",
+        " broken test ",
+        " broken tests ",
+        " pytest is failing ",
+        " traceback ",
+        " stack trace ",
+        " assertionerror ",
+        " fix the test ",
+        " fix the tests ",
+    )
+    return any(marker in lowered for marker in failure_markers)
+
+
 def _planned_orchestrated_operator_payload(
     *,
     user_text: str,
@@ -677,6 +705,27 @@ def _planned_orchestrated_operator_payload(
     task_suffix = hashlib.sha1(f"{task_class}|{path}|{old_text}|{new_text}|{explicit_command}".encode()).hexdigest()[:12]
     queen_id = f"queen-{task_suffix}"
     privacy_class = str(source_context.get("share_scope") or "local_only")
+    preflight_verifier = None
+    preflight_task_id = f"preflight-verify-{task_suffix}"
+    final_verifier_dependencies = [f"coder-{task_suffix}"]
+    if _looks_like_failing_test_repair_request(user_text, validation_step=validation_step):
+        preflight_step = {
+            "step_id": "capture-failing-validation",
+            **dict(validation_step),
+            "allow_failure": True,
+        }
+        preflight_verifier = build_task_envelope(
+            role="verifier",
+            task_id=preflight_task_id,
+            parent_task_id=queen_id,
+            goal="Capture the current failing test state before any workspace mutation.",
+            inputs={
+                "task_class": "debugging",
+                "runtime_tools": [preflight_step],
+            },
+            required_receipts=("tool_receipt", "validation_result"),
+            privacy_class=privacy_class,
+        )
     if path:
         coder_tools = [
             {"step_id": "inspect-target", "intent": "workspace.read_file", "arguments": {"path": path, "start_line": 1, "max_lines": 240}},
@@ -730,6 +779,7 @@ def _planned_orchestrated_operator_payload(
         ),
         inputs={
             "task_class": str(task_class or "debugging").strip() or "debugging",
+            "depends_on": [preflight_task_id] if preflight_verifier is not None else [],
             "runtime_tools": coder_tools,
         },
         required_receipts=("tool_receipt",),
@@ -742,7 +792,7 @@ def _planned_orchestrated_operator_payload(
         goal="Validate the requested workspace change.",
         inputs={
             "task_class": "file_inspection",
-            "depends_on": [coder.task_id],
+            "depends_on": final_verifier_dependencies,
             "runtime_tools": [validation_step],
         },
         required_receipts=("tool_receipt", "validation_result"),
@@ -762,7 +812,11 @@ def _planned_orchestrated_operator_payload(
             **dict(queen.inputs or {}),
             "task_class": str(task_class or queen.inputs.get("task_class") or "unknown"),
             "planner_source": "execution_planner",
-            "subtasks": [coder.to_dict(), verifier.to_dict()],
+            "subtasks": [
+                *( [preflight_verifier.to_dict()] if preflight_verifier is not None else [] ),
+                coder.to_dict(),
+                verifier.to_dict(),
+            ],
         },
         "merge_strategy": "highest_score",
         "required_receipts": [],

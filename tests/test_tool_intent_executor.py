@@ -915,6 +915,30 @@ class ToolIntentExecutorTests(unittest.TestCase):
         self.assertTrue(coder_steps[1]["arguments"]["path"]["$require_single_match"])
         self.assertEqual(coder_steps[2]["intent"], "workspace.replace_in_file")
 
+    def test_workflow_planner_can_emit_preflight_failing_test_repair_envelope(self) -> None:
+        decision = plan_tool_workflow(
+            user_text=(
+                "tests are failing. replace `return 41` with `return 42` in app.py, "
+                "then run `python3 -m pytest -q test_app.py`"
+            ),
+            task_class="debugging",
+            executed_steps=[],
+            source_context={"surface": "openclaw", "platform": "openclaw", "workspace": "/tmp/nulla-acceptance"},
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_orchestrated_operator_envelope")
+        envelope = dict(decision.next_payload["arguments"]["task_envelope"])
+        subtasks = list(envelope["inputs"]["subtasks"])
+        self.assertEqual([item["role"] for item in subtasks], ["verifier", "coder", "verifier"])
+        preflight = subtasks[0]
+        coder = subtasks[1]
+        postverify = subtasks[2]
+        self.assertTrue(preflight["inputs"]["runtime_tools"][0]["allow_failure"])
+        self.assertEqual(preflight["inputs"]["runtime_tools"][0]["intent"], "workspace.run_tests")
+        self.assertEqual(coder["inputs"]["depends_on"], [preflight["task_id"]])
+        self.assertEqual(postverify["inputs"]["depends_on"], [coder["task_id"]])
+
     def test_workflow_planner_stops_after_orchestrated_operator_envelope(self) -> None:
         decision = plan_tool_workflow(
             user_text="replace `return 41` with `return 42` in app.py, then run `python3 -m pytest -q test_app.py`",

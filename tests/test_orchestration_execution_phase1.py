@@ -329,6 +329,90 @@ class OrchestrationExecutionPhase1Tests(unittest.TestCase):
             self.assertEqual(result.details["step_results"][0]["step_id"], "locate-target")
             self.assertEqual(result.details["step_results"][2]["arguments"]["path"], "app.py")
 
+    def test_coder_envelope_can_continue_after_allowed_failure_validation_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+            envelope = build_task_envelope(
+                role="coder",
+                task_id="coder-preflight-failure",
+                goal="Capture failing tests, patch, then verify cleanly",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {
+                            "step_id": "capture-failing-tests",
+                            "intent": "workspace.run_tests",
+                            "arguments": {"command": "python3 -m pytest -q test_app.py"},
+                            "allow_failure": True,
+                        },
+                        {
+                            "step_id": "patch-target",
+                            "intent": "workspace.replace_in_file",
+                            "arguments": {
+                                "path": "app.py",
+                                "old_text": "return 41",
+                                "new_text": "return 42",
+                                "replace_all": True,
+                            },
+                        },
+                        {
+                            "step_id": "verify-clean",
+                            "intent": "workspace.run_tests",
+                            "arguments": {"command": "python3 -m pytest -q test_app.py"},
+                        },
+                    ],
+                },
+                required_receipts=("tool_receipt", "validation_result"),
+            )
+
+            result = execute_task_envelope(envelope, workspace_root=tmpdir)
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
+            self.assertFalse(result.details["step_results"][0]["ok"])
+            self.assertTrue(result.details["step_results"][0]["failure_allowed"])
+            self.assertTrue(result.details["step_results"][2]["ok"])
+
+    def test_worker_envelope_rejects_allow_failure_on_non_validation_step(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            envelope = build_task_envelope(
+                role="coder",
+                task_id="coder-invalid-allow-failure",
+                goal="Reject invalid allow failure usage",
+                inputs={
+                    "task_class": "debugging",
+                    "runtime_tools": [
+                        {
+                            "step_id": "patch-target",
+                            "intent": "workspace.replace_in_file",
+                            "arguments": {
+                                "path": "app.py",
+                                "old_text": "return 41",
+                                "new_text": "return 42",
+                                "replace_all": True,
+                            },
+                            "allow_failure": True,
+                        },
+                    ],
+                },
+                required_receipts=("tool_receipt",),
+            )
+
+            result = execute_task_envelope(envelope, workspace_root=tmpdir)
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.status, "invalid_allow_failure")
+            self.assertIn("only validation steps can continue after failure", result.output_text)
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 41\n")
+
     def test_coder_envelope_fails_closed_when_search_reference_is_ambiguous(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

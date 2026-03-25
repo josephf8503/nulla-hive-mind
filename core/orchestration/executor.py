@@ -189,6 +189,33 @@ def _execute_worker_envelope(
                     "step_results": step_results,
                 },
             )
+        tool_contract = runtime_tool_contract_map().get(intent)
+        allow_failure_requested = bool(step.get("allow_failure", False))
+        if allow_failure_requested and (
+            tool_contract is None or tool_contract.capability_id != "workspace.validate"
+        ):
+            return EnvelopeExecutionResult(
+                envelope=envelope,
+                ok=False,
+                status="invalid_allow_failure",
+                output_text=(
+                    f"{envelope.role} envelope `{envelope.task_id}` requested `allow_failure` for `{intent}`, "
+                    "but only validation steps can continue after failure."
+                ),
+                receipts=tuple(receipts),
+                details={
+                    "failed_step": index,
+                    "failed_step_id": step_id,
+                    "failed_intent": intent,
+                    "role_contract": contract.role,
+                    "step_results": step_results,
+                },
+            )
+        allow_failure = bool(
+            allow_failure_requested
+            and tool_contract is not None
+            and tool_contract.capability_id == "workspace.validate"
+        )
         runtime_result = execute_tool(intent, arguments, active_context)
         step_payload = {
             "step_id": step_id,
@@ -198,6 +225,8 @@ def _execute_worker_envelope(
             "response_text": runtime_result.response_text,
             "arguments": dict(arguments or {}),
             "details": dict(runtime_result.details or {}),
+            "allow_failure": allow_failure,
+            "failure_allowed": bool(allow_failure and not runtime_result.ok),
         }
         step_results.append(step_payload)
         step_results_by_id[step_id] = step_payload
@@ -211,8 +240,6 @@ def _execute_worker_envelope(
                     "observation": dict(runtime_result.details.get("observation") or {}),
                 }
             )
-        contract_map = runtime_tool_contract_map()
-        tool_contract = contract_map.get(intent)
         if tool_contract is not None and tool_contract.capability_id == "workspace.validate":
             receipts.append(
                 {
@@ -224,7 +251,7 @@ def _execute_worker_envelope(
                     "returncode": runtime_result.details.get("returncode"),
                 }
             )
-        if not runtime_result.ok:
+        if not runtime_result.ok and not allow_failure:
             return EnvelopeExecutionResult(
                 envelope=envelope,
                 ok=False,

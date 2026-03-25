@@ -21,6 +21,7 @@ from core.execution.git_tools import git_diff_workspace, git_status_workspace
 from core.execution.validation_tools import render_validation_result, runtime_validation_command, validation_command
 from core.execution.workspace_tools import (
     apply_unified_diff_workspace,
+    force_fresh_source_timestamp,
     list_tree_workspace,
     symbol_search_workspace,
 )
@@ -871,6 +872,7 @@ def _write_file(arguments: dict[str, Any], *, workspace_root: Path, session_id: 
     existed = target.exists()
     previous = target.read_text(encoding="utf-8", errors="replace") if existed else ""
     target.write_text(content, encoding="utf-8")
+    force_fresh_source_timestamp(target)
     line_count = len(content.splitlines()) or (1 if content else 0)
     relative_path = _relative_path(target, workspace_root=workspace_root)
     diff_artifact = build_file_diff_artifact(
@@ -1008,6 +1010,7 @@ def _replace_in_file(arguments: dict[str, Any], *, workspace_root: Path, session
         updated = content.replace(old_text, new_text, 1)
         replaced = 1
     target.write_text(updated, encoding="utf-8")
+    force_fresh_source_timestamp(target)
     relative_path = _relative_path(target, workspace_root=workspace_root)
     diff_artifact = build_file_diff_artifact(
         path=relative_path,
