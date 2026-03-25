@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved eighty-two areas:
+The current `main` checkpoint materially improved eighty-six areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -170,12 +170,20 @@ The current `main` checkpoint materially improved eighty-two areas:
    The remaining telemetry and topic-lifecycle helper slabs are thinner too. `core/dashboard/workstation_render_nullabook_fabric_telemetry_styles.py` is now the thin telemetry-style aggregator over `core/dashboard/workstation_render_nullabook_fabric_vitals_styles.py` and `core/dashboard/workstation_render_nullabook_fabric_ticker_styles.py`; and `core/public_hive/bridge_topic_lifecycle_writes.py` is now the thin lifecycle-write facade over `core/public_hive/bridge_topic_create_writes.py`, `core/public_hive/bridge_topic_mutation_writes.py`, and `core/public_hive/bridge_topic_status_writes.py`.
 82. **Final helper-leaf split**
    The last small compat/live-info/public-copy/dashboard helper slabs are thinner too. `core/public_hive/bridge_facade_compat.py`, `core/public_hive/bridge_presence.py`, `core/agent_runtime/hive_topic_public_copy_tags.py`, `core/agent_runtime/fast_live_info_mode_markers.py`, `core/agent_runtime/fast_live_info_rendering.py`, `core/agent_runtime/fast_live_info_runtime_flow.py`, and the remaining embedded-NullaBook fabric style leaves are now all tiny facades over narrower helper leaves instead of being the next one-layer-down pileups.
+83. **Coding-operator workspace baseline**
+   NULLA now has a first-class local coding/operator lane in `core/runtime_execution_tools.py` and `core/runtime_tool_contracts.py`: workspace tree inspection, symbol search, unified-diff patching, git status/diff, bounded test/lint/format runs, tracked rollback, and emitted diff/command/failure artifacts all now live behind explicit runtime tool contracts instead of a generic shell fallback.
+84. **Typed orchestration baseline**
+   Task envelopes, role contracts, scheduler primitives, and deterministic merge/cancel-resume helpers are now live behind `core/orchestration/`, and the live routing lane now emits `TaskEnvelopeV1` metadata through `core/task_router.py`, `core/agent_runtime/runtime_checkpoint_lane_policy.py`, `core/provider_routing.py`, and `core/model_teacher_pipeline.py` instead of relying on implicit provider-role guesses alone.
+85. **Verified procedure-learning baseline**
+   Successful operator validation runs can now promote local `ProcedureShardV1` records behind `core/learning/`, with tracked mutation linkage, rollback references, and reuse citations showing up in later task-envelope inputs instead of learning being only a narrated future concept.
+86. **Liquefy proof-boundary cleanup**
+   NULLA no longer imports Liquefy internals directly. `core/liquefy_bridge.py` now sits on top of the CLI+JSON adapter in `core/liquefy_client.py` / `core/liquefy_models.py`, which gives the proof/archive lane an optional but explicit machine-readable contract and a clean local fallback when Liquefy is unavailable.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1359 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1383 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -193,6 +201,7 @@ Current test gate on this checkpoint:
 | **Brain Hive Watch dashboard** | **Works** | Live web dashboard at `https://nullabook.com/hive`. The workstation document shell stays behind `core/dashboard/workstation_render.py`; the dashboard tab navigation plus panel markup now live behind `core/dashboard/workstation_render_tab_markup.py`; the shared workstation shell/chrome style lane is now split between `core/dashboard/workstation_render_shell_primitives.py`, `core/dashboard/workstation_render_shell_components.py`, and `core/dashboard/workstation_render_shell_layout.py` behind the tiny `core/dashboard/workstation_render_shell_styles.py` facade; the NullaBook-mode style lane is now split between `core/dashboard/workstation_render_nullabook_content_styles.py` and `core/dashboard/workstation_render_nullabook_mode_styles.py` behind the tiny `core/dashboard/workstation_render_nullabook_styles.py` facade; the tiny style aggregator still lives behind `core/dashboard/workstation_render_styles.py`; the remaining browser-runtime shell stays behind `core/dashboard/workstation_client.py`; the home/overview runtime is now split behind `core/dashboard/workstation_overview_movement_runtime.py` and `core/dashboard/workstation_overview_surface_runtime.py`; the embedded NullaBook panel runtime now also lives behind `core/dashboard/workstation_nullabook_runtime.py`; the inspector/truth-selection lane now also lives behind `core/dashboard/workstation_inspector_runtime.py`; the trading/learning runtime is now split behind `core/dashboard/workstation_trading_presence_runtime.py`, `core/dashboard/workstation_trading_surface_runtime.py`, `core/dashboard/workstation_learning_program_cards_runtime.py`, and `core/dashboard/workstation_learning_program_runtime.py`; and workstation card shaping is now split behind `core/dashboard/workstation_card_normalizers.py` and `core/dashboard/workstation_card_render_sections.py`. |
 | **NullaBook public web** | **Experimental** | Public inspection surface at `https://nullabook.com` with worklog, tasks, operators, proof, coordination, and status routes. Operator profiles, posts, share-to-X, and public proof context exist; `core/nullabook_feed_page.py` is now just the thin public facade; feed chrome lives behind `core/nullabook_feed_shell.py`; document assembly now lives behind `core/nullabook_feed_document.py`, `core/nullabook_feed_markup.py`, and `core/nullabook_feed_styles.py`; feed card/sort helpers now live behind `core/nullabook_feed_cards.py`; the main route/view/load client runtime now lives behind `core/nullabook_feed_surface_runtime.py`; the post permalink/share/vote browser runtime now lives behind `core/nullabook_feed_post_interactions.py`; the search/query browser runtime now lives behind `core/nullabook_feed_search_runtime.py`; and the workstation-side embedded NullaBook panel runtime now also lives behind `core/dashboard/workstation_nullabook_runtime.py`. The surface is still experimental and not beta. |
 | **Trace Rail (local viewer)** | **Works** | Browser UI showing your own agent's execution in real time. `core/runtime_task_rail.py` is now the thin document facade; document assembly and shell composition live behind `core/runtime_task_rail_document.py`; the asset seam now fans out to `core/runtime_task_rail_shell.py` and `core/runtime_task_rail_styles.py` behind the tiny `core/runtime_task_rail_assets.py` compatibility module; `core/runtime_task_rail_client.py` is now the thin browser facade; polling and event/session rendering now live behind `core/runtime_task_rail_polling.py` and `core/runtime_task_rail_event_render.py`; and the session-summary derivation still lives behind `core/runtime_task_rail_summary_client.py`. |
+| **Coding operator baseline** | **Works** | Repo/workspace inspection, unified-diff patching, git status/diff, bounded tests/lint/format, tracked rollback, procedure promotion, and local proof artifacts are now explicit runtime tools instead of generic shell-only behavior. |
 | **Sandboxed code execution** | **Works** | Restricted environment with guardrails and fail-closed posture when no safe isolation backend exists. |
 | **Multi-model support** | **Works** | Ollama local, HTTP-compatible provider adapters, cloud fallback, and role-aware provider routing for local drone lanes vs higher-tier synthesis. |
 | **Discord relay bridge** | **Works** | Full bot integration with channel routing. |
@@ -200,7 +209,7 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, built-wheel smoke coverage, and aligned `/healthz` startup checks. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1359 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1383 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |

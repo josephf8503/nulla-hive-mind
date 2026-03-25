@@ -214,6 +214,25 @@ Core lane:
 - `apps/nulla_agent.py`: thin runtime composition root
 - `core/provider_routing.py`: role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - `core/memory_first_router.py`: main model execution router that now honors provider-role routing for slow-lane synthesis and tool-intent selection
+- `core/runtime_tool_contracts.py`: authoritative runtime intent contract map for workspace, git, validation, sandbox, Hive, web, and operator execution
+- `core/runtime_execution_tools.py`: coding/operator execution surface for workspace inspection, diff patching, git status/diff, bounded validation, rollback, and emitted artifacts
+- `core/execution/workspace_tools.py`: workspace tree, symbol search, and unified-diff patch helpers
+- `core/execution/git_tools.py`: bounded git status/diff helpers
+- `core/execution/validation_tools.py`: bounded test/lint/format command helpers and result shaping
+- `core/execution/artifacts.py`: diff, command, failure, mutation-history, and rollback/procedure-link artifacts
+- `core/orchestration/task_envelope.py`: `TaskEnvelopeV1` schema and role-default builder
+- `core/orchestration/role_contracts.py`: queen/coder/verifier/researcher/memory-clerk/narrator contracts
+- `core/orchestration/resource_scheduler.py`: envelope priority and provider-role scheduling helpers
+- `core/orchestration/task_graph.py`: task-graph node/status model
+- `core/orchestration/cancel_resume.py`: cancel/resume propagation helpers
+- `core/orchestration/result_merge.py`: deterministic subtask result merge helpers
+- `core/learning/procedure_shards.py`: `ProcedureShardV1` local persistence and load/save helpers
+- `core/learning/procedure_promotion.py`: verified procedure promotion gate
+- `core/learning/reuse_ranker.py`: later-task procedure reuse ranking
+- `core/learning/procedure_metrics.py`: procedure shareability/success metrics
+- `core/liquefy_bridge.py`: proof/archive facade over the Liquefy CLI adapter plus local fallback artifacts
+- `core/liquefy_client.py`: Liquefy CLI+JSON adapter
+- `core/liquefy_models.py`: NULLA-side Liquefy self-test/proof/restore/search result models
 - `core/agent_runtime/runtime_checkpoint_support.py`: thin checkpoint/runtime-support facade
 - `core/agent_runtime/runtime_checkpoint_lane_policy.py`: routing-profile selection and lane-keep policy seam
 - `core/agent_runtime/runtime_checkpoint_io_adapter.py`: checkpoint/task/source-context adapter seam

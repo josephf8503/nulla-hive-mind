@@ -21,6 +21,15 @@ NULLA already has the right system spine:
 
 The repo shape is still carrying too much risk in a small set of giant files. The goal of this plan is to lower change risk without pretending the platform needs a ground-up rewrite.
 
+## Current Execution Phase
+
+The refactor-only pass is frozen. The current beta bar is execution hardening:
+
+- keep the new coding/operator lane real: workspace inspection, diff-based patching, git state, bounded validation, rollback, and emitted artifacts
+- keep typed task envelopes live in the routing path instead of letting provider/model decisions drift back to implicit guesses
+- keep Liquefy behind the CLI+JSON boundary in `core/liquefy_client.py` and `core/liquefy_bridge.py`; do not re-import vendor internals
+- keep verified procedure promotion local-first and citation-backed instead of narrating “learning” without proof
+
 ## Verified Current Risk Snapshot
 
 The current trunk still has a short list of blast-radius centers plus a few newly-thin facades that must not re-bloat:
@@ -33,9 +42,15 @@ The current trunk still has a short list of blast-radius centers plus a few newl
 | `core/agent_runtime/task_persistence_support.py` | 195 | task-class updates, task-outcome persistence, verified-action shard promotion, and local shard persistence are now isolated behind a dedicated runtime support seam |
 | `core/agent_runtime/proceed_intent_support.py` | 63 | proceed/resume request normalization, explicit resume detection, and generic proceed-message matching are now isolated behind a dedicated runtime intent-policy seam |
 | `core/agent_runtime/runtime_checkpoint_support.py` | 205 | now the thin runtime checkpoint facade over the lane-policy, I/O-adapter, and gate-policy seams |
-| `core/agent_runtime/runtime_checkpoint_lane_policy.py` | 137 | routing-profile selection, explicit workflow detection, and lane-keep policy now live behind a dedicated checkpoint policy seam |
+| `core/agent_runtime/runtime_checkpoint_lane_policy.py` | 154 | routing-profile selection, explicit workflow detection, lane-keep policy, and emitted task-envelope metadata now live behind a dedicated checkpoint policy seam |
 | `core/agent_runtime/runtime_checkpoint_io_adapter.py` | 96 | checkpoint/task/source-context adapter logic now lives behind a dedicated checkpoint I/O seam |
 | `core/agent_runtime/runtime_gate_policy.py` | 38 | runtime approval/gate policy now lives behind a dedicated gate seam |
+| `core/runtime_execution_tools.py` | 1485 | this is the real feature hotspot again after Phase 1: it now owns the coding/operator execution baseline, mutation tracking, rollback, and validation flow; split it only along behavior seams, not for line-count theater |
+| `core/runtime_tool_contracts.py` | 312 | the operator surface is now explicit here; keep the contract map authoritative and do not let new workspace/git/validation actions bypass it |
+| `core/liquefy_bridge.py` | 351 | the proof/archive bridge is now a facade over the CLI client and local fallbacks; do not let Liquefy vendor-specific logic leak back into this file |
+| `core/liquefy_client.py` | 234 | new CLI+JSON proof adapter; keep it stable and machine-readable instead of turning it into heuristic subprocess glue |
+| `core/orchestration/task_envelope.py` | 87 | typed task-envelope contract is now real and live in routing metadata; preserve the schema and role defaults as the stable subtask boundary |
+| `core/learning/procedure_shards.py` | 109 | verified procedure persistence is now live; keep it local-first and citation-backed instead of letting it become another vague shard format |
 | `core/agent_runtime/nullabook_runtime.py` | 264 | NullaBook intent classification, pending-step flow, post/edit/delete/rename handling, and request-text extraction are now isolated behind a dedicated runtime seam |
 | `core/agent_runtime/tool_result_surface.py` | 15 | now the thin tool-result facade over the truth-metrics, text-surface, history-surface, and workflow-surface seams |
 | `core/agent_runtime/tool_result_truth_metrics.py` | 117 | chat-truth claim metrics and audit logging now live behind a dedicated truth-metrics seam |
@@ -331,6 +346,12 @@ Quarantine in narrative and architecture priority:
 - settlement / token / DEX / marketplace layers
 - anything that reads broader than the current proof path
 
+Current execution-phase rule:
+
+- do not go back to refactor-for-refactor’s-sake
+- only split a file when new execution work exposes a real mixed-responsibility failure
+- prefer stronger contracts, safer receipts, and verified end-to-end work over smaller line counts
+
 ## Phase Order
 
 ### Phase 1 - Extract `core/execution/` from `core/tool_intent_executor.py`
@@ -338,6 +359,9 @@ Quarantine in narrative and architecture priority:
 Status on trunk:
 
 - `core/execution/` is already live with planner, models, receipts, web tools, and Hive tools
+- the coding/operator baseline is now also live with `core/execution/workspace_tools.py`, `core/execution/git_tools.py`, `core/execution/validation_tools.py`, and `core/execution/artifacts.py`
+- `core/liquefy_bridge.py` now sits on the optional CLI+JSON adapter in `core/liquefy_client.py` / `core/liquefy_models.py` instead of importing vendor internals directly
+- typed task envelopes and local procedure learning are now also live behind `core/orchestration/` and `core/learning/`
 - `core/tool_intent_executor.py` is down to 446 lines
 - this is no longer a top-tier monolith; keep the facade thin and stop letting new execution concerns leak back in
 

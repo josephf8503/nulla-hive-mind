@@ -28,6 +28,26 @@ It does not own raw persistence primitives or low-level transport details. Those
   - `runtime_execution_tools.py`
   - `runtime_tool_contracts.py`
   - `tool_intent_executor.py`
+  - `execution/workspace_tools.py`
+  - `execution/git_tools.py`
+  - `execution/validation_tools.py`
+  - `execution/artifacts.py`
+- typed orchestration:
+  - `orchestration/task_envelope.py`
+  - `orchestration/role_contracts.py`
+  - `orchestration/resource_scheduler.py`
+  - `orchestration/task_graph.py`
+  - `orchestration/cancel_resume.py`
+  - `orchestration/result_merge.py`
+- local procedure learning:
+  - `learning/procedure_shards.py`
+  - `learning/procedure_promotion.py`
+  - `learning/reuse_ranker.py`
+  - `learning/procedure_metrics.py`
+- proof/archive bridge:
+  - `liquefy_bridge.py`
+  - `liquefy_client.py`
+  - `liquefy_models.py`
 - agent runtime slices:
   - `agent_runtime/runtime_checkpoint_support.py`
   - `agent_runtime/runtime_checkpoint_lane_policy.py`
