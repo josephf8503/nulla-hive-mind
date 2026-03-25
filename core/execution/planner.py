@@ -577,6 +577,22 @@ def _explicit_replace_request(user_text: str) -> dict[str, str] | None:
     return None
 
 
+def _explicit_unified_diff_request(user_text: str) -> str:
+    text = str(user_text or "")
+    if not text.strip():
+        return ""
+    fenced = re.search(
+        r"```(?:diff|patch)\s*\n(?P<patch>.*?)(?:\n```|```)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if fenced:
+        patch = str(fenced.group("patch") or "").strip("\n")
+        if patch and "--- " in patch and "+++ " in patch and "@@ " in patch:
+            return patch
+    return ""
+
+
 def _explicit_command_request(user_text: str) -> str:
     text = str(user_text or "").strip()
     if not text:
@@ -672,6 +688,7 @@ def _planned_orchestrated_operator_payload(
     task_class: str,
     source_context: dict[str, Any] | None,
     replacement: dict[str, Any] | None,
+    patch_text: str,
     explicit_command: str,
 ) -> dict[str, Any] | None:
     source_context = dict(source_context or {})
@@ -679,17 +696,22 @@ def _planned_orchestrated_operator_payload(
     if not workspace:
         return None
     replace_payload = dict(replacement or {})
+    normalized_patch = str(patch_text or "").strip()
     path = str(replace_payload.get("path") or "").strip()
     old_text = str(replace_payload.get("old_text") or "").strip()
     new_text = str(replace_payload.get("new_text") or "").strip()
-    if not (path and old_text and new_text):
+    if not normalized_patch and not (path and old_text and new_text):
         if not (old_text and new_text):
             return None
     validation_step = _validation_step_from_request(user_text=user_text, explicit_command=explicit_command)
     if validation_step is None:
         return None
-    lowered = f" {' '.join(str(user_text or '').lower().split())} "
-    if not any(marker in lowered for marker in (" replace ", " patch ", " edit ", " change ", " fix ")):
+    normalized_request = re.sub(r"[^a-z0-9]+", " ", str(user_text or "").lower())
+    normalized_request = f" {' '.join(normalized_request.split())} "
+    if not normalized_patch and not any(
+        marker in normalized_request
+        for marker in (" apply ", " replace ", " patch ", " edit ", " change ", " fix ")
+    ):
         return None
     if str(task_class or "").strip().lower() not in {
         "unknown",
@@ -702,7 +724,9 @@ def _planned_orchestrated_operator_payload(
         return None
     from core.orchestration import build_task_envelope
 
-    task_suffix = hashlib.sha1(f"{task_class}|{path}|{old_text}|{new_text}|{explicit_command}".encode()).hexdigest()[:12]
+    task_suffix = hashlib.sha1(
+        f"{task_class}|{path}|{old_text}|{new_text}|{normalized_patch}|{explicit_command}".encode()
+    ).hexdigest()[:12]
     queen_id = f"queen-{task_suffix}"
     privacy_class = str(source_context.get("share_scope") or "local_only")
     preflight_verifier = None
@@ -726,7 +750,15 @@ def _planned_orchestrated_operator_payload(
             required_receipts=("tool_receipt", "validation_result"),
             privacy_class=privacy_class,
         )
-    if path:
+    if normalized_patch:
+        coder_tools = [
+            {
+                "step_id": "apply-patch",
+                "intent": "workspace.apply_unified_diff",
+                "arguments": {"patch": normalized_patch},
+            },
+        ]
+    elif path:
         coder_tools = [
             {"step_id": "inspect-target", "intent": "workspace.read_file", "arguments": {"path": path, "start_line": 1, "max_lines": 240}},
             {
@@ -773,7 +805,9 @@ def _planned_orchestrated_operator_payload(
         task_id=f"coder-{task_suffix}",
         parent_task_id=queen_id,
         goal=(
-            f"Apply the requested workspace change in `{path}`."
+            "Apply the requested unified diff inside the active workspace."
+            if normalized_patch
+            else f"Apply the requested workspace change in `{path}`."
             if path
             else "Locate the requested workspace change target, inspect it, and apply the requested replacement."
         ),
@@ -831,12 +865,14 @@ def plan_tool_workflow(
     executed_steps: list[dict[str, Any]],
     source_context: dict[str, Any] | None,
 ) -> WorkflowPlannerDecision:
-    text = " ".join(str(user_text or "").split()).strip()
+    raw_text = str(user_text or "")
+    text = " ".join(raw_text.split()).strip()
     lowered = f" {text.lower()} "
     followup_resume = _looks_like_followup_resume_request(text)
     steps = [dict(step) for step in list(executed_steps or []) if isinstance(step, dict)]
-    replacement = _explicit_replace_request(text)
-    explicit_command = _explicit_command_request(text)
+    replacement = _explicit_replace_request(raw_text)
+    patch_text = _explicit_unified_diff_request(raw_text)
+    explicit_command = _explicit_command_request(raw_text)
     compare_or_verify = any(marker in lowered for marker in (" compare ", " versus ", " vs ", " verify ", " confirm ", " is it true "))
     lookup_followup_text = ""
     if followup_resume and not (looks_like_explicit_lookup_request(text) or looks_like_public_entity_lookup_request(text)):
@@ -970,10 +1006,11 @@ def plan_tool_workflow(
                 next_payload={"intent": "workspace.ensure_directory", "arguments": {"path": workspace_bootstrap_path}},
             )
         orchestrated_payload = _planned_orchestrated_operator_payload(
-            user_text=text,
+            user_text=raw_text,
             task_class=task_class,
             source_context=source_context,
             replacement=replacement,
+            patch_text=patch_text,
             explicit_command=explicit_command,
         )
         if orchestrated_payload is not None:

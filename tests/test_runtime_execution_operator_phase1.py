@@ -417,6 +417,75 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertTrue(preflight["details"]["step_results"][0]["failure_allowed"])
             self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
 
+    def test_planned_orchestrated_operator_envelope_can_apply_multi_file_diff_and_verify(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text(
+                "from maths import adjust\n\n\ndef answer():\n    return adjust(41)\n",
+                encoding="utf-8",
+            )
+            (workspace / "maths.py").write_text(
+                "def adjust(value):\n    return value\n",
+                encoding="utf-8",
+            )
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+
+            decision = plan_tool_workflow(
+                user_text=(
+                    "tests are failing. apply this patch, then run `python3 -m pytest -q test_app.py`\n"
+                    "```diff\n"
+                    "--- a/app.py\n"
+                    "+++ b/app.py\n"
+                    "@@ -1,4 +1,4 @@\n"
+                    "-from maths import adjust\n"
+                    "+from maths import increment\n"
+                    " \n"
+                    " \n"
+                    " def answer():\n"
+                    "-    return adjust(41)\n"
+                    "+    return increment(41)\n"
+                    "--- a/maths.py\n"
+                    "+++ b/maths.py\n"
+                    "@@ -1,2 +1,2 @@\n"
+                    "-def adjust(value):\n"
+                    "-    return value\n"
+                    "+def increment(value):\n"
+                    "+    return value + 1\n"
+                    "```\n"
+                ),
+                task_class="debugging",
+                executed_steps=[],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(decision.handled)
+            self.assertEqual(decision.next_payload["intent"], "orchestration.execute_envelope")
+            subtasks = list(decision.next_payload["arguments"]["task_envelope"]["inputs"]["subtasks"])
+            self.assertEqual([item["role"] for item in subtasks], ["verifier", "coder", "verifier"])
+            self.assertEqual(subtasks[1]["inputs"]["runtime_tools"][0]["intent"], "workspace.apply_unified_diff")
+
+            result = execute_runtime_tool(
+                decision.next_payload["intent"],
+                dict(decision.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-diff-repair"},
+            )
+
+            assert result is not None
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertIn("coder-", result.details["scheduled_children"][1])
+            self.assertEqual(
+                (workspace / "app.py").read_text(encoding="utf-8"),
+                "from maths import increment\n\n\ndef answer():\n    return increment(41)\n",
+            )
+            self.assertEqual(
+                (workspace / "maths.py").read_text(encoding="utf-8"),
+                "def increment(value):\n    return value + 1\n",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

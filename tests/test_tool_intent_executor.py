@@ -939,6 +939,59 @@ class ToolIntentExecutorTests(unittest.TestCase):
         self.assertEqual(coder["inputs"]["depends_on"], [preflight["task_id"]])
         self.assertEqual(postverify["inputs"]["depends_on"], [coder["task_id"]])
 
+    def test_workflow_planner_can_emit_unified_diff_envelope(self) -> None:
+        decision = plan_tool_workflow(
+            user_text=(
+                "apply this patch, then run `python3 -m pytest -q test_app.py`\n"
+                "```diff\n"
+                "--- a/app.py\n"
+                "+++ b/app.py\n"
+                "@@ -1,2 +1,2 @@\n"
+                " def answer():\n"
+                "-    return 41\n"
+                "+    return 42\n"
+                "```\n"
+            ),
+            task_class="debugging",
+            executed_steps=[],
+            source_context={"surface": "openclaw", "platform": "openclaw", "workspace": "/tmp/nulla-acceptance"},
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_orchestrated_operator_envelope")
+        envelope = dict(decision.next_payload["arguments"]["task_envelope"])
+        subtasks = list(envelope["inputs"]["subtasks"])
+        self.assertEqual([item["role"] for item in subtasks], ["coder", "verifier"])
+        coder_steps = list(subtasks[0]["inputs"]["runtime_tools"])
+        self.assertEqual(coder_steps[0]["intent"], "workspace.apply_unified_diff")
+        self.assertIn("--- a/app.py", coder_steps[0]["arguments"]["patch"])
+
+    def test_workflow_planner_can_emit_preflight_unified_diff_repair_envelope(self) -> None:
+        decision = plan_tool_workflow(
+            user_text=(
+                "tests are failing. apply this patch, then run `python3 -m pytest -q test_app.py`\n"
+                "```diff\n"
+                "--- a/app.py\n"
+                "+++ b/app.py\n"
+                "@@ -1,2 +1,2 @@\n"
+                " def answer():\n"
+                "-    return 41\n"
+                "+    return 42\n"
+                "```\n"
+            ),
+            task_class="debugging",
+            executed_steps=[],
+            source_context={"surface": "openclaw", "platform": "openclaw", "workspace": "/tmp/nulla-acceptance"},
+        )
+
+        self.assertTrue(decision.handled)
+        self.assertEqual(decision.reason, "planned_orchestrated_operator_envelope")
+        envelope = dict(decision.next_payload["arguments"]["task_envelope"])
+        subtasks = list(envelope["inputs"]["subtasks"])
+        self.assertEqual([item["role"] for item in subtasks], ["verifier", "coder", "verifier"])
+        self.assertTrue(subtasks[0]["inputs"]["runtime_tools"][0]["allow_failure"])
+        self.assertEqual(subtasks[1]["inputs"]["runtime_tools"][0]["intent"], "workspace.apply_unified_diff")
+
     def test_workflow_planner_stops_after_orchestrated_operator_envelope(self) -> None:
         decision = plan_tool_workflow(
             user_text="replace `return 41` with `return 42` in app.py, then run `python3 -m pytest -q test_app.py`",

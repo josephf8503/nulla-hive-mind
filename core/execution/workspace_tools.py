@@ -220,6 +220,12 @@ def apply_unified_diff_workspace(
         else:
             errors.append((git_result.stderr or git_result.stdout or "").strip())
     if not applied_with:
+        try:
+            _apply_unified_diff_python(patch_text, workspace_root=workspace_root)
+            applied_with = "python_fallback"
+        except Exception as exc:
+            errors.append(str(exc).strip())
+    if not applied_with:
         patch_available = shutil.which("patch")
         if patch_available:
             strip = "1" if "/dev/null" in patch_text or " a/" in patch_text or " b/" in patch_text or "\na/" in patch_text else "0"
@@ -229,12 +235,6 @@ def apply_unified_diff_workspace(
                 applied_with = "patch"
             else:
                 errors.append((patch_result.stderr or patch_result.stdout or "").strip())
-    if not applied_with:
-        try:
-            _apply_unified_diff_python(patch_text, workspace_root=workspace_root)
-            applied_with = "python_fallback"
-        except Exception as exc:
-            errors.append(str(exc).strip())
     if not applied_with:
         error_text = "; ".join(item for item in errors if item) or "No supported patch engine was available."
         return {
