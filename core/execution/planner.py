@@ -587,6 +587,38 @@ def _latest_read_file_hints(steps: list[dict[str, Any]], *, path: str) -> dict[s
     return {}
 
 
+def _latest_lookup_hints(steps: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+    for step in reversed(list(steps or [])):
+        observation = dict(step.get("observation") or {})
+        intent = str(observation.get("intent") or "").strip()
+        if intent not in {"workspace.symbol_search", "workspace.search_text"}:
+            continue
+        return intent, extract_observation_followup_hints(observation)
+    return "", {}
+
+
+def _next_unread_lookup_path(
+    *,
+    steps: list[dict[str, Any]],
+    hints: dict[str, Any],
+    current_path: str,
+) -> tuple[str, int]:
+    primary_path = str(hints.get("primary_path") or "").strip()
+    primary_line = int(hints.get("primary_line") or 0)
+    candidate_paths: list[str] = []
+    for candidate in [primary_path, *list(hints.get("paths") or [])]:
+        normalized = str(candidate or "").strip()
+        if normalized and normalized not in candidate_paths:
+            candidate_paths.append(normalized)
+    for candidate in candidate_paths:
+        if candidate == current_path:
+            continue
+        if _workflow_step_exists(steps, "workspace.read_file", key="path", value=candidate):
+            continue
+        return candidate, primary_line if candidate == primary_path else 0
+    return "", 0
+
+
 def _diagnostic_symbol_query(query: str) -> str:
     normalized = str(query or "").strip()
     if not normalized:
@@ -1414,6 +1446,30 @@ def plan_tool_workflow(
                         reason="planned_candidate_repair_after_validation_diagnosis",
                         next_payload=orchestrated_payload,
                     )
+        latest_lookup_intent, latest_lookup_hints = _latest_lookup_hints(steps)
+        if str(latest_validation_hints.get("diagnostic_query") or "").strip() and latest_lookup_hints:
+            next_lookup_path, next_lookup_line = _next_unread_lookup_path(
+                steps=steps,
+                hints=latest_lookup_hints,
+                current_path=read_path,
+            )
+            if next_lookup_path:
+                return WorkflowPlannerDecision(
+                    handled=True,
+                    reason=(
+                        "planned_next_read_after_symbol_diagnosis"
+                        if latest_lookup_intent == "workspace.symbol_search"
+                        else "planned_next_read_after_search_diagnosis"
+                    ),
+                    next_payload={
+                        "intent": "workspace.read_file",
+                        "arguments": {
+                            "path": next_lookup_path,
+                            "start_line": max(1, next_lookup_line - 8) if next_lookup_line else 1,
+                            "max_lines": 60,
+                        },
+                    },
+                )
         if explicit_command and not (
             _workflow_step_exists(steps, "sandbox.run_command", key="command", value=explicit_command)
             or _workflow_step_exists(steps, "workspace.run_tests", key="command", value=explicit_command)
