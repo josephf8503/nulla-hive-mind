@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-25.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved one hundred and eight areas:
+The current `main` checkpoint materially improved one hundred and nine areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -222,12 +222,14 @@ The current `main` checkpoint materially improved one hundred and eight areas:
    The bounded queen/coder/verifier lane can now recover from a failed child without pretending the whole workflow is dead or hiding failure behind a bad merge rule. `core/orchestration/executor.py` now lets explicitly-marked fallback children continue after a failed dependency, and `core/orchestration/result_merge.py` now supports ordered `last_success` recovery merges so a later clean verifier result can win a bounded local recovery flow when the parent envelope explicitly opts into that behavior.
 108. **Configured local llama.cpp bootstrap baseline**
    The second local OpenAI-compatible backend is no longer only install-profile theory. `core/runtime_provider_defaults.py` now auto-registers a local `llamacpp-local` manifest whenever `LLAMACPP_BASE_URL` is configured, `core/runtime_backbone.py` surfaces that same local drone-capable lane through provider snapshots, and `core/web/api/runtime.py` now keeps API bootstrap aligned with that shared local-backend truth instead of pretending Ollama and vLLM are the only real local runtime lanes.
+109. **Distinct local verifier-lane install baseline**
+   Install-profile truth no longer flattens every heavier local profile back into the same backend. `core/runtime_install_profiles.py` now prefers a distinct configured local verifier lane like `vllm-local` or `llamacpp-local` for `local-max` and `full-orchestrated` when one is available, so the install/doctor/runtime truth matches the real multi-backend local topology instead of pretending extra local verification always means “run Ollama twice.”
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1451 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1452 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -259,7 +261,7 @@ Current test gate on this checkpoint:
 | **Telegram relay bridge** | **Works** | Bot API with group chat support. |
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts, cached remote-shard reuse surfaces citation metadata, grounded turns persist downstream reuse outcomes, and future cached-remote retrieval can prefer shards that have actually helped before instead of replaying static trust/quality only. |
-| **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready. |
+| **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. The doctor/receipt now report whether the selected install profile is actually ready, and the heavier local profiles can now prefer distinct configured local verifier lanes like `vllm-local` or `llamacpp-local` instead of flattening every local role back into one backend. |
 | **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1448 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist. Not yet proven at scale over internet. |
 | **DHT routing** | **Partial** | Code exists. Not hardened as public routing layer. |
