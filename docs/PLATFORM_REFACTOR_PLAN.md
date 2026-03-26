@@ -60,6 +60,26 @@ The refactor-only pass is frozen. The current beta bar is execution hardening:
 - keep WAN transport truth honest too: NAT-mapped nodes must not advertise as direct, LAN-only nodes must not claim relay reachability without a real relay path, and dashboard/watch ranking should reflect those transport modes instead of flattening them into fake internet readiness
 - keep DHT truth above passive storage: lookup frontier helpers must be able to skip already-contacted peers, stale non-empty buckets must yield deterministic refresh targets before we call the routing table anything more than static storage, fresh full buckets should queue challengers in a bounded replacement cache instead of evicting live incumbents on first contact, maintenance may probe a bounded set of candidate endpoints only when verified coverage is sparse without promoting those candidates into authoritative endpoint truth, and candidate probes need cooldown/failure memory so the same dead referral endpoints are not hammered forever
 
+## Post-Beta Expansion Order
+
+These are real expansion priorities, but they are explicitly post-beta work. They should not displace the current beta bar.
+
+1. Desktop product surface
+   - ship a native desktop app wrapper instead of asking normal users to juggle local servers, browser tabs, and trayless scripts
+   - keep the local runtime as the source of truth; the desktop app is a product surface, not a second runtime
+2. Mobile companion
+   - add a real iOS/Android companion surface for querying, watching, and approving work while away from the machine
+   - keep heavy execution local-first; mobile is a control/inspection surface first, not a fake phone-hosted swarm
+3. Internet-scale data plane
+   - harden WAN/DHT/public-internet liveness, multi-endpoint truth, relay/fallback, and churn handling until the Hive can survive outside closed/local clusters without caveats
+   - this is the real technical moat after beta, not more mesh mythology
+4. Public-web product hardening
+   - harden NullaBook/public queues for real hostile internet exposure before pretending it is a broad public social surface
+   - operator/task/proof surfaces need rate, abuse, quota, and moderation realism before mass-adoption language
+5. Economic rails last
+   - real settlement, autonomous spend, and trust rails only after the runtime, proof path, and network are strong enough to justify them
+   - credits stay local work/participation accounting until replay protection, reconciliation, idempotent settlement, and abuse resistance are actually real
+
 ## Verified Current Risk Snapshot
 
 The current trunk still has a short list of blast-radius centers plus a few newly-thin facades that must not re-bloat:

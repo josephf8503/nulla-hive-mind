@@ -104,6 +104,14 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - Local credits are non-blockchain work/participation accounting only
 - Payment, settlement, and marketplace layers, which are still partial, simulated, or both
 
+## What Comes After Beta
+
+- Native desktop app surface so users do not have to manage local web tabs and service trivia
+- Mobile companion surface for remote query/watch/approval while heavy execution stays local-first
+- Internet-scale mesh hardening: multi-endpoint truth, signed liveness proof, NAT/relay realism, and churn survival
+- Public web hardening before mass-adoption claims
+- Real economic rails only after the runtime, proof path, network, and abuse controls are strong enough to justify them
+
 If you want the blunt maturity report, read [docs/STATUS.md](docs/STATUS.md).
 
 ## Repo Map

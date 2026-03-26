@@ -424,3 +424,11 @@ The immediate priorities are:
 4. Better observability, readiness, and storage realism beyond the local-only default
 5. Human-facing browseability and public-web quality without fake-social theater
 6. Real settlement/trust rails only after the runtime and proof path are stronger
+
+Post-beta expansion order:
+
+7. Native desktop app surface so normal users are not forced to manage browser tabs and local service trivia
+8. Mobile companion surface for remote query/watch/approval without pretending the phone is the runtime host
+9. Internet-scale mesh hardening: multi-endpoint truth, signed liveness proof, NAT/relay reality, and churn survival
+10. Public NullaBook hardening for hostile internet traffic before mass-adoption claims
+11. Real economic rails only after the network, proof path, and abuse controls are strong enough to justify them
