@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.daemon.peer_delivery import send_to_peer_or_log
+from core.daemon.peer_delivery import broadcast_to_recent_peers, send_to_peer_or_log
 from core.discovery_index import (
     candidate_endpoints_for_peer,
     note_verified_peer_endpoint_delivery_result,
@@ -95,3 +95,35 @@ def test_send_to_peer_or_log_updates_candidate_probe_result_when_candidate_used(
     assert candidates[0].last_probe_delivery_ok is True
     assert candidates[0].consecutive_probe_failures == 0
     assert candidates[0].last_probe_attempt_at
+
+
+def test_broadcast_to_recent_peers_uses_ordered_peer_fallback_and_counts_successful_peers() -> None:
+    run_migrations()
+    _clear_tables()
+    register_peer_endpoint("peer-a", "198.51.100.40", 49140, source="observed")
+    register_peer_endpoint("peer-a", "198.51.100.41", 49141, source="observed")
+    register_peer_endpoint("peer-b", "198.51.100.50", 49150, source="observed")
+    note_verified_peer_endpoint_delivery_result("peer-a", "198.51.100.40", 49140, delivered=True)
+
+    attempts: list[tuple[str, int]] = []
+
+    def _send(host: str, port: int, _payload: bytes) -> bool:
+        attempts.append((host, int(port)))
+        return (host, int(port)) in {
+            ("198.51.100.41", 49141),
+            ("198.51.100.50", 49150),
+        }
+
+    sent = broadcast_to_recent_peers(
+        b"hello",
+        message_type="HELLO_AD",
+        target_id="local-peer",
+        limit=4,
+        send_attempt=_send,
+    )
+
+    assert sent == 2
+    assert ("198.51.100.40", 49140) in attempts
+    assert ("198.51.100.41", 49141) in attempts
+    assert ("198.51.100.50", 49150) in attempts
+    assert attempts.index(("198.51.100.40", 49140)) < attempts.index(("198.51.100.41", 49141))

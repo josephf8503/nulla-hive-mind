@@ -5,9 +5,9 @@ import uuid
 from typing import Any
 
 from core import audit_logger, policy_engine
+from core.daemon.peer_delivery import broadcast_to_recent_peers
 from core.discovery_index import (
     peer_trust,
-    recent_peer_endpoints,
     record_signed_peer_endpoint_observation,
     same_host_group_suspect,
     upsert_peer_minimal,
@@ -264,14 +264,21 @@ def handle_report_abuse(daemon: Any, payload: dict[str, Any], sender: str, addr:
         nonce=uuid.uuid4().hex,
         payload=forward_payload,
     )
-    forwarded = 0
-    for peer_id, host, port in recent_peer_endpoints(exclude_peer_id=local_peer_id(), limit=max(16, fanout * 2)):
-        if peer_id == sender:
-            continue
-        if daemon._send_or_log(host, int(port), forward_raw, message_type="REPORT_ABUSE", target_id=report_id):
-            forwarded += 1
-        if forwarded >= fanout:
-            break
+    forwarded = broadcast_to_recent_peers(
+        forward_raw,
+        message_type="REPORT_ABUSE",
+        target_id=report_id,
+        limit=max(16, fanout * 2),
+        fanout=fanout,
+        exclude_peer_ids={sender},
+        send_attempt=lambda host, port, raw: daemon._send_or_log(
+            host,
+            int(port),
+            raw,
+            message_type="REPORT_ABUSE",
+            target_id=report_id,
+        ),
+    )
 
     audit_logger.log(
         "report_abuse_gossiped",

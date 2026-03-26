@@ -4,6 +4,8 @@ import sqlite3
 
 from core.discovery_index import (
     delivery_endpoints_for_peer,
+    delivery_targets_for_peer,
+    note_verified_peer_endpoint_delivery_result,
     record_signed_peer_endpoint_observation,
     register_peer_endpoint,
     register_peer_endpoint_candidate,
@@ -201,4 +203,25 @@ def test_delivery_endpoints_prefer_verified_rows_and_append_candidates() -> None
         ("198.51.100.41", 49141),
         ("198.51.100.40", 49140),
         ("198.51.100.42", 49142),
+    ]
+
+
+def test_delivery_targets_promote_recent_delivery_success_over_registry_only_order() -> None:
+    run_migrations()
+    _clear_endpoint_tables()
+    peer_id = "peer-delivery-liveness"
+    register_peer_endpoint(peer_id, "198.51.100.50", 49150, source="observed")
+    register_peer_endpoint(peer_id, "198.51.100.51", 49151, source="bootstrap")
+    note_verified_peer_endpoint_delivery_result(peer_id, "198.51.100.51", 49151, delivered=True)
+
+    selected = verified_endpoints_for_peer(peer_id, limit=2)
+    targets = delivery_targets_for_peer(peer_id, verified_limit=2, include_candidates=False)
+
+    assert [(item.host, item.port) for item in selected] == [
+        ("198.51.100.51", 49151),
+        ("198.51.100.50", 49150),
+    ]
+    assert [(item.host, item.port) for item in targets] == [
+        ("198.51.100.51", 49151),
+        ("198.51.100.50", 49150),
     ]

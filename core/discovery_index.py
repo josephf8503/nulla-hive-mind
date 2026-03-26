@@ -95,7 +95,21 @@ def _is_verified_endpoint_source(value: str) -> bool:
     return str(value or "").strip().lower() in _VERIFIED_ENDPOINT_SOURCES
 
 
-def _verified_endpoint_sort_key(endpoint: VerifiedPeerEndpoint) -> tuple[int, float, float, int, int, float]:
+def _liveness_tier(endpoint: VerifiedPeerEndpoint) -> int:
+    verification_kind = str(endpoint.verification_kind or "").strip().lower()
+    source = str(endpoint.source or "").strip().lower()
+    if endpoint.last_delivery_success_at:
+        return 4
+    if verification_kind == "protocol_signature" and source == "observed":
+        return 3
+    if verification_kind in {"signed_api_write", "bootstrap_snapshot"}:
+        return 2
+    if source == "self":
+        return 1
+    return 0
+
+
+def _verified_endpoint_sort_key(endpoint: VerifiedPeerEndpoint) -> tuple[int, float, int, float, int, int, float]:
     verified_dt = _parse_dt(endpoint.last_verified_at) or _parse_dt(endpoint.last_seen_at)
     seen_dt = _parse_dt(endpoint.last_seen_at)
     success_dt = _parse_dt(endpoint.last_delivery_success_at)
@@ -103,10 +117,39 @@ def _verified_endpoint_sort_key(endpoint: VerifiedPeerEndpoint) -> tuple[int, fl
     seen_ts = seen_dt.timestamp() if seen_dt is not None else 0.0
     success_ts = success_dt.timestamp() if success_dt is not None else 0.0
     return (
-        _endpoint_source_priority(endpoint.source),
+        _liveness_tier(endpoint),
         success_ts,
+        _endpoint_source_priority(endpoint.source),
         verified_ts,
         -int(endpoint.consecutive_delivery_failures or 0),
+        int(endpoint.proof_count or 0),
+        seen_ts,
+    )
+
+
+def _delivery_liveness_priority(endpoint: VerifiedPeerEndpoint) -> int:
+    if endpoint.last_delivery_success_at:
+        return 3
+    if endpoint.source == "observed" and endpoint.verification_kind == "protocol_signature":
+        return 2
+    if endpoint.source == "self":
+        return 1
+    return 0
+
+
+def _delivery_target_sort_key(endpoint: VerifiedPeerEndpoint) -> tuple[int, float, int, int, float, int, float]:
+    success_dt = _parse_dt(endpoint.last_delivery_success_at)
+    verified_dt = _parse_dt(endpoint.last_verified_at) or _parse_dt(endpoint.last_seen_at)
+    seen_dt = _parse_dt(endpoint.last_seen_at)
+    success_ts = success_dt.timestamp() if success_dt is not None else 0.0
+    verified_ts = verified_dt.timestamp() if verified_dt is not None else 0.0
+    seen_ts = seen_dt.timestamp() if seen_dt is not None else 0.0
+    return (
+        _delivery_liveness_priority(endpoint),
+        success_ts,
+        -int(endpoint.consecutive_delivery_failures or 0),
+        _endpoint_source_priority(endpoint.source),
+        verified_ts,
         int(endpoint.proof_count or 0),
         seen_ts,
     )
@@ -1134,7 +1177,9 @@ def delivery_targets_for_peer(
     targets: list[PeerDeliveryTarget] = []
     seen: set[tuple[str, int]] = set()
 
-    for endpoint in verified_endpoints_for_peer(peer_id, limit=max(1, int(verified_limit))):
+    verified_rows = verified_endpoints_for_peer(peer_id, limit=max(1, int(verified_limit)) * 3)
+    verified_rows = sorted(verified_rows, key=_delivery_target_sort_key, reverse=True)
+    for endpoint in verified_rows[: max(1, int(verified_limit))]:
         key = (endpoint.host, int(endpoint.port))
         if key in seen:
             continue

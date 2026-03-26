@@ -287,6 +287,35 @@ class KnowledgePresenceTests(unittest.TestCase):
         self.assertTrue(local_rows)
         self.assertEqual(local_rows[0]["agent_name"], "Nulla")
 
+    def test_broadcast_hello_routes_through_peer_delivery_broadcast(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        def _broadcast(raw: bytes, *, message_type: str, target_id: str, limit: int = 32, **_kwargs: object) -> int:
+            calls.append(
+                {
+                    "message_type": message_type,
+                    "target_id": target_id,
+                    "limit": limit,
+                    "raw": raw,
+                }
+            )
+            return 2
+
+        with unittest.mock.patch("core.knowledge_advertiser.broadcast_to_recent_peers", side_effect=_broadcast):
+            sent = broadcast_hello(
+                agent_name="Nulla",
+                capabilities=["research"],
+                status="idle",
+                transport_mode="lan_only",
+                limit=5,
+            )
+
+        self.assertEqual(sent, 2)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["message_type"], "HELLO_AD")
+        self.assertEqual(calls[0]["target_id"], get_local_peer_id())
+        self.assertEqual(calls[0]["limit"], 5)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,11 +4,11 @@ import uuid
 from typing import Any
 
 from core import audit_logger, policy_engine
+from core.daemon.peer_delivery import broadcast_to_recent_peers
 from core.discovery_index import (
     delivery_endpoints_for_peer,
     endpoint_for_peer,
     get_best_helpers,
-    recent_peer_endpoints,
 )
 from network.protocol import encode_message
 from network.signer import get_local_peer_id as local_peer_id
@@ -39,10 +39,12 @@ def _send_to_peer(
 
 
 def broadcast_capability_ad(raw_message: bytes, *, limit: int = 25) -> int:
-    sent = 0
-    for _peer_id, host, port in recent_peer_endpoints(exclude_peer_id=local_peer_id(), limit=limit):
-        if send_message(host, port, raw_message):
-            sent += 1
+    sent = broadcast_to_recent_peers(
+        raw_message,
+        message_type="CAPABILITY_AD",
+        target_id=local_peer_id(),
+        limit=limit,
+    )
 
     audit_logger.log(
         "capability_ad_broadcast",
@@ -62,10 +64,12 @@ def dispatch_query_shard(query: dict[str, Any], *, limit: int = 5) -> int:
         payload=query,
     )
 
-    sent = 0
-    for _peer_id, host, port in recent_peer_endpoints(exclude_peer_id=local_peer_id(), limit=limit):
-        if send_message(host, port, msg):
-            sent += 1
+    sent = broadcast_to_recent_peers(
+        msg,
+        message_type="QUERY_SHARD",
+        target_id=str(query.get("query_id") or local_peer_id()),
+        limit=limit,
+    )
 
     audit_logger.log(
         "query_shard_dispatched",
@@ -175,11 +179,12 @@ def broadcast_credit_offer(offer_payload: dict[str, Any], *, limit: int = 50) ->
         payload=offer_payload,
     )
 
-    sent = 0
-    # Blast the offer to recent peers so they can cache it in their local order books
-    for _peer_id, host, port in recent_peer_endpoints(exclude_peer_id=local_peer_id(), limit=limit):
-        if send_message(host, port, msg):
-            sent += 1
+    sent = broadcast_to_recent_peers(
+        msg,
+        message_type="CREDIT_OFFER",
+        target_id=str(offer_payload.get("offer_id") or ""),
+        limit=limit,
+    )
 
     audit_logger.log(
         "credit_offer_broadcast",

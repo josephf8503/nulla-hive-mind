@@ -4,12 +4,12 @@ import uuid
 from typing import Any
 
 from core import audit_logger
-from core.discovery_index import peer_trust, recent_peer_endpoints
+from core.daemon.peer_delivery import broadcast_to_recent_peers
+from core.discovery_index import peer_trust
 from core.knowledge_freshness import DEFAULT_KNOWLEDGE_TTL_SECONDS, DEFAULT_LEASE_SECONDS, iso_now, lease_expiry
 from core.knowledge_registry import holders_for_fetch, local_manifest, sync_local_learning_shards
 from network.protocol import encode_message
 from network.signer import get_local_peer_id as local_peer_id
-from network.transport import send_message
 from storage.knowledge_index import upsert_presence_lease
 
 
@@ -125,11 +125,12 @@ def _broadcast(msg_type: str, payload: dict[str, Any], *, limit: int = 32) -> in
         nonce=_nonce(),
         payload=payload,
     )
-    sent = 0
-    for _, host, port in recent_peer_endpoints(exclude_peer_id=local_peer_id(), limit=limit):
-        if send_message(host, port, msg):
-            sent += 1
-    return sent
+    return broadcast_to_recent_peers(
+        msg,
+        message_type=msg_type,
+        target_id=local_peer_id(),
+        limit=limit,
+    )
 
 
 def broadcast_hello(

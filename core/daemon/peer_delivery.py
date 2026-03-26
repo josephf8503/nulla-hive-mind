@@ -8,7 +8,9 @@ from core.discovery_index import (
     delivery_targets_for_peer,
     note_peer_endpoint_candidate_probe_result,
     note_verified_peer_endpoint_delivery_result,
+    recent_peer_verified_endpoints,
 )
+from network.signer import get_local_peer_id as local_peer_id
 from network.transport import send_message
 
 
@@ -149,3 +151,46 @@ def send_to_peer_or_log(
         },
     )
     return False
+
+
+def broadcast_to_recent_peers(
+    payload: bytes,
+    *,
+    message_type: str,
+    target_id: str,
+    limit: int = 32,
+    fanout: int | None = None,
+    exclude_peer_ids: set[str] | None = None,
+    include_candidates: bool = False,
+    candidate_limit: int = 1,
+    verified_limit: int = 4,
+    send_attempt: Callable[[str, int, bytes], bool] | None = None,
+) -> int:
+    excluded = {str(item).strip() for item in set(exclude_peer_ids or set()) if str(item).strip()}
+    excluded.add(local_peer_id())
+    peers = recent_peer_verified_endpoints(
+        exclude_peer_id=local_peer_id(),
+        limit=max(1, int(limit)),
+        per_peer_limit=1,
+    )
+    sent = 0
+    seen_peers: set[str] = set()
+    for endpoint in peers:
+        peer_id = str(endpoint.peer_id or "").strip()
+        if not peer_id or peer_id in excluded or peer_id in seen_peers:
+            continue
+        seen_peers.add(peer_id)
+        if send_to_peer_or_log(
+            peer_id,
+            payload,
+            message_type=message_type,
+            target_id=target_id,
+            include_candidates=include_candidates,
+            candidate_limit=candidate_limit,
+            verified_limit=verified_limit,
+            send_attempt=send_attempt,
+        ):
+            sent += 1
+        if fanout is not None and sent >= max(0, int(fanout)):
+            break
+    return sent
