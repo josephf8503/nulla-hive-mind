@@ -308,12 +308,14 @@ The current `main` checkpoint materially improved one hundred and forty-seven ar
    Verified endpoint truth no longer treats any signed proof or old delivery success as indefinitely live. `core/discovery_index.py` now persists `proof_timestamp` on authoritative `peer_endpoints` rows, backfills that field for both rebuilt legacy stores and already-multi-endpoint databases, limits strong liveness credit to recent delivery success and recent signed proof windows, and lets fresher observed protocol proof on the same endpoint displace stale declaration-grade `api`/`bootstrap` labels instead of hiding transport truth behind older provenance.
 151. **Bootstrap/assist delivery-export baseline**
    Bootstrap presence snapshots and local assist self-advertising no longer export stale best-endpoint compatibility aliases when they actually need a real delivery target. `core/bootstrap_sync.py` now emits its `endpoints` list and legacy `endpoint` alias from `delivery_targets_for_peer(...)` instead of `endpoint_for_peer()`, and `network/assist_router.py` now uses that same ordered verified-target seam when local `BLOCK_FOUND` replies advertise where the block really lives. That is materially more honest, but broader assist/bootstrap/export compatibility callers still are not fully converted.
+152. **Meet presence delivery-export baseline**
+   Meet presence records no longer export stale verified-row ordering when callers ask for a peer endpoint. `core/meet_and_greet_service.py` now shapes both `endpoint` and `endpoints` from `delivery_targets_for_peer(...)` instead of `selected_verified_endpoint_for_peer()` / `verified_endpoints_for_peer()`, so meet/API consumers now see the same delivery-ordered verified endpoint truth that the daemon and bootstrap export lanes already use.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1563 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1564 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
