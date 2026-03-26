@@ -256,12 +256,14 @@ The current `main` checkpoint materially improved one hundred and twenty-two are
    The bounded local debug loop no longer stalls when the failing function is just a trivial helper wrapper. `core/execution/planner.py` can now promote a one-hop no-arg delegation chain into the existing repair envelope when the failing test expectation is explicit, the delegating function body is a single `return helper()`, and the unread helper read shows a single conflicting literal `return`, which keeps the repair lane narrow without forcing the user to restate the obvious helper patch by hand.
 125. **Post-rollback repair followthrough baseline**
    Bounded local repair no longer dead-ends after the first bad guess when the verifier already proved the patch was wrong and the workspace has been restored. `core/execution/planner.py` now inspects failed `orchestration.execute_envelope` results, extracts the nested failed validation observation only when the tracked rollback succeeded, and resumes the same bounded inspect/search diagnosis lane from that failure context instead of stopping after one red repair envelope.
+126. **Second-attempt repair baseline**
+   A failed bounded repair envelope no longer consumes the only repair shot when the next diagnosis makes the real fix explicit. `core/execution/planner.py` now preserves nested failed validation context from a rolled-back envelope through later read/search steps, treats that validation command as already attempted so diagnosis keeps moving instead of rerunning pytest too early, and allows one bounded second repair envelope when the post-rollback evidence is still explicit enough for the same fail-closed queen/coder/verifier lane.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1488 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1490 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 

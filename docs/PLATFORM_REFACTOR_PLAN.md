@@ -766,6 +766,7 @@ pytest -q \
 ## Current Beta Execution Frontier
 
 - Bounded local repair can now keep diagnosing after a failed repair envelope, but only when the nested verifier failure is explicit and the tracked rollback succeeded. That is deliberate; anything broader would turn into guessy retry spam.
+- That same lane can now take one bounded second repair shot when the post-rollback diagnosis becomes explicit. It still does not get infinite retries, and it still does not guess without concrete read/search evidence.
 - The next real gaps are still multi-hop repo debugging, deeper queen/coder/verifier retry-and-merge behavior, provider rollout beyond the current contract truth, stronger measured Hive-reuse impact on completion quality, and WAN/DHT hardening.
 
 ## Shared Refactor Rules
