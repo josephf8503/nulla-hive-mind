@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -170,6 +171,9 @@ def unwrap_signed_write_with_meta(
         "signer_peer_id": envelope.signer_peer_id,
         "nonce": envelope.nonce,
         "timestamp": raw_timestamp_str,
+        "target_path": envelope.target_path,
+        "signature": envelope.signature,
+        "proof_hash": hashlib.sha256(raw).hexdigest(),
         "write_grant": dict(write_grant) if isinstance(write_grant, dict) else None,
     }
 

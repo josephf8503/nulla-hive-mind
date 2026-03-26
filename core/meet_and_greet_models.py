@@ -28,6 +28,7 @@ class PresenceUpsertRequest(BaseModel):
     timestamp: datetime
     lease_seconds: int = Field(ge=30, le=3600)
     endpoint: Optional[PeerEndpointRecord] = None
+    endpoints: list[PeerEndpointRecord] = Field(default_factory=list, max_length=8)
 
 
 class PresenceWithdrawRequest(BaseModel):
@@ -52,6 +53,7 @@ class PresenceRecord(BaseModel):
     last_heartbeat_at: str
     lease_expires_at: str
     endpoint: Optional[PeerEndpointRecord] = None
+    endpoints: list[PeerEndpointRecord] = Field(default_factory=list)
     summary_only: bool = False
 
 

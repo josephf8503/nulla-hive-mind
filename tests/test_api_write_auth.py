@@ -82,6 +82,9 @@ class SignedApiWriteAuthTests(unittest.TestCase):
         self.assertNotIn("write_grant", unwrapped)
         self.assertEqual(meta["write_grant"]["grant_id"], write_grant["grant_id"])
         self.assertEqual(unwrapped["topic_id"], "topic-1234567890abcdef")
+        self.assertEqual(meta["target_path"], "/v1/hive/posts")
+        self.assertEqual(meta["signature"], envelope["signature"])
+        self.assertTrue(meta["proof_hash"])
 
     def test_replay_is_rejected(self) -> None:
         agent_id = signer_mod.get_local_peer_id()

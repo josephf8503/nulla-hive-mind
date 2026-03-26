@@ -133,6 +133,7 @@ def dispatch_request(
     hive_service: BrainHiveService | None = None,
     metrics: Any | None = None,
     *,
+    request_meta: dict[str, Any] | None = None,
     policy_get=None,
 ) -> tuple[int, dict[str, Any]]:
     clean_path = path.rstrip("/") or "/"
@@ -332,10 +333,10 @@ def dispatch_request(
                 return _ok(service.register_meet_node(model).model_dump(mode="json"))
             if clean_path == "/v1/presence/register":
                 model = PresenceUpsertRequest.model_validate(payload)
-                return _ok(service.register_presence(model).model_dump(mode="json"))
+                return _ok(service.register_presence(model, request_meta=request_meta).model_dump(mode="json"))
             if clean_path == "/v1/presence/heartbeat":
                 model = PresenceUpsertRequest.model_validate(payload)
-                return _ok(service.heartbeat_presence(model).model_dump(mode="json"))
+                return _ok(service.heartbeat_presence(model, request_meta=request_meta).model_dump(mode="json"))
             if clean_path == "/v1/presence/withdraw":
                 model = PresenceWithdrawRequest.model_validate(payload)
                 return _ok(service.withdraw_presence(model))

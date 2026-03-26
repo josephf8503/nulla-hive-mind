@@ -9,7 +9,13 @@ from typing import Any
 
 from core import audit_logger
 from core.bootstrap_adapters import BootstrapMirrorAdapter, FileTopicAdapter
-from core.discovery_index import endpoint_for_peer, record_bootstrap_presence, register_peer_endpoint
+from core.discovery_index import (
+    endpoint_for_peer,
+    record_bootstrap_presence,
+    record_verified_peer_endpoint_proof,
+    register_peer_endpoint,
+    verified_endpoints_for_peer,
+)
 from core.runtime_paths import data_path
 from network.signer import get_local_peer_id as local_peer_id
 from network.signer import sign, verify
@@ -122,6 +128,7 @@ def _local_capability_records(limit: int = 128) -> list[dict[str, Any]]:
         except Exception:
             capabilities = []
 
+        endpoints = verified_endpoints_for_peer(row["peer_id"], limit=4)
         endpoint = endpoint_for_peer(row["peer_id"])
         record = {
             "peer_id": row["peer_id"],
@@ -132,6 +139,11 @@ def _local_capability_records(limit: int = 128) -> list[dict[str, Any]]:
             "host_group_hint_hash": row["host_group_hint_hash"],
             "last_seen_at": row["last_seen_at"],
         }
+        if endpoints:
+            record["endpoints"] = [
+                {"host": item.host, "port": int(item.port), "source": item.source}
+                for item in endpoints
+            ]
         if endpoint:
             record["endpoint"] = {"host": endpoint[0], "port": endpoint[1]}
         records.append(record)
@@ -229,12 +241,49 @@ def _merge_snapshot(snapshot: dict[str, Any]) -> int:
             host_group_hint_hash=str(host_group_hint_hash) if host_group_hint_hash else None,
         )
 
-        endpoint = rec.get("endpoint")
-        if isinstance(endpoint, dict):
-            host = endpoint.get("host")
-            port = endpoint.get("port")
-            if host and isinstance(port, int) and port > 0:
+        endpoints = rec.get("endpoints")
+        merged_any_endpoint = False
+        if isinstance(endpoints, list):
+            for endpoint in endpoints:
+                if not isinstance(endpoint, dict):
+                    continue
+                host = endpoint.get("host")
+                port = endpoint.get("port")
+                if not host or not isinstance(port, int) or port <= 0:
+                    continue
                 register_peer_endpoint(str(peer_id), str(host), int(port), source="bootstrap")
+                record_verified_peer_endpoint_proof(
+                    str(peer_id),
+                    str(host),
+                    int(port),
+                    source="bootstrap",
+                    verification_kind="bootstrap_snapshot",
+                    proof_message_id=str(snapshot.get("snapshot_hash") or ""),
+                    proof_message_type=str(snapshot.get("topic_name") or "bootstrap_snapshot"),
+                    proof_hash=str(snapshot.get("snapshot_hash") or ""),
+                    proof_signature=str(snapshot.get("signature") or ""),
+                    proof_timestamp=str(snapshot.get("published_at") or ""),
+                )
+                merged_any_endpoint = True
+        if not merged_any_endpoint:
+            endpoint = rec.get("endpoint")
+            if isinstance(endpoint, dict):
+                host = endpoint.get("host")
+                port = endpoint.get("port")
+                if host and isinstance(port, int) and port > 0:
+                    register_peer_endpoint(str(peer_id), str(host), int(port), source="bootstrap")
+                    record_verified_peer_endpoint_proof(
+                        str(peer_id),
+                        str(host),
+                        int(port),
+                        source="bootstrap",
+                        verification_kind="bootstrap_snapshot",
+                        proof_message_id=str(snapshot.get("snapshot_hash") or ""),
+                        proof_message_type=str(snapshot.get("topic_name") or "bootstrap_snapshot"),
+                        proof_hash=str(snapshot.get("snapshot_hash") or ""),
+                        proof_signature=str(snapshot.get("signature") or ""),
+                        proof_timestamp=str(snapshot.get("published_at") or ""),
+                    )
 
         merged += 1
 

@@ -30,6 +30,7 @@ from apps.meet_and_greet_server import (
     main as meet_main,
 )
 from core.brain_hive_artifacts import store_artifact_manifest
+from core.discovery_index import selected_verified_endpoint_for_peer, verified_endpoints_for_peer
 from core.hive_write_grants import build_hive_write_grant
 from core.meet_and_greet_models import (
     KnowledgeSearchRequest,
@@ -79,6 +80,48 @@ class MeetAndGreetServiceTests(unittest.TestCase):
         self.assertIsNotNone(record.endpoint)
         deltas = self.service.get_deltas(limit=20)
         self.assertTrue(any(delta.delta_type == "presence_register" and delta.peer_id == peer_id for delta in deltas))
+
+    def test_signed_presence_registration_persists_api_endpoint_proof_and_endpoints_list(self) -> None:
+        peer_id = _signer_mod.get_local_peer_id()
+        payload = {
+            "agent_id": peer_id,
+            "agent_name": "Thomas",
+            "status": "idle",
+            "capabilities": ["research"],
+            "home_region": "eu",
+            "current_region": "eu",
+            "transport_mode": "lan_only",
+            "trust_score": 0.6,
+            "timestamp": _now().isoformat(),
+            "lease_seconds": 180,
+            "endpoints": [
+                {"host": "127.0.0.1", "port": 49152, "source": "observed"},
+            ],
+        }
+        envelope = _api_write_auth_mod.build_signed_write_envelope(
+            target_path="/v1/presence/register",
+            payload=payload,
+        )
+        request_payload, request_meta = _api_write_auth_mod.unwrap_signed_write_with_meta(
+            target_path="/v1/presence/register",
+            raw_payload=envelope,
+        )
+
+        record = self.service.register_presence(
+            PresenceUpsertRequest.model_validate(request_payload),
+            request_meta=request_meta,
+        )
+
+        self.assertIsNotNone(record.endpoint)
+        self.assertEqual((record.endpoint.host, record.endpoint.port, record.endpoint.source), ("127.0.0.1", 49152, "api"))
+        self.assertEqual([(item.host, item.port, item.source) for item in record.endpoints], [("127.0.0.1", 49152, "api")])
+        selected = selected_verified_endpoint_for_peer(peer_id)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected.source, "api")
+        self.assertEqual(selected.verification_kind, "signed_api_write")
+        self.assertTrue(selected.proof_hash)
+        endpoints = verified_endpoints_for_peer(peer_id)
+        self.assertEqual(len(endpoints), 1)
 
     def test_presence_heartbeat_preserves_agent_name(self) -> None:
         peer_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
@@ -1965,6 +2008,7 @@ def _clear_meet_tables() -> None:
             "agent_capabilities",
             "peers",
             "peer_endpoints",
+            "peer_endpoint_observations",
             "identity_revocations",
             "identity_key_history",
             "nonce_cache",

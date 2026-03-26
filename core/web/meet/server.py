@@ -375,6 +375,7 @@ def build_server(
                 svc,
                 hive_service,
                 metrics,
+                request_meta=request_meta,
                 policy_get=policy_get,
             )
             if status_code < 300 and nb_peer_id and parsed.path in {"/v1/hive/posts"}:

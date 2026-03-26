@@ -5,9 +5,13 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
+import core.bootstrap_sync as bootstrap_sync
 from core.bootstrap_adapters import FileTopicAdapter
 from core.bootstrap_sync import publish_local_presence_snapshots, sync_from_bootstrap_topics
+from core.discovery_index import verified_endpoints_for_peer
 from core.runtime_paths import configure_runtime_home
+from storage.db import get_connection, reset_default_connection
+from storage.migrations import run_migrations
 
 
 def test_publish_local_presence_snapshots_uses_active_record_helper() -> None:
@@ -67,3 +71,42 @@ def test_publish_local_presence_snapshots_writes_to_active_runtime_home() -> Non
             assert payload["signature"] == "signed"
         finally:
             configure_runtime_home(None)
+
+
+def test_sync_from_bootstrap_topics_persists_bootstrap_endpoint_proof_from_endpoints_list() -> None:
+    run_migrations()
+    reset_default_connection()
+    conn = get_connection()
+    try:
+        for table in ("agent_capabilities", "peers", "peer_endpoints", "peer_endpoint_observations", "peer_endpoint_candidates"):
+            conn.execute(f"DELETE FROM {table}")
+        conn.commit()
+    finally:
+        conn.close()
+
+    peer_id = "peer-bootstrap-proof-000000000000000000000001"
+    record = {
+        "peer_id": peer_id,
+        "status": "idle",
+        "capabilities": ["research"],
+        "capacity": 2,
+        "trust_score": 0.6,
+        "host_group_hint_hash": None,
+        "last_seen_at": "2026-03-26T10:00:00+00:00",
+        "endpoints": [
+            {"host": "203.0.113.80", "port": 49880, "source": "bootstrap"},
+        ],
+    }
+    body = bootstrap_sync._snapshot_body("topic_a", bootstrap_sync.local_peer_id(), [record], 15)
+    signed = bootstrap_sync._sign_snapshot_body(body)
+    adapter = mock.Mock()
+    adapter.fetch_snapshot.side_effect = [signed]
+
+    result = sync_from_bootstrap_topics(topic_names=["topic_a"], adapter=adapter)
+
+    assert result.records_merged == 1
+    endpoints = verified_endpoints_for_peer(peer_id)
+    assert len(endpoints) == 1
+    assert (endpoints[0].host, endpoints[0].port, endpoints[0].source) == ("203.0.113.80", 49880, "bootstrap")
+    assert endpoints[0].verification_kind == "bootstrap_snapshot"
+    assert endpoints[0].proof_hash == signed["snapshot_hash"]

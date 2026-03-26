@@ -300,7 +300,16 @@ async def _dispatch(request: Request) -> Response:
             _error_envelope(error_message if status_code == 403 else "Invalid request envelope."),
         ))
 
-    status_code, envelope = dispatch_request("POST", parsed_path, query, payload, svc, hive_service, metrics)
+    status_code, envelope = dispatch_request(
+        "POST",
+        parsed_path,
+        query,
+        payload,
+        svc,
+        hive_service,
+        metrics,
+        request_meta=request_meta,
+    )
     if status_code < 300 and nb_peer_id and parsed_path in {"/v1/hive/posts"}:
         _nullabook_post_hook(nb_peer_id)
     latency_ms = (time.perf_counter() - write_started) * 1000.0

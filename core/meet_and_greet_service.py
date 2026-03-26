@@ -5,7 +5,13 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from core.discovery_index import endpoint_for_peer, register_peer_endpoint, upsert_peer_minimal
+from core.discovery_index import (
+    record_verified_peer_endpoint_proof,
+    register_peer_endpoint,
+    selected_verified_endpoint_for_peer,
+    upsert_peer_minimal,
+    verified_endpoints_for_peer,
+)
 from core.knowledge_freshness import utcnow
 from core.knowledge_possession_challenge import (
     issue_knowledge_possession_challenge,
@@ -82,15 +88,14 @@ class MeetAndGreetService:
     def __init__(self, config: MeetAndGreetConfig | None = None) -> None:
         self.config = config or MeetAndGreetConfig()
 
-    def register_presence(self, request: PresenceUpsertRequest) -> PresenceRecord:
+    def register_presence(
+        self,
+        request: PresenceUpsertRequest,
+        *,
+        request_meta: dict[str, Any] | None = None,
+    ) -> PresenceRecord:
         upsert_peer_minimal(request.agent_id)
-        if request.endpoint:
-            register_peer_endpoint(
-                request.agent_id,
-                request.endpoint.host,
-                request.endpoint.port,
-                source=request.endpoint.source,
-            )
+        _persist_presence_endpoints(request.agent_id, request, request_meta=request_meta)
         payload = HelloAd(
             agent_id=request.agent_id,
             agent_name=request.agent_name,
@@ -114,15 +119,14 @@ class MeetAndGreetService:
         )
         return self.get_presence_record(request.agent_id)
 
-    def heartbeat_presence(self, request: PresenceUpsertRequest) -> PresenceRecord:
+    def heartbeat_presence(
+        self,
+        request: PresenceUpsertRequest,
+        *,
+        request_meta: dict[str, Any] | None = None,
+    ) -> PresenceRecord:
         upsert_peer_minimal(request.agent_id)
-        if request.endpoint:
-            register_peer_endpoint(
-                request.agent_id,
-                request.endpoint.host,
-                request.endpoint.port,
-                source=request.endpoint.source,
-            )
+        _persist_presence_endpoints(request.agent_id, request, request_meta=request_meta)
         payload = PresenceHeartbeat(
             agent_id=request.agent_id,
             agent_name=request.agent_name,
@@ -223,6 +227,7 @@ class MeetAndGreetService:
             last_heartbeat_at=utcnow().isoformat(),
             lease_expires_at=utcnow().isoformat(),
             endpoint=endpoint if summary_mode == "regional_detail" else None,
+            endpoints=_endpoint_models(agent_id) if summary_mode == "regional_detail" else [],
             summary_only=summary_mode == "global_summary",
         )
 
@@ -461,6 +466,7 @@ class MeetAndGreetService:
             last_heartbeat_at=row["last_heartbeat_at"],
             lease_expires_at=row["lease_expires_at"],
             endpoint=None if summary_only else _endpoint_model(row["peer_id"]),
+            endpoints=[] if summary_only else _endpoint_models(row["peer_id"]),
             summary_only=summary_only,
         )
 
@@ -587,11 +593,60 @@ class MeetAndGreetService:
 
 
 def _endpoint_model(peer_id: str) -> PeerEndpointRecord | None:
-    endpoint = endpoint_for_peer(peer_id)
-    if not endpoint:
+    endpoint = selected_verified_endpoint_for_peer(peer_id)
+    if endpoint is None:
         return None
-    host, port = endpoint
-    return PeerEndpointRecord(host=host, port=port, source="observed")
+    return PeerEndpointRecord(host=endpoint.host, port=int(endpoint.port), source=endpoint.source)
+
+
+def _endpoint_models(peer_id: str, *, limit: int = 4) -> list[PeerEndpointRecord]:
+    return [
+        PeerEndpointRecord(host=endpoint.host, port=int(endpoint.port), source=endpoint.source)
+        for endpoint in verified_endpoints_for_peer(peer_id, limit=limit)
+    ]
+
+
+def _normalized_request_endpoints(request: PresenceUpsertRequest) -> list[PeerEndpointRecord]:
+    endpoints = list(request.endpoints or [])
+    if request.endpoint is not None:
+        endpoints = [request.endpoint, *endpoints]
+    deduped: list[PeerEndpointRecord] = []
+    seen: set[tuple[str, int]] = set()
+    for endpoint in endpoints:
+        key = (endpoint.host, int(endpoint.port))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(PeerEndpointRecord(host=endpoint.host, port=int(endpoint.port), source="api"))
+    return deduped
+
+
+def _persist_presence_endpoints(
+    agent_id: str,
+    request: PresenceUpsertRequest,
+    *,
+    request_meta: dict[str, Any] | None,
+) -> None:
+    endpoints = _normalized_request_endpoints(request)
+    if not endpoints:
+        return
+    meta = dict(request_meta or {})
+    for endpoint in endpoints:
+        register_peer_endpoint(agent_id, endpoint.host, int(endpoint.port), source="api")
+        if not meta.get("signature") or not meta.get("proof_hash"):
+            continue
+        record_verified_peer_endpoint_proof(
+            agent_id,
+            endpoint.host,
+            int(endpoint.port),
+            source="api",
+            verification_kind="signed_api_write",
+            proof_message_id=str(meta.get("nonce") or ""),
+            proof_message_type=str(meta.get("target_path") or "/v1/presence/register"),
+            proof_hash=str(meta.get("proof_hash") or ""),
+            proof_signature=str(meta.get("signature") or ""),
+            proof_timestamp=str(meta.get("timestamp") or ""),
+        )
 
 
 def _is_local_region_match(detail_region: str | None, *, home_region: str, current_region: str | None) -> bool:
