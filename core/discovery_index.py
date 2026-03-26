@@ -8,6 +8,17 @@ from typing import Any
 from network.assist_models import CapabilityAd
 from storage.db import get_connection
 
+_VERIFIED_ENDPOINT_SOURCES = {"self", "api", "observed", "bootstrap"}
+_ENDPOINT_SOURCE_PRIORITIES = {
+    "self": 500,
+    "api": 450,
+    "observed": 400,
+    "bootstrap": 300,
+    "advertised": 200,
+    "dht": 100,
+    "block_found": 90,
+}
+
 
 @dataclass
 class HelperCandidate:
@@ -21,6 +32,15 @@ class HelperCandidate:
     host_group_hint_hash: str | None = None
 
 
+@dataclass(frozen=True)
+class PeerEndpointCandidate:
+    peer_id: str
+    host: str
+    port: int
+    source: str
+    last_seen_at: str
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -28,6 +48,15 @@ def _utcnow() -> str:
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
+
+
+def _endpoint_source_priority(value: str) -> int:
+    normalized = str(value or "").strip().lower()
+    return _ENDPOINT_SOURCE_PRIORITIES.get(normalized, 0)
+
+
+def _is_verified_endpoint_source(value: str) -> bool:
+    return str(value or "").strip().lower() in _VERIFIED_ENDPOINT_SOURCES
     try:
         return datetime.fromisoformat(value)
     except Exception:
@@ -342,19 +371,10 @@ def prune_stale_capabilities(max_age_hours: int = 24) -> int:
 def register_peer_endpoint(peer_id: str, host: str, port: int, source: str = "observed") -> None:
     if not host or port <= 0:
         return
-
-    def _priority(value: str) -> int:
-        normalized = str(value or "").strip().lower()
-        priorities = {
-            "self": 500,
-            "api": 450,
-            "observed": 400,
-            "bootstrap": 300,
-            "advertised": 200,
-            "dht": 100,
-            "block_found": 90,
-        }
-        return priorities.get(normalized, 0)
+    incoming_source = str(source or "observed")
+    if not _is_verified_endpoint_source(incoming_source):
+        register_peer_endpoint_candidate(peer_id, host, port, source=incoming_source)
+        return
 
     conn = get_connection()
     try:
@@ -370,15 +390,14 @@ def register_peer_endpoint(peer_id: str, host: str, port: int, source: str = "ob
 
         incoming_host = str(host)
         incoming_port = int(port)
-        incoming_source = str(source or "observed")
         if existing:
             current_host = str(existing["host"])
             current_port = int(existing["port"])
             current_source = str(existing["source"] or "observed")
             same_endpoint = current_host == incoming_host and current_port == incoming_port
-            if not same_endpoint and _priority(incoming_source) < _priority(current_source):
+            if not same_endpoint and _endpoint_source_priority(incoming_source) < _endpoint_source_priority(current_source):
                 return
-            if same_endpoint and _priority(incoming_source) < _priority(current_source):
+            if same_endpoint and _endpoint_source_priority(incoming_source) < _endpoint_source_priority(current_source):
                 incoming_source = current_source
 
         conn.execute(
@@ -394,6 +413,47 @@ def register_peer_endpoint(peer_id: str, host: str, port: int, source: str = "ob
                 incoming_host,
                 incoming_port,
                 incoming_source,
+                _utcnow(),
+                _utcnow(),
+            ),
+        )
+        conn.execute(
+            """
+            DELETE FROM peer_endpoint_candidates
+            WHERE peer_id = ? AND host = ? AND port = ?
+            """,
+            (peer_id, incoming_host, incoming_port),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def register_peer_endpoint_candidate(peer_id: str, host: str, port: int, source: str = "dht") -> None:
+    if not host or port <= 0:
+        return
+    normalized_source = str(source or "dht").strip().lower() or "dht"
+    if _is_verified_endpoint_source(normalized_source):
+        register_peer_endpoint(peer_id, host, port, source=normalized_source)
+        return
+
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO peer_endpoint_candidates (
+                peer_id, host, port, source, first_seen_at, last_seen_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(peer_id, host, port, source) DO UPDATE SET
+                last_seen_at = excluded.last_seen_at,
+                updated_at = excluded.updated_at
+            """,
+            (
+                peer_id,
+                str(host),
+                int(port),
+                normalized_source,
+                _utcnow(),
                 _utcnow(),
                 _utcnow(),
             ),
@@ -415,6 +475,34 @@ def endpoint_for_peer(peer_id: str) -> tuple[str, int] | None:
         return str(row["host"]), int(row["port"])
     finally:
         conn.close()
+
+
+def candidate_endpoints_for_peer(peer_id: str, *, limit: int = 8) -> list[PeerEndpointCandidate]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT peer_id, host, port, source, last_seen_at
+            FROM peer_endpoint_candidates
+            WHERE peer_id = ?
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (peer_id, max(1, int(limit))),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return [
+        PeerEndpointCandidate(
+            peer_id=str(row["peer_id"]),
+            host=str(row["host"]),
+            port=int(row["port"]),
+            source=str(row["source"]),
+            last_seen_at=str(row["last_seen_at"]),
+        )
+        for row in rows
+    ]
 
 
 def recent_peer_endpoints(*, exclude_peer_id: str | None = None, limit: int = 32) -> list[tuple[str, str, int]]:

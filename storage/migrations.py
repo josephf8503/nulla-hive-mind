@@ -708,6 +708,23 @@ CREATE TABLE IF NOT EXISTS peer_endpoints (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS peer_endpoint_candidates (
+    peer_id TEXT NOT NULL,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'dht',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (peer_id, host, port, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_peer_endpoint_candidates_seen
+ON peer_endpoint_candidates(last_seen_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_peer_endpoint_candidates_peer
+ON peer_endpoint_candidates(peer_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS scoreboard (
     entry_id          TEXT PRIMARY KEY,
     peer_id           TEXT NOT NULL,

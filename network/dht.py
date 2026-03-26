@@ -80,6 +80,9 @@ class RoutingTable:
         if bucket_index is None:
             return
         now = time.time()
+        source_priority = self._endpoint_source_priority(source)
+        source_is_verified = self._is_verified_endpoint_source(source)
+        source_last_seen = now if source_is_verified else 0.0
         bucket = self._buckets[bucket_index]
         replacements = self._replacement_caches[bucket_index]
 
@@ -87,37 +90,47 @@ class RoutingTable:
         if existing is not None:
             same_endpoint = existing.ip == ip and int(existing.port) == int(port)
             existing_priority = self._endpoint_source_priority(existing.endpoint_source)
-            incoming_priority = self._endpoint_source_priority(source)
+            refresh_liveness = False
+            reorder_bucket = False
             if same_endpoint:
-                if incoming_priority > existing_priority:
+                if source_priority > existing_priority:
                     existing.endpoint_source = source
-            elif incoming_priority >= existing_priority:
+                    reorder_bucket = True
+                if source_is_verified:
+                    existing.last_seen = now
+                    refresh_liveness = True
+                    reorder_bucket = True
+            elif source_priority >= existing_priority:
                 existing.ip = ip
                 existing.port = int(port)
                 existing.endpoint_source = source
-            existing.last_seen = now
+                existing.last_seen = source_last_seen
+                refresh_liveness = source_is_verified
+                reorder_bucket = True
             if peer_id in bucket:
-                bucket.move_to_end(peer_id, last=True)
+                if reorder_bucket:
+                    bucket.move_to_end(peer_id, last=True)
             else:
                 bucket[peer_id] = existing
             replacements.pop(peer_id, None)
-            self._bucket_touched_at[bucket_index] = now
+            if refresh_liveness:
+                self._bucket_touched_at[bucket_index] = now
             return
 
-        node = DHTNode(peer_id=peer_id, ip=ip, port=int(port), last_seen=now, endpoint_source=source)
+        node = DHTNode(peer_id=peer_id, ip=ip, port=int(port), last_seen=source_last_seen, endpoint_source=source)
         if peer_id in replacements:
             cached = replacements[peer_id]
             same_endpoint = cached.ip == ip and int(cached.port) == int(port)
             cached_priority = self._endpoint_source_priority(cached.endpoint_source)
-            incoming_priority = self._endpoint_source_priority(source)
             if same_endpoint:
-                if incoming_priority > cached_priority:
+                if source_priority > cached_priority:
                     cached.endpoint_source = source
-            elif incoming_priority >= cached_priority:
+            elif source_priority >= cached_priority:
                 cached.ip = ip
                 cached.port = int(port)
                 cached.endpoint_source = source
-            cached.last_seen = now
+            if source_is_verified:
+                cached.last_seen = now
             replacements.move_to_end(peer_id, last=True)
         elif len(bucket) >= self.k_bucket_size:
             oldest_peer_id, oldest_node = next(iter(bucket.items()))
@@ -135,7 +148,8 @@ class RoutingTable:
             self.nodes[peer_id] = node
         if peer_id in bucket:
             replacements.pop(peer_id, None)
-        self._bucket_touched_at[bucket_index] = now
+        if source_is_verified:
+            self._bucket_touched_at[bucket_index] = now
 
     def remove_node(self, peer_id: str) -> None:
         node = self.nodes.pop(peer_id, None)

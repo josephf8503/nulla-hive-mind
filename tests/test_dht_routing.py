@@ -188,6 +188,41 @@ class DhtRoutingTests(unittest.TestCase):
 
         self.assertEqual([item.peer_id for item in out], [observed_peer])
 
+    def test_weaker_referral_does_not_refresh_observed_liveness_or_bucket_touch(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=64)
+        peer_id = "c" * 64
+        table.add_node(peer_id, "203.0.113.10", 49001, source="observed")
+
+        bucket_index = table._bucket_index(peer_id)
+        assert bucket_index is not None
+        original_last_seen = table.nodes[peer_id].last_seen
+        original_bucket_touch = table._bucket_touched_at[bucket_index]
+
+        table.add_node(peer_id, "198.51.100.99", 49999, source="dht")
+
+        node = table.nodes[peer_id]
+        self.assertEqual((node.ip, node.port), ("203.0.113.10", 49001))
+        self.assertEqual(node.endpoint_source, "observed")
+        self.assertEqual(node.last_seen, original_last_seen)
+        self.assertEqual(table._bucket_touched_at[bucket_index], original_bucket_touch)
+
+    def test_referral_only_node_stays_stale_until_verified(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=64)
+        peer_id = "d" * 64
+        table.add_node(peer_id, "198.51.100.99", 49999, source="dht")
+
+        bucket_index = table._bucket_index(peer_id)
+        assert bucket_index is not None
+        self.assertEqual(table.nodes[peer_id].last_seen, 0.0)
+        self.assertEqual(table._bucket_touched_at[bucket_index], 0.0)
+
+        table.add_node(peer_id, "203.0.113.10", 49001, source="observed")
+
+        self.assertEqual((table.nodes[peer_id].ip, table.nodes[peer_id].port), ("203.0.113.10", 49001))
+        self.assertEqual(table.nodes[peer_id].endpoint_source, "observed")
+        self.assertGreater(table.nodes[peer_id].last_seen, 0.0)
+        self.assertGreater(table._bucket_touched_at[bucket_index], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

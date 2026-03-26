@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from core.credit_ledger import get_credit_balance
-from core.discovery_index import endpoint_for_peer, register_peer_endpoint
+from core.discovery_index import candidate_endpoints_for_peer, endpoint_for_peer, register_peer_endpoint
 from network.assist_router import handle_incoming_assist_message
 from network.dht import RoutingTable
 from network.protocol import Protocol, encode_message
@@ -27,6 +27,7 @@ class AssistRouterMeshTests(unittest.TestCase):
             conn.execute("DELETE FROM nonce_cache")
             conn.execute("DELETE FROM compute_credit_ledger")
             conn.execute("DELETE FROM peer_endpoints")
+            conn.execute("DELETE FROM peer_endpoint_candidates")
             conn.commit()
         finally:
             conn.close()
@@ -191,6 +192,62 @@ class AssistRouterMeshTests(unittest.TestCase):
         response = Protocol.decode_and_validate(result.generated_messages[0])
         peers = (response.get("payload") or {}).get("hosting_peers") or []
         self.assertEqual([item["peer_id"] for item in peers], [observed_peer])
+
+    def test_node_found_records_candidate_without_authoritative_endpoint(self) -> None:
+        target_peer = "d" * 64
+
+        raw = encode_message(
+            msg_id=str(uuid.uuid4()),
+            msg_type="NODE_FOUND",
+            sender_peer_id=local_peer_id(),
+            nonce=uuid.uuid4().hex,
+            payload={
+                "target_id": "a" * 64,
+                "nodes": [
+                    {
+                        "peer_id": target_peer,
+                        "ip": "198.51.100.77",
+                        "port": 49977,
+                    }
+                ],
+            },
+        )
+
+        result = handle_incoming_assist_message(raw_bytes=raw, source_addr=("198.51.100.40", 49222))
+
+        self.assertTrue(result.ok)
+        self.assertIsNone(endpoint_for_peer(target_peer))
+        candidates = candidate_endpoints_for_peer(target_peer)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual((candidates[0].host, candidates[0].port, candidates[0].source), ("198.51.100.77", 49977, "dht"))
+
+    def test_block_found_records_candidate_without_authoritative_endpoint(self) -> None:
+        target_peer = "e" * 64
+
+        raw = encode_message(
+            msg_id=str(uuid.uuid4()),
+            msg_type="BLOCK_FOUND",
+            sender_peer_id=local_peer_id(),
+            nonce=uuid.uuid4().hex,
+            payload={
+                "block_hash": "d" * 64,
+                "hosting_peers": [
+                    {
+                        "peer_id": target_peer,
+                        "ip": "198.51.100.66",
+                        "port": 49966,
+                    }
+                ],
+            },
+        )
+
+        result = handle_incoming_assist_message(raw_bytes=raw, source_addr=("198.51.100.40", 49222))
+
+        self.assertTrue(result.ok)
+        self.assertIsNone(endpoint_for_peer(target_peer))
+        candidates = candidate_endpoints_for_peer(target_peer)
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual((candidates[0].host, candidates[0].port, candidates[0].source), ("198.51.100.66", 49966, "block_found"))
 
 
 if __name__ == "__main__":

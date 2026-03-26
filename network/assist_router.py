@@ -18,6 +18,7 @@ from core.discovery_index import (
     record_bootstrap_presence,
     register_capability_ad,
     register_peer_endpoint,
+    register_peer_endpoint_candidate,
     upsert_peer_minimal,
 )
 from core.idle_assist_policy import IdleAssistConfig, should_accept_offer
@@ -865,7 +866,7 @@ def handle_incoming_assist_message(
         nodes = payload_model.nodes
         for n in nodes:
             table.add_node(n.peer_id, n.ip, n.port, source="dht")
-            register_peer_endpoint(n.peer_id, n.ip, n.port, source="dht")
+            register_peer_endpoint_candidate(n.peer_id, n.ip, n.port, source="dht")
         return RouteResult(True, f"DHT NODE_FOUND processed. Integrated {len(nodes)} peers.", generated)
 
     # Phase 24: Petabyte Data Layer (CAS Block Routing)
@@ -913,7 +914,7 @@ def handle_incoming_assist_message(
     if msg_type == "BLOCK_FOUND":
         hosting_peers = getattr(payload_model, "hosting_peers", [])
         for peer in hosting_peers:
-            register_peer_endpoint(peer.peer_id, peer.ip, peer.port, source="block_found")
+            register_peer_endpoint_candidate(peer.peer_id, peer.ip, peer.port, source="block_found")
         return RouteResult(True, f"BLOCK_FOUND processed. Observed {len(hosting_peers)} hosting peers.", generated)
 
     if msg_type == "BLOCK_PAYLOAD":
