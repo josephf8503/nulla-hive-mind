@@ -30,7 +30,14 @@ from apps.meet_and_greet_server import (
     main as meet_main,
 )
 from core.brain_hive_artifacts import store_artifact_manifest
-from core.discovery_index import selected_verified_endpoint_for_peer, verified_endpoints_for_peer
+from core.discovery_index import (
+    delivery_targets_for_peer,
+    note_verified_peer_endpoint_delivery_result,
+    record_verified_peer_endpoint_proof,
+    register_peer_endpoint,
+    selected_verified_endpoint_for_peer,
+    verified_endpoints_for_peer,
+)
 from core.hive_write_grants import build_hive_write_grant
 from core.meet_and_greet_models import (
     KnowledgeSearchRequest,
@@ -122,6 +129,50 @@ class MeetAndGreetServiceTests(unittest.TestCase):
         self.assertTrue(selected.proof_hash)
         endpoints = verified_endpoints_for_peer(peer_id)
         self.assertEqual(len(endpoints), 1)
+
+    def test_presence_record_prefers_delivery_order_over_verified_alias_order(self) -> None:
+        peer_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"
+        self.service.register_presence(
+            PresenceUpsertRequest(
+                agent_id=peer_id,
+                agent_name="Thomas",
+                status="idle",
+                capabilities=["research"],
+                home_region="eu",
+                current_region="eu",
+                transport_mode="lan_only",
+                trust_score=0.6,
+                timestamp=_now(),
+                lease_seconds=180,
+            )
+        )
+
+        register_peer_endpoint(peer_id, "198.51.100.40", 49440, source="self")
+        register_peer_endpoint(peer_id, "198.51.100.41", 49441, source="bootstrap")
+        record_verified_peer_endpoint_proof(
+            peer_id,
+            "198.51.100.41",
+            49441,
+            source="bootstrap",
+            verification_kind="bootstrap_snapshot",
+            proof_message_id="bootstrap-proof",
+            proof_timestamp="2026-03-26T12:00:00+00:00",
+        )
+        note_verified_peer_endpoint_delivery_result(peer_id, "198.51.100.40", 49440, delivered=True)
+
+        record = self.service.get_presence_record(peer_id)
+
+        self.assertIsNotNone(record.endpoint)
+        self.assertEqual((record.endpoint.host, record.endpoint.port, record.endpoint.source), ("198.51.100.40", 49440, "self"))
+        self.assertEqual(
+            [(item.host, item.port, item.source) for item in record.endpoints[:2]],
+            [("198.51.100.40", 49440, "self"), ("198.51.100.41", 49441, "bootstrap")],
+        )
+        targets = delivery_targets_for_peer(peer_id, verified_limit=2, include_candidates=False)
+        self.assertEqual(
+            [(item.host, item.port, item.source) for item in targets[:2]],
+            [("198.51.100.40", 49440, "self"), ("198.51.100.41", 49441, "bootstrap")],
+        )
 
     def test_presence_heartbeat_preserves_agent_name(self) -> None:
         peer_id = f"peer-{uuid.uuid4().hex}{uuid.uuid4().hex}"

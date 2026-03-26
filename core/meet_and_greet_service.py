@@ -6,11 +6,10 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from core.discovery_index import (
+    delivery_targets_for_peer,
     record_verified_peer_endpoint_proof,
     register_peer_endpoint,
-    selected_verified_endpoint_for_peer,
     upsert_peer_minimal,
-    verified_endpoints_for_peer,
 )
 from core.knowledge_freshness import utcnow
 from core.knowledge_possession_challenge import (
@@ -593,16 +592,21 @@ class MeetAndGreetService:
 
 
 def _endpoint_model(peer_id: str) -> PeerEndpointRecord | None:
-    endpoint = selected_verified_endpoint_for_peer(peer_id)
-    if endpoint is None:
+    targets = delivery_targets_for_peer(peer_id, verified_limit=1, include_candidates=False)
+    if not targets:
         return None
+    endpoint = targets[0]
     return PeerEndpointRecord(host=endpoint.host, port=int(endpoint.port), source=endpoint.source)
 
 
 def _endpoint_models(peer_id: str, *, limit: int = 4) -> list[PeerEndpointRecord]:
     return [
         PeerEndpointRecord(host=endpoint.host, port=int(endpoint.port), source=endpoint.source)
-        for endpoint in verified_endpoints_for_peer(peer_id, limit=limit)
+        for endpoint in delivery_targets_for_peer(
+            peer_id,
+            verified_limit=limit,
+            include_candidates=False,
+        )
     ]
 
 
