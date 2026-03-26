@@ -62,8 +62,11 @@ Core lane:
 ## Current WAN Transport Spine
 
 - `apps/nulla_daemon.py`: transport-mode discovery, capability advertising, and local presence broadcast entrypoint
-- `core/discovery_index.py`: endpoint-source priority, capability freshness scoring, authoritative multi-endpoint storage, best-endpoint compatibility selection, signed observed/API/bootstrap/self endpoint promotion, candidate probe cooldown/failure memory, delivery-target ordering, and recent discovery seed selection
+- `core/discovery_index.py`: endpoint-source priority, capability freshness scoring, authoritative multi-endpoint storage, best-endpoint compatibility selection, signed observed/API/bootstrap/self endpoint promotion, candidate probe cooldown/failure memory, and delivery-target ordering that distinguishes live mesh proof from registry proof while still serving deterministic compatibility views for older callers
 - `core/daemon/peer_delivery.py`: critical peer-send retry/fallback seam that walks ordered verified/candidate endpoint targets, writes delivery outcomes back into discovery truth, and fails closed with explicit attempted-endpoint evidence
+- `core/knowledge_advertiser.py`: hello/capability broadcasts now route through peer-centric ordered fallback instead of flattening peers to one compatibility endpoint
+- `retrieval/swarm_query.py`: shard/query/capability/credit broadcasts now use peer-centric ordered fallback while targeted shard delivery still goes through direct ordered endpoint selection
+- `core/daemon/messages.py`: abuse-gossip fanout now reuses the same peer-centric fallback seam instead of retrying a single compatibility endpoint tuple
 - `core/maintenance.py`: scheduled bootstrap sync, bounded DHT discovery seeding, and candidate-endpoint probing with cooldown/failure backoff when verified coverage is sparse while still preferring verified endpoints from the authoritative multi-endpoint store first
 - `core/bootstrap_sync.py`: signed bootstrap snapshot export/import seam that now preserves endpoint lists plus best-endpoint compatibility while threading bootstrap proof into discovery state
 - `network/nat_probe.py`: local vs public NAT classification seam

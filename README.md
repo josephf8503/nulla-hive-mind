@@ -93,6 +93,8 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - Role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - Proof-backed mesh endpoint promotion for signed observed, signed API, and signed bootstrap traffic, so ingress/bootstrap lanes can persist authoritative multi-endpoint discovery state while still keeping best-endpoint compatibility fields without promoting raw DHT referrals into live transport truth
 - Delivery-memory-backed mesh peer fallback for critical task/result/review lanes, so verified endpoints are re-ranked by actual send success/failure and the daemon no longer assumes one endpoint tuple is enough for bounded peer delivery
+- Delivery targeting now also distinguishes live mesh proof from registry-style proof: signed observed ingress and recent successful sends now outrank signed API/bootstrap registry entries when NULLA chooses actual delivery targets, while the old best-endpoint compatibility views stay deterministic for exports and older callers
+- Peer-centric mesh broadcast/gossip fallback is now broader too: knowledge ads, shard/capability/credit broadcasts, and abuse gossip now route through ordered per-peer endpoint fallback instead of flattening every peer to one compatibility endpoint, while some assist/bootstrap compatibility paths still remain
 - OpenClaw registration and local API lane
 - Public proof, tasks, operator pages, worklog, and coordination surfaces
 - One-click install, built-wheel smoke, and `/healthz` startup contract
