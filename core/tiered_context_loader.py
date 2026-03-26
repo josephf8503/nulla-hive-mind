@@ -167,15 +167,22 @@ def _local_candidate_items(task: Any, classification: dict[str, Any]) -> tuple[l
         if citation:
             reuse_outcomes = dict(citation.get("reuse_outcomes") or {})
             reuse_note = ""
+            quality_backed = int(reuse_outcomes.get("quality_backed_count") or 0)
+            quality_backed_durable = int(reuse_outcomes.get("quality_backed_durable_count") or 0)
             answer_backed = int(reuse_outcomes.get("answer_backed_count") or 0)
             answer_backed_durable = int(reuse_outcomes.get("answer_backed_durable_count") or 0)
             selected = int(reuse_outcomes.get("selected_count") or 0)
             success = int(reuse_outcomes.get("success_count") or 0)
             durable = int(reuse_outcomes.get("durable_count") or 0)
-            if answer_backed > 0:
+            if quality_backed > 0:
+                reuse_note = (
+                    f" Previously improved clean answers in {quality_backed} turns "
+                    f"({quality_backed_durable} durable)."
+                )
+            elif answer_backed > 0:
                 reuse_note = (
                     f" Previously backed answers in {answer_backed} turns "
-                    f"({answer_backed_durable} durable)."
+                    f"({answer_backed_durable} durable), but clean-answer proof is still weaker."
                 )
             elif selected > 0:
                 reuse_note = f" Previously selected during planning in {selected} turns."

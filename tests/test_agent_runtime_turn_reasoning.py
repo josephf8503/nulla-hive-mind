@@ -351,6 +351,7 @@ def test_execute_grounded_turn_records_remote_shard_reuse_outcome(make_agent) ->
     assert result["swarm_reuse_outcome_count"] == 1
     assert result["swarm_reuse_citations"][0]["selected_for_plan"] is True
     assert result["swarm_reuse_citations"][0]["answer_backed"] is True
+    assert result["swarm_reuse_citations"][0]["quality_backed"] is True
     assert result["swarm_reuse_citations"][0]["counterfactual_tested"] is True
     assert result["swarm_reuse_citations"][0]["counterfactual_confidence_drop"] == pytest.approx(0.11)
     assert result["swarm_reuse_citations"][0]["response_reason"] == "grounded_plan_response"
@@ -360,6 +361,7 @@ def test_execute_grounded_turn_records_remote_shard_reuse_outcome(make_agent) ->
     assert summary[citation["shard_id"]]["durable_count"] == 1
     assert summary[citation["shard_id"]]["selected_count"] == 1
     assert summary[citation["shard_id"]]["answer_backed_count"] == 1
+    assert summary[citation["shard_id"]]["quality_backed_count"] == 1
     assert summary[citation["shard_id"]]["last_outcome_label"] == "durable_success"
     assert summary[citation["shard_id"]]["last_response_class"] == ResponseClass.GENERIC_CONVERSATION.value
 
@@ -465,13 +467,17 @@ def test_execute_grounded_turn_only_marks_first_remote_shard_as_answer_backed(ma
     assert result["swarm_reuse_outcome_count"] == 2
     assert result["swarm_reuse_citations"][0]["selected_for_plan"] is True
     assert result["swarm_reuse_citations"][0]["answer_backed"] is True
+    assert result["swarm_reuse_citations"][0]["quality_backed"] is True
     assert result["swarm_reuse_citations"][1]["selected_for_plan"] is False
     assert result["swarm_reuse_citations"][1]["answer_backed"] is False
+    assert result["swarm_reuse_citations"][1]["quality_backed"] is False
     summary = summarize_reuse_outcomes_for_shards(
         [primary_citation["shard_id"], incidental_citation["shard_id"]]
     )
     assert summary[primary_citation["shard_id"]]["answer_backed_count"] == 1
+    assert summary[primary_citation["shard_id"]]["quality_backed_count"] == 1
     assert summary[incidental_citation["shard_id"]]["answer_backed_count"] == 0
+    assert summary[incidental_citation["shard_id"]]["quality_backed_count"] == 0
 
 
 def test_execute_grounded_turn_requires_counterfactual_loss_before_remote_shard_counts_as_answer_backed(
@@ -560,9 +566,105 @@ def test_execute_grounded_turn_requires_counterfactual_loss_before_remote_shard_
     assert result["swarm_reuse_outcome_count"] == 1
     assert result["swarm_reuse_citations"][0]["selected_for_plan"] is True
     assert result["swarm_reuse_citations"][0]["answer_backed"] is False
+    assert result["swarm_reuse_citations"][0]["quality_backed"] is False
     assert result["swarm_reuse_citations"][0]["counterfactual_tested"] is True
     assert result["swarm_reuse_citations"][0]["counterfactual_confidence_drop"] == 0.0
     assert result["swarm_reuse_citations"][0]["counterfactual_winning_source_changed"] is False
     summary = summarize_reuse_outcomes_for_shards([citation["shard_id"]])
     assert summary[citation["shard_id"]]["selected_count"] == 1
     assert summary[citation["shard_id"]]["answer_backed_count"] == 0
+    assert summary[citation["shard_id"]]["quality_backed_count"] == 0
+
+
+def test_execute_grounded_turn_keeps_answer_backed_remote_shard_non_quality_backed_when_final_response_is_template_fallback(
+    make_agent,
+) -> None:
+    agent = make_agent()
+    citation = {
+        "kind": "remote_shard",
+        "shard_id": "remote-shard-template-fallback",
+        "receipt_id": "receipt-template-fallback",
+        "source_peer_id": "peer-template-fallback",
+        "source_node_id": "node-template-fallback",
+        "manifest_id": "manifest-template-fallback",
+        "content_hash": "content-template-fallback",
+        "validation_state": "signature_and_manifest_verified",
+        "fetched_at": "2026-03-25T00:00:00+00:00",
+    }
+    context_result = SimpleNamespace(
+        local_candidates=[],
+        swarm_metadata=[],
+        retrieval_confidence_score=0.74,
+        assembled_context=lambda: "",
+        context_snippets=lambda: [
+            {
+                "title": "Cached remote shard",
+                "source_type": "remote_shard_cache",
+                "summary": "Remote proof notes",
+                "citation": dict(citation),
+            }
+        ],
+        report=SimpleNamespace(
+            retrieval_confidence=0.74,
+            total_tokens_used=lambda: 0,
+            to_dict=lambda: {"external_evidence_attachments": []},
+        ),
+    )
+    task, classification, interpreted, persona = _configure_grounded_turn_agent(agent, context_result=context_result)
+    agent._decorate_chat_response = mock.Mock(  # type: ignore[method-assign]
+        return_value="Using best known pattern for this answer while evidence is thin."
+    )
+
+    def _plan_with_counterfactual(*, evidence: dict[str, Any], **_: Any) -> Any:
+        remote_context = [
+            snippet
+            for snippet in list(evidence.get("context_snippets") or [])
+            if isinstance(snippet, dict)
+            and isinstance(snippet.get("citation"), dict)
+            and str(snippet["citation"].get("kind") or "").strip() == "remote_shard"
+        ]
+        if remote_context:
+            return SimpleNamespace(confidence=0.72, evidence_sources=["context:remote_shard_cache"])
+        return SimpleNamespace(confidence=0.61, evidence_sources=["model_deferred"])
+
+    with mock.patch("apps.nulla_agent.orchestrate_parent_task", return_value=None), mock.patch(
+        "apps.nulla_agent.ingest_media_evidence",
+        return_value=[],
+    ), mock.patch(
+        "apps.nulla_agent.build_media_context_snippets",
+        return_value=[],
+    ), mock.patch(
+        "apps.nulla_agent.build_plan",
+        side_effect=_plan_with_counterfactual,
+    ), mock.patch(
+        "apps.nulla_agent.render_response",
+        return_value="rendered answer",
+    ), mock.patch(
+        "apps.nulla_agent.explicit_planner_style_requested",
+        return_value=False,
+    ), mock.patch(
+        "apps.nulla_agent.should_use_planner_renderer",
+        return_value=True,
+    ), mock.patch(
+        "apps.nulla_agent.feedback_engine.evaluate_outcome",
+        return_value=SimpleNamespace(is_success=True, is_durable=True),
+    ), mock.patch(
+        "apps.nulla_agent.feedback_engine.apply",
+        return_value=None,
+    ):
+        result = agent._execute_grounded_turn(
+            task=task,
+            effective_input="research proof receipts",
+            classification=classification,
+            interpreted=interpreted,
+            persona=persona,
+            session_id="turn-reasoning-session-template-fallback",
+            source_context={"surface": "openclaw", "platform": "openclaw"},
+        )
+
+    assert result["swarm_reuse_citations"][0]["selected_for_plan"] is True
+    assert result["swarm_reuse_citations"][0]["answer_backed"] is True
+    assert result["swarm_reuse_citations"][0]["quality_backed"] is False
+    summary = summarize_reuse_outcomes_for_shards([citation["shard_id"]])
+    assert summary[citation["shard_id"]]["answer_backed_count"] == 1
+    assert summary[citation["shard_id"]]["quality_backed_count"] == 0

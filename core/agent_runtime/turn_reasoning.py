@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.reasoning_engine import inspect_user_response_shape
 from storage.shard_reuse_outcomes import record_shard_reuse_outcomes
 
 _GROUNDED_RESPONSE_REASONS = {"grounded_plan_response", "grounded_model_response"}
+_NON_QUALITY_RESPONSE_CLASSES = {"task_failed_user_safe", "system_error_user_safe"}
 
 
 def _dispatch_background_swarm_query(
@@ -68,6 +70,7 @@ def _annotate_swarm_reuse_citations(
     response_reason: str,
     selected_shard_id: str = "",
     answer_backed: bool = False,
+    quality_backed: bool = False,
     counterfactual_details: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     annotated: list[dict[str, Any]] = []
@@ -77,6 +80,7 @@ def _annotate_swarm_reuse_citations(
         is_selected = bool(selected_shard_id) and shard_id == selected_shard_id
         enriched["selected_for_plan"] = is_selected
         enriched["answer_backed"] = bool(is_selected and answer_backed)
+        enriched["quality_backed"] = bool(is_selected and quality_backed)
         enriched["rendered_via"] = rendered_via if is_selected else ""
         enriched["response_reason"] = response_reason if is_selected else ""
         if is_selected and counterfactual_details:
@@ -191,6 +195,31 @@ def _answer_backed_counterfactual(
     )
     answer_backed = confidence_drop >= 0.05 or winning_source_changed
     return selected_shard_id, answer_backed, details
+
+
+def _quality_backed_remote_shard(
+    *,
+    answer_backed: bool,
+    response_text: str,
+    response_class: str,
+    surface: str,
+    rendered_via: str,
+) -> tuple[bool, dict[str, bool]]:
+    render_metrics = inspect_user_response_shape(
+        response_text,
+        surface=surface,
+        rendered_via=rendered_via,
+    )
+    quality_backed = (
+        bool(answer_backed)
+        and str(response_class or "").strip().lower() not in _NON_QUALITY_RESPONSE_CLASSES
+        and not bool(render_metrics.get("planner_leakage"))
+        and not bool(render_metrics.get("template_fallback_hit"))
+    )
+    return quality_backed, {
+        "planner_leakage": bool(render_metrics.get("planner_leakage")),
+        "template_fallback_hit": bool(render_metrics.get("template_fallback_hit")),
+    }
 
 
 def execute_grounded_turn(
@@ -532,12 +561,20 @@ def execute_grounded_turn(
         response_reason=response_reason,
         build_plan_fn=build_plan_fn,
     )
+    quality_backed, response_shape = _quality_backed_remote_shard(
+        answer_backed=answer_backed,
+        response_text=response,
+        response_class=turn_result.response_class.value,
+        surface=surface,
+        rendered_via=rendered_via,
+    )
     swarm_reuse_citations = _annotate_swarm_reuse_citations(
         swarm_reuse_citations,
         rendered_via=rendered_via,
         response_reason=response_reason,
         selected_shard_id=selected_shard_id,
         answer_backed=answer_backed,
+        quality_backed=quality_backed,
         counterfactual_details=counterfactual_details,
     )
     reuse_outcome_records = record_shard_reuse_outcomes(
@@ -553,6 +590,8 @@ def execute_grounded_turn(
             "source_platform": str((source_context or {}).get("platform") or ""),
             "model_execution_source": str(model_execution.source or ""),
             "gate_mode": str(gate.mode or ""),
+            "planner_leakage": bool(response_shape.get("planner_leakage")),
+            "template_fallback_hit": bool(response_shape.get("template_fallback_hit")),
         },
     )
     agent._emit_chat_truth_metrics(

@@ -38,6 +38,7 @@ def test_record_shard_reuse_outcomes_dedupes_citations_and_summarizes_latest() -
     assert summary["remote-shard-1"]["selected_success_count"] == 1
     assert summary["remote-shard-1"]["answer_backed_count"] == 1
     assert summary["remote-shard-1"]["answer_backed_success_count"] == 1
+    assert summary["remote-shard-1"]["quality_backed_count"] == 0
     assert summary["remote-shard-1"]["last_outcome_label"] == "successful"
     assert summary["remote-shard-1"]["last_response_class"] == "generic_conversation"
     assert summary["remote-shard-1"]["last_validation_state"] == "signature_and_manifest_verified"
@@ -108,3 +109,35 @@ def test_record_shard_reuse_outcomes_keeps_single_selected_remote_shard_non_answ
     assert summary["remote-shard-selected-only"]["selected_count"] == 1
     assert summary["remote-shard-selected-only"]["answer_backed_count"] == 0
     assert summary["remote-shard-selected-only"]["answer_backed_success_count"] == 0
+    assert summary["remote-shard-selected-only"]["quality_backed_count"] == 0
+
+
+def test_record_shard_reuse_outcomes_summarizes_quality_backed_counts() -> None:
+    rows = record_shard_reuse_outcomes(
+        citations=[
+            {
+                "kind": "remote_shard",
+                "shard_id": "remote-shard-quality",
+                "receipt_id": "receipt-quality",
+                "selected_for_plan": True,
+                "answer_backed": True,
+                "quality_backed": True,
+                "rendered_via": "reasoning_engine",
+                "response_reason": "grounded_plan_response",
+            }
+        ],
+        task_id="task-quality",
+        session_id="session-quality",
+        task_class="research",
+        response_class="generic_conversation",
+        success=True,
+        durable=True,
+    )
+
+    assert len(rows) == 1
+    summary = summarize_reuse_outcomes_for_shards(["remote-shard-quality"])
+    assert summary["remote-shard-quality"]["answer_backed_count"] == 1
+    assert summary["remote-shard-quality"]["quality_backed_count"] == 1
+    assert summary["remote-shard-quality"]["quality_backed_success_count"] == 1
+    assert summary["remote-shard-quality"]["quality_backed_durable_count"] == 1
+    assert summary["remote-shard-quality"]["last_quality_backed"] is True

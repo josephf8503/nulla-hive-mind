@@ -174,6 +174,9 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
                 "answer_backed_count": 0,
                 "answer_backed_success_count": 0,
                 "answer_backed_durable_count": 0,
+                "quality_backed_count": 0,
+                "quality_backed_success_count": 0,
+                "quality_backed_durable_count": 0,
                 "last_recorded_at": "",
                 "last_outcome_label": "",
                 "last_response_class": "",
@@ -181,6 +184,7 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
                 "last_receipt_id": "",
                 "last_selected_for_plan": False,
                 "last_answer_backed": False,
+                "last_quality_backed": False,
                 "last_rendered_via": "",
                 "last_response_reason": "",
             },
@@ -188,6 +192,7 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
         details = dict(data.get("details") or {})
         selected_for_plan = bool(details.get("selected_for_plan"))
         answer_backed = bool(details.get("answer_backed"))
+        quality_backed = bool(details.get("quality_backed"))
         summary["total_count"] += 1
         summary["success_count"] += 1 if data.get("success") else 0
         summary["durable_count"] += 1 if data.get("durable") else 0
@@ -197,6 +202,9 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
         summary["answer_backed_count"] += 1 if answer_backed else 0
         summary["answer_backed_success_count"] += 1 if answer_backed and data.get("success") else 0
         summary["answer_backed_durable_count"] += 1 if answer_backed and data.get("durable") else 0
+        summary["quality_backed_count"] += 1 if quality_backed else 0
+        summary["quality_backed_success_count"] += 1 if quality_backed and data.get("success") else 0
+        summary["quality_backed_durable_count"] += 1 if quality_backed and data.get("durable") else 0
         if not summary["last_recorded_at"]:
             summary["last_recorded_at"] = str(data.get("created_at") or "")
             summary["last_outcome_label"] = str(data.get("outcome_label") or "")
@@ -205,6 +213,7 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
             summary["last_receipt_id"] = str(data.get("receipt_id") or "")
             summary["last_selected_for_plan"] = selected_for_plan
             summary["last_answer_backed"] = answer_backed
+            summary["last_quality_backed"] = quality_backed
             summary["last_rendered_via"] = str(details.get("rendered_via") or "")
             summary["last_response_reason"] = str(details.get("response_reason") or "")
     return summaries
@@ -248,11 +257,16 @@ def _citation_reuse_details(
 ) -> dict[str, Any]:
     selected_explicit = citation.get("selected_for_plan")
     answer_backed_explicit = citation.get("answer_backed")
+    quality_backed_explicit = citation.get("quality_backed")
     selected_for_plan = bool(selected_explicit) if selected_explicit is not None else single_citation
     answer_backed = bool(answer_backed_explicit) if answer_backed_explicit is not None else (single_citation and bool(success))
+    quality_backed = bool(quality_backed_explicit) if quality_backed_explicit is not None else False
+    if not answer_backed:
+        quality_backed = False
     return {
         "selected_for_plan": selected_for_plan,
         "answer_backed": answer_backed,
+        "quality_backed": quality_backed,
         "rendered_via": str(citation.get("rendered_via") or "").strip(),
         "response_reason": str(citation.get("response_reason") or "").strip(),
     }

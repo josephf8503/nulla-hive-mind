@@ -37,11 +37,11 @@ def _reuse_outcome_adjustment(candidate: dict[str, Any]) -> float:
     if str(candidate.get("source_type") or "").strip() != "peer_received":
         return 0.0
     summary = dict(candidate.get("reuse_outcomes") or {})
-    total = max(0, int(summary.get("answer_backed_count") or 0))
+    total = max(0, int(summary.get("quality_backed_count") or 0))
     if total <= 0:
         return 0.0
-    success = max(0, int(summary.get("answer_backed_success_count") or 0))
-    durable = max(0, int(summary.get("answer_backed_durable_count") or 0))
+    success = max(0, int(summary.get("quality_backed_success_count") or 0))
+    durable = max(0, int(summary.get("quality_backed_durable_count") or 0))
     success_rate = success / total
     durable_rate = durable / total
     evidence_weight = min(total, 5) / 5.0

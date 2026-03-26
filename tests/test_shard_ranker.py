@@ -35,6 +35,9 @@ def test_rank_prefers_peer_received_shard_with_proven_reuse_success() -> None:
         "answer_backed_count": 4,
         "answer_backed_success_count": 4,
         "answer_backed_durable_count": 3,
+        "quality_backed_count": 4,
+        "quality_backed_success_count": 4,
+        "quality_backed_durable_count": 3,
     }
 
     ranked = rank([baseline, proven], task)
@@ -75,3 +78,30 @@ def test_rank_does_not_apply_remote_reuse_bonus_from_incidental_success_without_
     ranked = rank([incidental], task)
 
     assert ranked[0]["reuse_outcome_adjustment"] == 0.0
+
+
+def test_rank_prefers_peer_received_shard_with_quality_backed_reuse_over_answer_backed_only_history() -> None:
+    task = SimpleNamespace(task_id="task-4")
+    answer_backed_only = _candidate(shard_id="peer-answer-backed")
+    answer_backed_only["reuse_outcomes"] = {
+        "answer_backed_count": 5,
+        "answer_backed_success_count": 5,
+        "answer_backed_durable_count": 4,
+        "quality_backed_count": 0,
+        "quality_backed_success_count": 0,
+        "quality_backed_durable_count": 0,
+    }
+    quality_backed = _candidate(shard_id="peer-quality-backed")
+    quality_backed["reuse_outcomes"] = {
+        "answer_backed_count": 2,
+        "answer_backed_success_count": 2,
+        "answer_backed_durable_count": 1,
+        "quality_backed_count": 2,
+        "quality_backed_success_count": 2,
+        "quality_backed_durable_count": 1,
+    }
+
+    ranked = rank([answer_backed_only, quality_backed], task)
+
+    assert ranked[0]["shard_id"] == "peer-quality-backed"
+    assert ranked[0]["reuse_outcome_adjustment"] > ranked[1]["reuse_outcome_adjustment"]

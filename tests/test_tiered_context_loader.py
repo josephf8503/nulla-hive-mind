@@ -541,6 +541,7 @@ class TieredContextLoaderTests(unittest.TestCase):
                     "manifest_id": "manifest-1",
                     "content_hash": "content-1",
                     "validation_state": "signature_and_manifest_verified",
+                    "quality_backed": True,
                 }
             ],
             task_id="task-reuse-summary",
@@ -570,8 +571,9 @@ class TieredContextLoaderTests(unittest.TestCase):
         self.assertEqual(reuse_outcomes["durable_count"], 1)
         self.assertEqual(reuse_outcomes["selected_count"], 1)
         self.assertEqual(reuse_outcomes["answer_backed_count"], 1)
+        self.assertEqual(reuse_outcomes["quality_backed_count"], 1)
         self.assertEqual(reuse_outcomes["last_receipt_id"], receipt_id)
-        self.assertIn("Previously backed answers in 1 turns", remote_items[0].content)
+        self.assertIn("Previously improved clean answers in 1 turns", remote_items[0].content)
 
     def test_cached_remote_shard_with_better_reuse_history_ranks_first(self) -> None:
         now = _now()
@@ -645,6 +647,7 @@ class TieredContextLoaderTests(unittest.TestCase):
                     "manifest_id": "manifest-favored",
                     "content_hash": "content-favored",
                     "validation_state": "signature_and_manifest_verified",
+                    "quality_backed": True,
                 }
             ],
             task_id="task-rank-favored",
@@ -669,7 +672,7 @@ class TieredContextLoaderTests(unittest.TestCase):
         self.assertGreaterEqual(len(remote_items), 2)
         top_citation = dict(remote_items[0].metadata.get("reuse_citation") or {})
         self.assertEqual(top_citation["shard_id"], favored_shard_id)
-        self.assertEqual(dict(top_citation.get("reuse_outcomes") or {}).get("answer_backed_count"), 1)
+        self.assertEqual(dict(top_citation.get("reuse_outcomes") or {}).get("quality_backed_count"), 1)
 
     def test_shared_swarm_context_is_reused_in_live_retrieval(self) -> None:
         save_sniffed_context(
