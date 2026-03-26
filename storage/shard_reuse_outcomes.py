@@ -137,23 +137,40 @@ def record_shard_reuse_outcomes(
     return rows
 
 
-def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) -> dict[str, dict[str, Any]]:
+def summarize_reuse_outcomes_for_shards(
+    shard_ids: list[str] | tuple[str, ...],
+    *,
+    task_class: str | None = None,
+) -> dict[str, dict[str, Any]]:
     clean_ids = [str(item or "").strip() for item in shard_ids if str(item or "").strip()]
     if not clean_ids:
         return {}
+    normalized_task_class = str(task_class or "").strip()
     _init_table()
     placeholders = ", ".join("?" for _ in clean_ids)
     conn = get_connection()
     try:
-        rows = conn.execute(
-            f"""
-            SELECT *
-            FROM shard_reuse_outcomes
-            WHERE shard_id IN ({placeholders})
-            ORDER BY created_at DESC
-            """,
-            tuple(clean_ids),
-        ).fetchall()
+        if normalized_task_class:
+            rows = conn.execute(
+                f"""
+                SELECT *
+                FROM shard_reuse_outcomes
+                WHERE shard_id IN ({placeholders})
+                  AND task_class = ?
+                ORDER BY created_at DESC
+                """,
+                (*tuple(clean_ids), normalized_task_class),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""
+                SELECT *
+                FROM shard_reuse_outcomes
+                WHERE shard_id IN ({placeholders})
+                ORDER BY created_at DESC
+                """,
+                tuple(clean_ids),
+            ).fetchall()
     finally:
         conn.close()
     summaries: dict[str, dict[str, Any]] = {}
@@ -187,6 +204,7 @@ def summarize_reuse_outcomes_for_shards(shard_ids: list[str] | tuple[str, ...]) 
                 "last_quality_backed": False,
                 "last_rendered_via": "",
                 "last_response_reason": "",
+                "task_class_filter": normalized_task_class,
             },
         )
         details = dict(data.get("details") or {})

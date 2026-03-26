@@ -141,3 +141,43 @@ def test_record_shard_reuse_outcomes_summarizes_quality_backed_counts() -> None:
     assert summary["remote-shard-quality"]["quality_backed_success_count"] == 1
     assert summary["remote-shard-quality"]["quality_backed_durable_count"] == 1
     assert summary["remote-shard-quality"]["last_quality_backed"] is True
+
+
+def test_summarize_reuse_outcomes_can_filter_to_task_class() -> None:
+    citation = {
+        "kind": "remote_shard",
+        "shard_id": "remote-shard-task-class",
+        "receipt_id": "receipt-task-class",
+        "selected_for_plan": True,
+        "answer_backed": True,
+        "quality_backed": True,
+    }
+
+    record_shard_reuse_outcomes(
+        citations=[citation],
+        task_id="task-system-design",
+        session_id="session-system-design",
+        task_class="system_design",
+        response_class="generic_conversation",
+        success=True,
+        durable=True,
+    )
+    record_shard_reuse_outcomes(
+        citations=[citation],
+        task_id="task-research",
+        session_id="session-research",
+        task_class="research",
+        response_class="generic_conversation",
+        success=False,
+        durable=False,
+    )
+
+    filtered = summarize_reuse_outcomes_for_shards(["remote-shard-task-class"], task_class="system_design")
+    assert filtered["remote-shard-task-class"]["total_count"] == 1
+    assert filtered["remote-shard-task-class"]["success_count"] == 1
+    assert filtered["remote-shard-task-class"]["quality_backed_count"] == 1
+    assert filtered["remote-shard-task-class"]["task_class_filter"] == "system_design"
+
+    unfiltered = summarize_reuse_outcomes_for_shards(["remote-shard-task-class"])
+    assert unfiltered["remote-shard-task-class"]["total_count"] == 2
+    assert unfiltered["remote-shard-task-class"]["success_count"] == 1

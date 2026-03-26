@@ -149,6 +149,7 @@ def _render_context_sections(label: str, items: list[ContextItem]) -> list[str]:
 
 
 def _local_candidate_items(task: Any, classification: dict[str, Any]) -> tuple[list[ContextItem], list[dict[str, Any]]]:
+    task_class = str(classification.get("task_class") or "").strip()
     ranked = rank(find_local_candidates(task, classification), task)
     outcome_summaries = summarize_reuse_outcomes_for_shards(
         [
@@ -156,7 +157,8 @@ def _local_candidate_items(task: Any, classification: dict[str, Any]) -> tuple[l
             for candidate in ranked
             if str(candidate.get("source_type") or "") == "peer_received"
             and not dict(candidate.get("reuse_outcomes") or {})
-        ]
+        ],
+        task_class=task_class,
     )
     items: list[ContextItem] = []
     for candidate in ranked[:8]:
@@ -176,19 +178,19 @@ def _local_candidate_items(task: Any, classification: dict[str, Any]) -> tuple[l
             durable = int(reuse_outcomes.get("durable_count") or 0)
             if quality_backed > 0:
                 reuse_note = (
-                    f" Previously improved clean answers in {quality_backed} turns "
+                    f" Previously improved clean answers for this task class in {quality_backed} turns "
                     f"({quality_backed_durable} durable)."
                 )
             elif answer_backed > 0:
                 reuse_note = (
-                    f" Previously backed answers in {answer_backed} turns "
+                    f" Previously backed answers for this task class in {answer_backed} turns "
                     f"({answer_backed_durable} durable), but clean-answer proof is still weaker."
                 )
             elif selected > 0:
-                reuse_note = f" Previously selected during planning in {selected} turns."
+                reuse_note = f" Previously selected during planning for this task class in {selected} turns."
             elif success > 0:
                 reuse_note = (
-                    f" Previously cited in {success} successful turns "
+                    f" Previously cited for this task class in {success} successful turns "
                     f"({durable} durable); answer-backed proof not established yet."
                 )
             content = (

@@ -74,6 +74,7 @@ def find_local_candidates(task: Any, classification: dict[str, Any]) -> list[dic
     query = build_generalized_query(task, classification)
     expected_sig = query["problem_signature"]
     problem_class = query["problem_class"]
+    task_class = str(classification.get("task_class") or "").strip()
 
     conn = get_connection()
     try:
@@ -93,7 +94,7 @@ def find_local_candidates(task: Any, classification: dict[str, Any]) -> list[dic
 
     shard_ids = [str(row["shard_id"]) for row in rows]
     receipt_map = latest_receipts_for_shards(shard_ids)
-    reuse_outcome_map = summarize_reuse_outcomes_for_shards(shard_ids)
+    reuse_outcome_map = summarize_reuse_outcomes_for_shards(shard_ids, task_class=task_class)
     candidates: list[dict] = []
 
     for row in rows:
