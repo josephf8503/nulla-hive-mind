@@ -138,10 +138,20 @@ class RoutingTable:
         *,
         count: int = 20,
         exclude_peer_ids: set[str] | None = None,
+        now: float | None = None,
+        max_age_seconds: float | None = None,
     ) -> list[DHTNode]:
         excluded = {str(item).strip() for item in set(exclude_peer_ids or set()) if str(item).strip()}
-        candidates = [node for node in self.find_closest_peers(target_id, count=max(1, int(count) + len(excluded))) if node.peer_id not in excluded]
-        return candidates[: max(1, int(count))]
+        current_time = float(time.time() if now is None else now)
+        stale_limit = float(self._stale_node_age_seconds if max_age_seconds is None else max_age_seconds)
+        ranked: list[tuple[int, int, DHTNode]] = []
+        for node in self.nodes.values():
+            if node.peer_id in excluded:
+                continue
+            is_stale = self._node_is_stale(node, now=current_time, max_age_seconds=stale_limit)
+            ranked.append((1 if is_stale else 0, self._distance(target_id, node.peer_id), node))
+        ranked.sort(key=lambda item: (item[0], item[1], item[2].peer_id))
+        return [item[2] for item in ranked[: max(1, int(count))]]
 
     def refresh_targets(
         self,
@@ -196,8 +206,9 @@ class RoutingTable:
         target_int = (self.local_peer_int ^ midpoint_distance) & mask
         return f"{target_int:0{self._peer_id_width}x}"
 
-    def _node_is_stale(self, node: DHTNode, *, now: float) -> bool:
-        return (now - float(node.last_seen)) > float(self._stale_node_age_seconds)
+    def _node_is_stale(self, node: DHTNode, *, now: float, max_age_seconds: float | None = None) -> bool:
+        stale_limit = float(self._stale_node_age_seconds if max_age_seconds is None else max_age_seconds)
+        return (now - float(node.last_seen)) > stale_limit
 
     def _promote_replacement(self, bucket_index: int, *, now: float) -> None:
         bucket = self._buckets[bucket_index]

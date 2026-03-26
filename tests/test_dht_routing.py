@@ -54,6 +54,30 @@ class DhtRoutingTests(unittest.TestCase):
         self.assertNotIn(near, {item.peer_id for item in out})
         self.assertEqual(out[0].peer_id, mid)
 
+    def test_find_lookup_candidates_prefers_fresh_peers_over_stale_ones(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=64)
+        stale_near = "0" * 63 + "1"
+        fresh_far = "f" * 64
+        table.add_node(stale_near, "203.0.113.10", 49001)
+        table.add_node(fresh_far, "203.0.113.11", 49002)
+        table.nodes[stale_near].last_seen = 0.0
+        table._stale_node_age_seconds = 10.0
+
+        out = table.find_lookup_candidates("0" * 64, count=2, now=1000.0)
+
+        self.assertEqual([item.peer_id for item in out], [fresh_far, stale_near])
+
+    def test_find_lookup_candidates_keeps_stale_peers_as_fallback_when_needed(self) -> None:
+        table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=64)
+        stale_only = "0" * 63 + "1"
+        table.add_node(stale_only, "203.0.113.10", 49001)
+        table.nodes[stale_only].last_seen = 0.0
+        table._stale_node_age_seconds = 10.0
+
+        out = table.find_lookup_candidates("0" * 64, count=1, now=1000.0)
+
+        self.assertEqual([item.peer_id for item in out], [stale_only])
+
     def test_refresh_targets_returns_stale_buckets_in_age_order(self) -> None:
         table = RoutingTable(local_peer_id="0" * 64, k_bucket_size=20, bucket_count=16)
         near = "0" * 63 + "1"
