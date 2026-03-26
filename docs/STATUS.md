@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-26.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved one hundred and forty-five areas:
+The current `main` checkpoint materially improved one hundred and forty-six areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -292,16 +292,18 @@ The current `main` checkpoint materially improved one hundred and forty-five are
    DHT discovery no longer forgets every failed candidate probe between maintenance ticks. `core/discovery_index.py` now records candidate probe attempts, delivery outcomes, and consecutive probe failures, while `core/maintenance.py` now honors bounded cooldown and failure limits before re-probing the same candidate endpoint. That still is not public-internet liveness proof, but it stops pretending that endlessly re-pinging dead candidates is real hardening.
 143. **Envelope task/proof event spine baseline**
    Bounded envelope execution no longer keeps its lifecycle truth trapped inside executor-local result details. `core/orchestration/proof_events.py` now emits append-only `task_envelope_*` runtime events through the existing runtime continuity store, `core/orchestration/executor.py` now records start, step, dependency, restore, rollback, merge, and final result milestones into that same session event spine, `core/runtime_continuity.py` now normalizes those events into session status instead of leaving them as unmapped strings, and `core/runtime_task_rail_summary_client.py` now recognizes that lifecycle so operator proof/status surfaces derive from the same runtime truth instead of ad hoc local details.
-144. **Signed observed-backup endpoint baseline**
-   Signed assist and daemon ingress no longer throw away peer liveness evidence after validation. `network/assist_router.py` and `core/daemon/messages.py` now persist signed observed endpoint proofs through `core/discovery_index.py`, `core/maintenance.py` now prefers those verified backup endpoints before raw candidate probes when verified coverage is sparse, and the observed proof metadata now stays visible as proof-backed backup truth instead of being flattened into either referral gossip or a premature primary replacement. This is still not full authoritative multi-endpoint truth yet.
+144. **Signed observed endpoint-proof baseline**
+   Signed assist and daemon ingress no longer throw away peer liveness evidence after validation. `network/assist_router.py` and `core/daemon/messages.py` now persist signed observed endpoint proofs through `core/discovery_index.py`, `core/maintenance.py` now prefers those verified endpoints before raw candidate probes when verified coverage is sparse, and the observed proof metadata now stays visible as proof-backed endpoint truth instead of being flattened into either referral gossip or a premature primary replacement.
 145. **Signed API/bootstrap endpoint-proof baseline**
-   Signed meet presence writes and signed bootstrap snapshots no longer stop at proofless endpoint registration. `core/api_write_auth.py` now surfaces proof context after signed-write validation, meet ingress now threads that proof context through `core/web/meet/*` into `core/meet_and_greet_service.py`, presence contracts now carry `endpoints` lists while keeping `endpoint` as the best-endpoint compatibility alias, and `core/bootstrap_sync.py` now exports/imports those endpoint lists while persisting bootstrap proof into the same discovery-backed verified-endpoint seam. This is still a compatibility bridge over a singleton primary endpoint row, not the final multi-endpoint authority model.
+   Signed meet presence writes and signed bootstrap snapshots no longer stop at proofless endpoint registration. `core/api_write_auth.py` now surfaces proof context after signed-write validation, meet ingress now threads that proof context through `core/web/meet/*` into `core/meet_and_greet_service.py`, presence contracts now carry `endpoints` lists while keeping `endpoint` as the best-endpoint compatibility alias, and `core/bootstrap_sync.py` now exports/imports those endpoint lists while persisting bootstrap proof into the same discovery-backed verified-endpoint seam.
+146. **Authoritative multi-endpoint discovery baseline**
+   Discovery truth no longer collapses every peer to one authoritative transport row. `storage/migrations.py` now rebuilds legacy `peer_endpoints` state into one row per `(peer_id, host, port)`, `core/discovery_index.py` now promotes signed/API/bootstrap/self endpoint truth into that multi-endpoint store while keeping `endpoint_for_peer()` and `recent_peer_endpoints()` as deterministic best-endpoint compatibility views, `retrieval/swarm_query.py` now tries ordered delivery targets for direct shard/task sends instead of assuming a single endpoint, and `core/hardware_challenge.py` now uses the same ordered endpoint set before falling back to raw DHT routing.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1544 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1549 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -334,9 +336,9 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts, cached remote-shard reuse surfaces citation metadata, grounded turns persist downstream reuse outcomes with selected-vs-answer-backed attribution, selected shards now need counterfactual loss proof before they count as strongly answer-backed, future cached-remote retrieval can prefer shards that have actually improved clean final answers before instead of replaying static trust/quality or weaker citation history only, and that proof is now scoped to the current task class instead of leaking across unrelated Hive work. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. Doctor, receipt, and both installer launchers now derive profile truth from the same runtime provider snapshot seam, expose machine-readable `provider_capability_truth`, carry selected-lane health state, route around blocked local alternatives when a healthier local lane exists, and stop calling degraded required lanes “ready” just because the API key is present. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1544 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1549 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist, NAT-mapped nodes now advertise `hole_punch` instead of pretending they are direct, and private-LAN nodes now stay `lan_only` unless a real relay is configured. This is more honest, but it is still not proven at scale over internet. |
-| **DHT routing** | **Partial** | Bucketed routing now has iterative lookup-frontier helpers that can exclude already-contacted peers, deterministic refresh targets for stale non-empty buckets, a bounded replacement-cache path so fresh full buckets queue challengers instead of evicting live incumbents immediately, endpoint-provenance guardrails so referral-only `NODE_FOUND` / `BLOCK_FOUND` peers do not overwrite observed endpoint truth or refresh observed-peer liveness, proof-backed backup-endpoint memory for signed observed/API/bootstrap lanes so validated ingress and verified bootstrap snapshots stop discarding their endpoint proof after one pass, bounded maintenance-time candidate-endpoint probing when verified discovery coverage is sparse, and candidate-probe cooldown/failure memory so maintenance stops hammering the same dead referral endpoints every tick. Those candidate probes still do not become authoritative endpoint truth for free, and the authoritative row is still not true multi-endpoint state yet. It is still not hardened as a public multi-hop routing layer. |
+| **DHT routing** | **Partial** | Bucketed routing now has iterative lookup-frontier helpers that can exclude already-contacted peers, deterministic refresh targets for stale non-empty buckets, a bounded replacement-cache path so fresh full buckets queue challengers instead of evicting live incumbents immediately, endpoint-provenance guardrails so referral-only `NODE_FOUND` / `BLOCK_FOUND` peers do not overwrite observed endpoint truth or refresh observed-peer liveness, proof-backed observed/API/bootstrap/self endpoint promotion into authoritative multi-endpoint discovery state, bounded maintenance-time candidate-endpoint probing when verified coverage is sparse, and candidate-probe cooldown/failure memory so maintenance stops hammering the same dead referral endpoints every tick. Those candidate probes still do not become authoritative endpoint truth for free, signed liveness is still not complete, and the mesh is still not hardened as a public multi-hop routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
 | **Channel gateway** | **Partial** | Platform-neutral gateway exists. Live surface wiring pending. |
 | **OpenClaw integration** | **Partial** | Agent registers and responds. Live-info routing and Hive create/confirm flow are better, but chat quality and product polish are still uneven. |
@@ -370,8 +372,8 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1544 passed, 13 skipped, 12 xfailed, 16 xpassed` |
-| Passing | 1544 |
+| Full suite result | `1549 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Passing | 1549 |
 | Skipped | 13 |
 | Expected failures (xfail) | 12 |
 | Unexpected passes (xpass) | 16 |

@@ -91,7 +91,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - Bounded coding/operator repair flow for concrete repo edits, including search/read/patch/validate, preflight failing-test capture, narrow diagnosis-to-repair promotion, and fail-closed rollback/recovery isolation
 - Append-only runtime task/proof event spine for bounded local envelope execution, so repair/orchestration lifecycle truth is no longer trapped inside executor-local details
 - Role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
-- Proof-backed mesh endpoint memory for signed observed, signed API, and signed bootstrap traffic, so ingress/bootstrap lanes can persist verified backup endpoints and keep the best-endpoint compatibility field without promoting raw DHT referrals into live transport truth
+- Proof-backed mesh endpoint promotion for signed observed, signed API, and signed bootstrap traffic, so ingress/bootstrap lanes can persist authoritative multi-endpoint discovery state while still keeping best-endpoint compatibility fields without promoting raw DHT referrals into live transport truth
 - OpenClaw registration and local API lane
 - Public proof, tasks, operator pages, worklog, and coordination surfaces
 - One-click install, built-wheel smoke, and `/healthz` startup contract
@@ -110,7 +110,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 
 - Native desktop app surface so users do not have to manage local web tabs and service trivia
 - Mobile companion surface for remote query/watch/approval while heavy execution stays local-first
-- Internet-scale mesh hardening: authoritative multi-endpoint truth, signed liveness proof beyond the current verified-backup baseline, NAT/relay realism, and churn survival
+- Internet-scale mesh hardening: signed-liveness-backed multi-endpoint truth beyond the current local/trusted baseline, NAT/relay realism, and churn survival
 - Public web hardening before mass-adoption claims
 - Real economic rails only after the runtime, proof path, network, and abuse controls are strong enough to justify them
 
