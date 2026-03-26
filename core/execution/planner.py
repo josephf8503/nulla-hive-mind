@@ -857,6 +857,14 @@ def _infer_literal_candidate_repair(
     )
     if direct_repair is not None:
         return direct_repair
+    binding_repair = _literal_binding_candidate_repair(
+        lines=_read_hint_lines(current_read_hints),
+        function_name=function_name,
+        expected_literal=expected_literal,
+        current_path=current_path,
+    )
+    if binding_repair is not None:
+        return binding_repair
 
     current_lines = _read_hint_lines(current_read_hints)
     if not current_lines:
@@ -879,6 +887,14 @@ def _infer_literal_candidate_repair(
         )
         if delegated_repair is not None:
             return delegated_repair
+        delegated_binding_repair = _literal_binding_candidate_repair(
+            lines=current_lines,
+            function_name=delegate_function,
+            expected_literal=expected_literal,
+            current_path=current_path,
+        )
+        if delegated_binding_repair is not None:
+            return delegated_binding_repair
     return None
 
 
@@ -927,6 +943,45 @@ def _literal_return_candidate_repair(
         "path": current_path,
         "old_text": body_line.strip(),
         "new_text": f"return {expected_literal}",
+    }
+
+
+def _literal_binding_candidate_repair(
+    *,
+    lines: list[str],
+    function_name: str,
+    expected_literal: str,
+    current_path: str,
+) -> dict[str, str] | None:
+    body_line = _single_function_body_line(lines, function_name)
+    if not body_line:
+        return None
+    binding_return_match = re.match(r"^\s*return\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*$", body_line)
+    if not binding_return_match:
+        return None
+    binding_name = str(binding_return_match.group("name") or "").strip()
+    if not binding_name:
+        return None
+    binding_matches: list[tuple[str, str]] = []
+    binding_pattern = re.compile(
+        rf"^(?P<name>{re.escape(binding_name)})\s*=\s*(?P<value>-?\d+|True|False|None|'[^']*'|\"[^\"]*\")\s*$"
+    )
+    for raw_line in list(lines or []):
+        if raw_line.startswith((" ", "\t")):
+            continue
+        match = binding_pattern.match(raw_line)
+        if not match:
+            continue
+        binding_matches.append((raw_line, str(match.group("value") or "").strip()))
+    if len(binding_matches) != 1:
+        return None
+    binding_line, actual_literal = binding_matches[0]
+    if actual_literal == expected_literal:
+        return None
+    return {
+        "path": current_path,
+        "old_text": binding_line.strip(),
+        "new_text": f"{binding_name} = {expected_literal}",
     }
 
 
