@@ -39,6 +39,9 @@ class PeerEndpointCandidate:
     port: int
     source: str
     last_seen_at: str
+    last_probe_attempt_at: str = ""
+    last_probe_delivery_ok: bool = False
+    consecutive_probe_failures: int = 0
 
 
 def _utcnow() -> str:
@@ -442,8 +445,9 @@ def register_peer_endpoint_candidate(peer_id: str, host: str, port: int, source:
         conn.execute(
             """
             INSERT INTO peer_endpoint_candidates (
-                peer_id, host, port, source, first_seen_at, last_seen_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                peer_id, host, port, source, first_seen_at, last_seen_at,
+                last_probe_attempt_at, last_probe_delivery_ok, consecutive_probe_failures, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, '', 0, 0, ?)
             ON CONFLICT(peer_id, host, port, source) DO UPDATE SET
                 last_seen_at = excluded.last_seen_at,
                 updated_at = excluded.updated_at
@@ -482,10 +486,11 @@ def candidate_endpoints_for_peer(peer_id: str, *, limit: int = 8) -> list[PeerEn
     try:
         rows = conn.execute(
             """
-            SELECT peer_id, host, port, source, last_seen_at
+            SELECT peer_id, host, port, source, last_seen_at,
+                   last_probe_attempt_at, last_probe_delivery_ok, consecutive_probe_failures
             FROM peer_endpoint_candidates
             WHERE peer_id = ?
-            ORDER BY updated_at DESC
+            ORDER BY consecutive_probe_failures ASC, updated_at DESC
             LIMIT ?
             """,
             (peer_id, max(1, int(limit))),
@@ -500,31 +505,50 @@ def candidate_endpoints_for_peer(peer_id: str, *, limit: int = 8) -> list[PeerEn
             port=int(row["port"]),
             source=str(row["source"]),
             last_seen_at=str(row["last_seen_at"]),
+            last_probe_attempt_at=str(row["last_probe_attempt_at"] or ""),
+            last_probe_delivery_ok=bool(row["last_probe_delivery_ok"]),
+            consecutive_probe_failures=int(row["consecutive_probe_failures"] or 0),
         )
         for row in rows
     ]
 
 
-def recent_peer_endpoint_candidates(*, exclude_peer_id: str | None = None, limit: int = 32) -> list[PeerEndpointCandidate]:
+def recent_peer_endpoint_candidates(
+    *,
+    exclude_peer_id: str | None = None,
+    limit: int = 32,
+    cooldown_seconds: int = 0,
+    max_consecutive_failures: int | None = None,
+) -> list[PeerEndpointCandidate]:
     conn = get_connection()
     try:
         rows = conn.execute(
             """
-            SELECT peer_id, host, port, source, last_seen_at
+            SELECT peer_id, host, port, source, last_seen_at,
+                   last_probe_attempt_at, last_probe_delivery_ok, consecutive_probe_failures
             FROM peer_endpoint_candidates
-            ORDER BY updated_at DESC
+            ORDER BY consecutive_probe_failures ASC, updated_at DESC
             LIMIT ?
             """,
-            (max(1, int(limit)),),
+            (max(1, int(limit)) * 4,),
         ).fetchall()
     finally:
         conn.close()
 
     out: list[PeerEndpointCandidate] = []
+    now = datetime.now(timezone.utc)
     for row in rows:
         peer_id = str(row["peer_id"])
         if exclude_peer_id and peer_id == exclude_peer_id:
             continue
+        failures = int(row["consecutive_probe_failures"] or 0)
+        if max_consecutive_failures is not None and failures >= max(0, int(max_consecutive_failures)):
+            continue
+        last_probe_attempt_at = str(row["last_probe_attempt_at"] or "")
+        if cooldown_seconds > 0 and last_probe_attempt_at:
+            probe_dt = _parse_dt(last_probe_attempt_at)
+            if probe_dt is not None and (now - probe_dt).total_seconds() < max(0, int(cooldown_seconds)):
+                continue
         out.append(
             PeerEndpointCandidate(
                 peer_id=peer_id,
@@ -532,9 +556,61 @@ def recent_peer_endpoint_candidates(*, exclude_peer_id: str | None = None, limit
                 port=int(row["port"]),
                 source=str(row["source"]),
                 last_seen_at=str(row["last_seen_at"]),
+                last_probe_attempt_at=last_probe_attempt_at,
+                last_probe_delivery_ok=bool(row["last_probe_delivery_ok"]),
+                consecutive_probe_failures=failures,
             )
         )
+        if len(out) >= max(1, int(limit)):
+            break
     return out
+
+
+def note_peer_endpoint_candidate_probe_result(
+    peer_id: str,
+    host: str,
+    port: int,
+    *,
+    source: str,
+    delivered: bool,
+) -> None:
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT consecutive_probe_failures
+            FROM peer_endpoint_candidates
+            WHERE peer_id = ? AND host = ? AND port = ? AND source = ?
+            LIMIT 1
+            """,
+            (peer_id, str(host), int(port), str(source)),
+        ).fetchone()
+        if not row:
+            return
+        failures = 0 if delivered else (int(row["consecutive_probe_failures"] or 0) + 1)
+        conn.execute(
+            """
+            UPDATE peer_endpoint_candidates
+            SET last_probe_attempt_at = ?,
+                last_probe_delivery_ok = ?,
+                consecutive_probe_failures = ?,
+                updated_at = ?
+            WHERE peer_id = ? AND host = ? AND port = ? AND source = ?
+            """,
+            (
+                _utcnow(),
+                1 if delivered else 0,
+                failures,
+                _utcnow(),
+                peer_id,
+                str(host),
+                int(port),
+                str(source),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def recent_peer_endpoints(*, exclude_peer_id: str | None = None, limit: int = 32) -> list[tuple[str, str, int]]:

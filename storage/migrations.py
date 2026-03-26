@@ -715,6 +715,9 @@ CREATE TABLE IF NOT EXISTS peer_endpoint_candidates (
     source TEXT NOT NULL DEFAULT 'dht',
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
+    last_probe_attempt_at TEXT NOT NULL DEFAULT '',
+    last_probe_delivery_ok INTEGER NOT NULL DEFAULT 0,
+    consecutive_probe_failures INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (peer_id, host, port, source)
 );
@@ -1231,6 +1234,9 @@ def run_migrations(db_path=None) -> None:
         _add_column_if_missing(conn, "task_assignments", "lease_expires_at", "TEXT")
         _add_column_if_missing(conn, "task_assignments", "last_progress_state", "TEXT NOT NULL DEFAULT ''")
         _add_column_if_missing(conn, "task_assignments", "last_progress_note", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoint_candidates", "last_probe_attempt_at", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoint_candidates", "last_probe_delivery_ok", "INTEGER NOT NULL DEFAULT 0")
+        _add_column_if_missing(conn, "peer_endpoint_candidates", "consecutive_probe_failures", "INTEGER NOT NULL DEFAULT 0")
         _add_column_if_missing(conn, "adaptation_corpora", "quality_score", "REAL NOT NULL DEFAULT 0.0")
         _add_column_if_missing(conn, "adaptation_corpora", "quality_details_json", "TEXT NOT NULL DEFAULT '{}'")
         _add_column_if_missing(conn, "adaptation_corpora", "content_hash", "TEXT NOT NULL DEFAULT ''")

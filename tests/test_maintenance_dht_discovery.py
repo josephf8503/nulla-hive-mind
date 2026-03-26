@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from core.discovery_index import (
+    candidate_endpoints_for_peer,
     endpoint_for_peer,
     get_best_helpers,
+    note_peer_endpoint_candidate_probe_result,
     recent_peer_endpoint_candidates,
     record_bootstrap_presence,
     register_peer_endpoint,
@@ -93,6 +96,41 @@ def test_recent_peer_endpoint_candidates_returns_candidate_rows_without_promotin
     assert endpoint_for_peer("candidate-peer") is None
 
 
+def test_recent_peer_endpoint_candidates_skips_recent_failures_within_cooldown() -> None:
+    run_migrations()
+    _clear_tables()
+    register_peer_endpoint_candidate("candidate-peer", "198.51.100.56", 49556, source="dht")
+    note_peer_endpoint_candidate_probe_result(
+        "candidate-peer",
+        "198.51.100.56",
+        49556,
+        source="dht",
+        delivered=False,
+    )
+
+    candidates = recent_peer_endpoint_candidates(limit=4, cooldown_seconds=600, max_consecutive_failures=3)
+
+    assert candidates == []
+
+
+def test_recent_peer_endpoint_candidates_excludes_over_failure_limit() -> None:
+    run_migrations()
+    _clear_tables()
+    register_peer_endpoint_candidate("candidate-peer", "198.51.100.57", 49557, source="dht")
+    for _ in range(3):
+        note_peer_endpoint_candidate_probe_result(
+            "candidate-peer",
+            "198.51.100.57",
+            49557,
+            source="dht",
+            delivered=False,
+        )
+
+    candidates = recent_peer_endpoint_candidates(limit=4, cooldown_seconds=0, max_consecutive_failures=3)
+
+    assert candidates == []
+
+
 def test_maintenance_tick_uses_candidate_endpoints_when_verified_coverage_is_sparse() -> None:
     run_migrations()
     _clear_tables()
@@ -177,3 +215,51 @@ def test_maintenance_tick_prefers_verified_endpoints_before_candidates() -> None
         loop.run_tick()
 
     send_message.assert_called_once_with("203.0.113.20", 49020, b"find-node")
+
+
+def test_maintenance_tick_records_candidate_probe_failures_and_cools_down_retry() -> None:
+    run_migrations()
+    _clear_tables()
+    register_peer_endpoint_candidate("candidate-peer", "198.51.100.62", 49562, source="dht")
+    loop = MaintenanceLoop(
+        config=MaintenanceConfig(
+            bootstrap_topics=[],
+            dht_discovery_min_nodes=20,
+            dht_discovery_verified_limit=4,
+            dht_discovery_candidate_limit=2,
+            dht_discovery_min_verified_endpoints=1,
+            dht_candidate_probe_cooldown_seconds=600,
+            dht_candidate_probe_failure_limit=3,
+        )
+    )
+
+    def _run_tick(send_ok: bool) -> mock.Mock:
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch("core.maintenance.publish_local_presence_snapshots"))
+            stack.enter_context(mock.patch("core.maintenance.sync_from_bootstrap_topics"))
+            stack.enter_context(mock.patch("core.maintenance.prune_stale_capabilities", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.prune_expired_presence", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.prune_expired_holders", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.reap_stale_subtasks", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.release_mature_pending_rewards", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.finalize_confirmed_rewards", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.prune_expired_topic_files", return_value=0))
+            stack.enter_context(mock.patch("core.maintenance.initiate_random_hardware_challenge"))
+            stack.enter_context(mock.patch("core.maintenance.schedule_adaptation_autopilot_tick"))
+            stack.enter_context(mock.patch("core.maintenance.sync_control_plane_workspace", return_value={"ok": True, "writes": 0}))
+            stack.enter_context(mock.patch("network.signer.get_local_peer_id", return_value="local-peer"))
+            stack.enter_context(mock.patch("network.dht.get_routing_table", return_value=mock.Mock(nodes={})))
+            stack.enter_context(mock.patch("network.assist_router.build_find_node_message", return_value=b"find-node"))
+            send_message = stack.enter_context(mock.patch("network.transport.send_message", return_value=send_ok))
+            loop.run_tick()
+            return send_message
+
+    send_message = _run_tick(False)
+    send_message.assert_called_once_with("198.51.100.62", 49562, b"find-node")
+    candidate = candidate_endpoints_for_peer("candidate-peer")[0]
+    assert candidate.consecutive_probe_failures == 1
+    assert candidate.last_probe_delivery_ok is False
+    assert candidate.last_probe_attempt_at
+
+    send_message = _run_tick(True)
+    send_message.assert_not_called()

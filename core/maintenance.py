@@ -12,6 +12,7 @@ from core.bootstrap_sync import prune_expired_topic_files, publish_local_presenc
 from core.control_plane_workspace import sync_control_plane_workspace
 from core.credit_ledger import award_presence_credits
 from core.discovery_index import (
+    note_peer_endpoint_candidate_probe_result,
     prune_stale_capabilities,
     recent_peer_endpoint_candidates,
     recent_peer_endpoints,
@@ -38,6 +39,8 @@ class MaintenanceConfig:
     dht_discovery_verified_limit: int = 10
     dht_discovery_candidate_limit: int = 4
     dht_discovery_min_verified_endpoints: int = 3
+    dht_candidate_probe_cooldown_seconds: int = 300
+    dht_candidate_probe_failure_limit: int = 3
 
 
 def _dht_discovery_targets(
@@ -46,7 +49,9 @@ def _dht_discovery_targets(
     verified_limit: int,
     candidate_limit: int,
     min_verified_endpoints: int,
-) -> tuple[list[tuple[str, str, int]], list[tuple[str, str, int]]]:
+    candidate_probe_cooldown_seconds: int,
+    candidate_probe_failure_limit: int,
+) -> tuple[list[tuple[str, str, int]], list[tuple[str, str, int, str]]]:
     verified_targets = list(
         recent_peer_endpoints(
             exclude_peer_id=local_peer_id,
@@ -58,15 +63,17 @@ def _dht_discovery_targets(
 
     seen_peers = {peer_id for peer_id, _, _ in verified_targets}
     seen_endpoints = {(host, int(port)) for _, host, port in verified_targets}
-    candidate_targets: list[tuple[str, str, int]] = []
+    candidate_targets: list[tuple[str, str, int, str]] = []
     for candidate in recent_peer_endpoint_candidates(
         exclude_peer_id=local_peer_id,
         limit=max(1, int(candidate_limit)) * 3,
+        cooldown_seconds=int(candidate_probe_cooldown_seconds),
+        max_consecutive_failures=int(candidate_probe_failure_limit),
     ):
         endpoint = (candidate.host, int(candidate.port))
         if candidate.peer_id in seen_peers or endpoint in seen_endpoints:
             continue
-        candidate_targets.append((candidate.peer_id, candidate.host, int(candidate.port)))
+        candidate_targets.append((candidate.peer_id, candidate.host, int(candidate.port), str(candidate.source)))
         seen_peers.add(candidate.peer_id)
         seen_endpoints.add(endpoint)
         if len(candidate_targets) >= max(0, int(candidate_limit)):
@@ -160,6 +167,8 @@ class MaintenanceLoop:
                     verified_limit=int(self.config.dht_discovery_verified_limit),
                     candidate_limit=int(self.config.dht_discovery_candidate_limit),
                     min_verified_endpoints=int(self.config.dht_discovery_min_verified_endpoints),
+                    candidate_probe_cooldown_seconds=int(self.config.dht_candidate_probe_cooldown_seconds),
+                    candidate_probe_failure_limit=int(self.config.dht_candidate_probe_failure_limit),
                 )
                 payload = build_find_node_message(local_peer_id)
                 verified_sent = 0
@@ -167,8 +176,16 @@ class MaintenanceLoop:
                 for _, host, port in verified_targets:
                     if send_message(host, int(port), payload):
                         verified_sent += 1
-                for _, host, port in candidate_targets:
-                    if send_message(host, int(port), payload):
+                for peer_id, host, port, source in candidate_targets:
+                    delivered = bool(send_message(host, int(port), payload))
+                    note_peer_endpoint_candidate_probe_result(
+                        peer_id,
+                        host,
+                        int(port),
+                        source=source,
+                        delivered=delivered,
+                    )
+                    if delivered:
                         candidate_sent += 1
                 sent = verified_sent + candidate_sent
                 if sent > 0:
