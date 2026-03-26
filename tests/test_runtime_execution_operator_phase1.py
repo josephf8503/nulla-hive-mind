@@ -1040,6 +1040,152 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertEqual(second.next_payload["intent"], "workspace.read_file")
             self.assertEqual(second.next_payload["arguments"]["path"], "test_app.py")
 
+    def test_failed_planned_repair_can_retry_with_second_envelope_after_diagnosis(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text("def answer():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+
+            first_prompt = (
+                "tests are failing. replace `return 41` with `return 40` in app.py, "
+                "then run `python3 -m pytest -q test_app.py`"
+            )
+            diagnose_prompt = "run `python3 -m pytest -q test_app.py` and fix the failing tests"
+
+            first = plan_tool_workflow(
+                user_text=first_prompt,
+                task_class=classify(first_prompt)["task_class"],
+                executed_steps=[],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(first.handled)
+            self.assertEqual(first.next_payload["intent"], "orchestration.execute_envelope")
+            first_result = execute_runtime_tool(
+                first.next_payload["intent"],
+                dict(first.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-second-repair-attempt-1"},
+            )
+
+            assert first_result is not None
+            self.assertFalse(first_result.ok)
+            self.assertEqual(first_result.status, "merge_failed")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 41\n")
+
+            executed_steps = [
+                {
+                    "tool_name": first.next_payload["intent"],
+                    "arguments": dict(first.next_payload["arguments"]),
+                    "observation": dict(first_result.details["observation"] or {}),
+                    "details": dict(first_result.details or {}),
+                }
+            ]
+
+            second = plan_tool_workflow(
+                user_text=diagnose_prompt,
+                task_class=classify(diagnose_prompt)["task_class"],
+                executed_steps=executed_steps,
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+            self.assertEqual(second.next_payload["intent"], "workspace.read_file")
+            executed_steps.append(
+                {
+                    "tool_name": second.next_payload["intent"],
+                    "arguments": dict(second.next_payload["arguments"]),
+                    "observation": {
+                        "intent": "workspace.read_file",
+                        "tool_surface": "workspace",
+                        "ok": True,
+                        "status": "executed",
+                        "path": "test_app.py",
+                        "start_line": 1,
+                        "line_count": 4,
+                        "lines": [
+                            {"line_number": 1, "text": "from app import answer"},
+                            {"line_number": 4, "text": "    assert answer() == 42"},
+                        ],
+                    },
+                }
+            )
+
+            third = plan_tool_workflow(
+                user_text=diagnose_prompt,
+                task_class=classify(diagnose_prompt)["task_class"],
+                executed_steps=executed_steps,
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+            self.assertEqual(third.next_payload["intent"], "workspace.symbol_search")
+            executed_steps.append(
+                {
+                    "tool_name": third.next_payload["intent"],
+                    "arguments": dict(third.next_payload["arguments"]),
+                    "observation": {
+                        "intent": "workspace.symbol_search",
+                        "tool_surface": "workspace",
+                        "ok": True,
+                        "status": "executed",
+                        "symbol": "answer",
+                        "match_count": 2,
+                        "matches": [
+                            {"path": "test_app.py", "line": 1, "kind": "reference", "snippet": "from app import answer"},
+                            {"path": "app.py", "line": 1, "kind": "function_definition", "snippet": "def answer():"},
+                        ],
+                    },
+                }
+            )
+
+            fourth = plan_tool_workflow(
+                user_text=diagnose_prompt,
+                task_class=classify(diagnose_prompt)["task_class"],
+                executed_steps=executed_steps,
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+            self.assertEqual(fourth.next_payload["intent"], "workspace.read_file")
+            self.assertEqual(fourth.next_payload["arguments"]["path"], "app.py")
+            executed_steps.append(
+                {
+                    "tool_name": fourth.next_payload["intent"],
+                    "arguments": dict(fourth.next_payload["arguments"]),
+                    "observation": {
+                        "intent": "workspace.read_file",
+                        "tool_surface": "workspace",
+                        "ok": True,
+                        "status": "executed",
+                        "path": "app.py",
+                        "start_line": 1,
+                        "line_count": 2,
+                        "lines": [
+                            {"line_number": 1, "text": "def answer():"},
+                            {"line_number": 2, "text": "    return 41"},
+                        ],
+                    },
+                }
+            )
+
+            fifth = plan_tool_workflow(
+                user_text=diagnose_prompt,
+                task_class=classify(diagnose_prompt)["task_class"],
+                executed_steps=executed_steps,
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+            self.assertTrue(fifth.handled)
+            self.assertEqual(fifth.reason, "planned_candidate_repair_after_validation_diagnosis")
+            self.assertEqual(fifth.next_payload["intent"], "orchestration.execute_envelope")
+
+            second_result = execute_runtime_tool(
+                fifth.next_payload["intent"],
+                dict(fifth.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-second-repair-attempt-2"},
+            )
+
+            assert second_result is not None
+            self.assertTrue(second_result.ok)
+            self.assertEqual(second_result.status, "completed")
+            self.assertEqual((workspace / "app.py").read_text(encoding="utf-8"), "def answer():\n    return 42\n")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -554,6 +554,10 @@ def _latest_failed_validation_hints(steps: list[dict[str, Any]]) -> dict[str, An
         observation = dict(step.get("observation") or {})
         intent = str(observation.get("intent") or "").strip()
         if intent not in {"workspace.run_tests", "workspace.run_lint", "workspace.run_formatter"}:
+            if intent == "orchestration.execute_envelope":
+                _, hints, rollback = _failed_validation_from_orchestration_step(step)
+                if hints and bool(rollback.get("ok", False)):
+                    return hints
             continue
         hints = extract_observation_followup_hints(observation)
         if int(hints.get("returncode") or 0) != 0:
@@ -566,6 +570,10 @@ def _latest_failed_validation_observation(steps: list[dict[str, Any]]) -> dict[s
         observation = dict(step.get("observation") or {})
         intent = str(observation.get("intent") or "").strip()
         if intent not in {"workspace.run_tests", "workspace.run_lint", "workspace.run_formatter"}:
+            if intent == "orchestration.execute_envelope":
+                nested_observation, hints, rollback = _failed_validation_from_orchestration_step(step)
+                if nested_observation and hints and bool(rollback.get("ok", False)):
+                    return nested_observation
             continue
         hints = extract_observation_followup_hints(observation)
         if int(hints.get("returncode") or 0) != 0:
@@ -609,6 +617,47 @@ def _latest_read_file_hints(steps: list[dict[str, Any]], *, path: str) -> dict[s
         if str(hints.get("path") or "").strip() == normalized_path:
             return hints
     return {}
+
+
+def _workflow_validation_command_already_attempted(steps: list[dict[str, Any]], command: str) -> bool:
+    normalized = str(command or "").strip()
+    if not normalized:
+        return False
+    for step in reversed(list(steps or [])):
+        observation = dict(step.get("observation") or {})
+        intent = str(observation.get("intent") or "").strip()
+        if intent in {"workspace.run_tests", "workspace.run_lint", "workspace.run_formatter"}:
+            step_command = str(dict(step.get("arguments") or {}).get("command") or "").strip()
+            if step_command == normalized:
+                return True
+            hints = extract_observation_followup_hints(observation)
+            if str(hints.get("command") or "").strip() == normalized:
+                return True
+            continue
+        if intent == "orchestration.execute_envelope":
+            _, _, rollback = _failed_validation_from_orchestration_step(step)
+            if not bool(rollback.get("ok", False)):
+                continue
+            details = dict(step.get("details") or {})
+            merged_result = dict(details.get("merged_result") or {})
+            winner = dict(merged_result.get("winner") or {})
+            winner_details = dict(winner.get("details") or {})
+            for step_payload in reversed(list(winner_details.get("step_results") or [])):
+                if not isinstance(step_payload, dict):
+                    continue
+                nested_intent = str(step_payload.get("intent") or "").strip()
+                if nested_intent not in {"workspace.run_tests", "workspace.run_lint", "workspace.run_formatter"}:
+                    continue
+                nested_arguments = dict(step_payload.get("arguments") or {})
+                nested_command = str(nested_arguments.get("command") or "").strip()
+                if nested_command == normalized:
+                    return True
+                nested_details = dict(step_payload.get("details") or {})
+                nested_observation = dict(nested_details.get("observation") or {})
+                hints = extract_observation_followup_hints(nested_observation)
+                if str(hints.get("command") or "").strip() == normalized:
+                    return True
+    return False
 
 
 def _iter_read_file_hints(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -732,6 +781,24 @@ def _planned_validation_failure_followup(
         if lookup_followup is not None:
             return lookup_followup
     return WorkflowPlannerDecision(handled=True, reason=stop_reason, stop_after=True)
+
+
+def _can_plan_candidate_repair_envelope(steps: list[dict[str, Any]]) -> bool:
+    envelope_steps = [
+        step
+        for step in list(steps or [])
+        if str(dict(step.get("observation") or {}).get("intent") or "").strip() == "orchestration.execute_envelope"
+    ]
+    if not envelope_steps:
+        return True
+    if len(envelope_steps) > 1:
+        return False
+    last_envelope = dict(envelope_steps[-1] or {})
+    _, hints, rollback = _failed_validation_from_orchestration_step(last_envelope)
+    if not hints or not bool(rollback.get("ok", False)):
+        return False
+    observation = dict(last_envelope.get("observation") or {})
+    return not bool(observation.get("ok", False))
 
 
 def _infer_literal_candidate_repair(
@@ -1549,7 +1616,7 @@ def plan_tool_workflow(
                         },
                     },
                 )
-        if replacement is None and not patch_text and not _workflow_step_exists(steps, "orchestration.execute_envelope"):
+        if replacement is None and not patch_text and _can_plan_candidate_repair_envelope(steps):
             candidate_repair = _infer_literal_candidate_repair(
                 user_text=user_text,
                 steps=steps,
@@ -1601,9 +1668,7 @@ def plan_tool_workflow(
                 )
         if explicit_command and not (
             _workflow_step_exists(steps, "sandbox.run_command", key="command", value=explicit_command)
-            or _workflow_step_exists(steps, "workspace.run_tests", key="command", value=explicit_command)
-            or _workflow_step_exists(steps, "workspace.run_lint", key="command", value=explicit_command)
-            or _workflow_step_exists(steps, "workspace.run_formatter", key="command", value=explicit_command)
+            or _workflow_validation_command_already_attempted(steps, explicit_command)
         ):
             command_payload = _planned_command_payload(user_text=user_text, command=explicit_command)
             if command_payload is not None:
@@ -1666,9 +1731,7 @@ def plan_tool_workflow(
             )
         if explicit_command and not (
             _workflow_step_exists(steps, "sandbox.run_command", key="command", value=explicit_command)
-            or _workflow_step_exists(steps, "workspace.run_tests", key="command", value=explicit_command)
-            or _workflow_step_exists(steps, "workspace.run_lint", key="command", value=explicit_command)
-            or _workflow_step_exists(steps, "workspace.run_formatter", key="command", value=explicit_command)
+            or _workflow_validation_command_already_attempted(steps, explicit_command)
         ):
             command_payload = _planned_command_payload(user_text=user_text, command=explicit_command)
             if command_payload is not None:
