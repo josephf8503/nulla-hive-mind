@@ -30,6 +30,13 @@ Core lane:
 - `scripts/`: support utilities that are not product entrypoints
 - `config/`: checked-in policy, cluster templates, and release metadata
 
+## Current Installer Truth Spine
+
+- `installer/install_nulla.sh`: POSIX installer entrypoint that now derives install-profile summaries from the runtime provider snapshot seam instead of shell-local profile guesses
+- `installer/install_nulla.bat`: Windows installer entrypoint that now derives install-profile summaries from the runtime provider snapshot seam instead of shell-local profile guesses
+- `installer/write_install_receipt.py`: machine-readable install receipt writer that now emits top-level `provider_capability_truth` plus install-profile truth from the shared runtime provider snapshot
+- `installer/doctor.py`: post-install machine-readable health report that now emits top-level `provider_capability_truth` plus install-profile truth from the shared runtime provider snapshot
+
 ## First 3-Minute Inspection Path
 
 1. `README.md`
