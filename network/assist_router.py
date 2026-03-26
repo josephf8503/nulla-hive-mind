@@ -14,7 +14,7 @@ from core.capability_tokens import (
     revoke_capability_tokens_for_task,
 )
 from core.discovery_index import (
-    endpoint_for_peer,
+    delivery_targets_for_peer,
     record_bootstrap_presence,
     record_signed_peer_endpoint_observation,
     register_capability_ad,
@@ -885,9 +885,13 @@ def handle_incoming_assist_message(
             # We have it; advertise a reachable endpoint when known.
             from network.dht import DHTNode
             local_id = local_peer_id()
-            endpoint = endpoint_for_peer(local_id)
-            host = endpoint[0] if endpoint else "127.0.0.1"
-            port = int(endpoint[1]) if endpoint else 49152
+            targets = delivery_targets_for_peer(local_id, verified_limit=1, include_candidates=False)
+            if targets:
+                host = targets[0].host
+                port = int(targets[0].port)
+            else:
+                host = "127.0.0.1"
+                port = 49152
             self_entry = DHTNode(peer_id=local_id, ip=host, port=port, last_seen=0)
             generated.append(build_block_found_message(block_hash, [self_entry]))
             return RouteResult(True, "FIND_BLOCK processed. We have the block, returning BLOCK_FOUND.", generated)

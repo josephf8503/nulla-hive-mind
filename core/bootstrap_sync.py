@@ -10,11 +10,10 @@ from typing import Any
 from core import audit_logger
 from core.bootstrap_adapters import BootstrapMirrorAdapter, FileTopicAdapter
 from core.discovery_index import (
-    endpoint_for_peer,
+    delivery_targets_for_peer,
     record_bootstrap_presence,
     record_verified_peer_endpoint_proof,
     register_peer_endpoint,
-    verified_endpoints_for_peer,
 )
 from core.runtime_paths import data_path
 from network.signer import get_local_peer_id as local_peer_id
@@ -128,8 +127,11 @@ def _local_capability_records(limit: int = 128) -> list[dict[str, Any]]:
         except Exception:
             capabilities = []
 
-        endpoints = verified_endpoints_for_peer(row["peer_id"], limit=4)
-        endpoint = endpoint_for_peer(row["peer_id"])
+        delivery_targets = delivery_targets_for_peer(
+            row["peer_id"],
+            verified_limit=4,
+            include_candidates=False,
+        )
         record = {
             "peer_id": row["peer_id"],
             "status": row["status"],
@@ -139,13 +141,15 @@ def _local_capability_records(limit: int = 128) -> list[dict[str, Any]]:
             "host_group_hint_hash": row["host_group_hint_hash"],
             "last_seen_at": row["last_seen_at"],
         }
-        if endpoints:
+        if delivery_targets:
             record["endpoints"] = [
                 {"host": item.host, "port": int(item.port), "source": item.source}
-                for item in endpoints
+                for item in delivery_targets
             ]
-        if endpoint:
-            record["endpoint"] = {"host": endpoint[0], "port": endpoint[1]}
+            record["endpoint"] = {
+                "host": delivery_targets[0].host,
+                "port": int(delivery_targets[0].port),
+            }
         records.append(record)
     return records
 

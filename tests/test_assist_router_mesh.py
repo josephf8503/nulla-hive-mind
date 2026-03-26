@@ -8,7 +8,10 @@ from unittest.mock import patch
 from core.credit_ledger import get_credit_balance
 from core.discovery_index import (
     candidate_endpoints_for_peer,
+    delivery_targets_for_peer,
     endpoint_for_peer,
+    note_verified_peer_endpoint_delivery_result,
+    record_verified_peer_endpoint_proof,
     register_peer_endpoint,
     signed_observed_endpoints_for_peer,
 )
@@ -62,6 +65,41 @@ class AssistRouterMeshTests(unittest.TestCase):
         self.assertTrue(peers)
         self.assertEqual(str(peers[0].get("ip")), "198.51.100.10")
         self.assertEqual(int(peers[0].get("port")), 49200)
+
+    def test_find_block_advertises_delivery_best_endpoint_not_stale_registry_alias(self) -> None:
+        peer_id = local_peer_id()
+        register_peer_endpoint(peer_id, "198.51.100.12", 49212, source="self")
+        register_peer_endpoint(peer_id, "198.51.100.13", 49213, source="bootstrap")
+        record_verified_peer_endpoint_proof(
+            peer_id,
+            "198.51.100.13",
+            49213,
+            source="bootstrap",
+            verification_kind="bootstrap_snapshot",
+            proof_message_id="bootstrap-proof",
+            proof_timestamp="2026-03-26T10:30:00+00:00",
+        )
+        note_verified_peer_endpoint_delivery_result(peer_id, "198.51.100.12", 49212, delivered=True)
+
+        raw = encode_message(
+            msg_id=str(uuid.uuid4()),
+            msg_type="FIND_BLOCK",
+            sender_peer_id=peer_id,
+            nonce=uuid.uuid4().hex,
+            payload={"block_hash": "b" * 64},
+        )
+
+        with patch("core.liquefy_cas.get_chunk", return_value=b"test-bytes"):
+            result = handle_incoming_assist_message(raw_bytes=raw, source_addr=None)
+
+        self.assertTrue(result.ok)
+        response = Protocol.decode_and_validate(result.generated_messages[0])
+        peers = (response.get("payload") or {}).get("hosting_peers") or []
+        self.assertTrue(peers)
+        self.assertEqual(str(peers[0].get("ip")), "198.51.100.12")
+        self.assertEqual(int(peers[0].get("port")), 49212)
+        targets = delivery_targets_for_peer(peer_id, verified_limit=2, include_candidates=False)
+        self.assertEqual([(item.host, item.port) for item in targets[:2]], [("198.51.100.12", 49212), ("198.51.100.13", 49213)])
 
     def test_credit_transfer_uses_live_signer_identity_lookup(self) -> None:
         actual_sender = local_peer_id()

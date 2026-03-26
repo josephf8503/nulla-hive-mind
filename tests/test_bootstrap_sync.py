@@ -8,7 +8,12 @@ from unittest import mock
 import core.bootstrap_sync as bootstrap_sync
 from core.bootstrap_adapters import FileTopicAdapter
 from core.bootstrap_sync import publish_local_presence_snapshots, sync_from_bootstrap_topics
-from core.discovery_index import verified_endpoints_for_peer
+from core.discovery_index import (
+    note_verified_peer_endpoint_delivery_result,
+    record_verified_peer_endpoint_proof,
+    register_peer_endpoint,
+    verified_endpoints_for_peer,
+)
 from core.runtime_paths import configure_runtime_home
 from storage.db import get_connection, reset_default_connection
 from storage.migrations import run_migrations
@@ -110,3 +115,60 @@ def test_sync_from_bootstrap_topics_persists_bootstrap_endpoint_proof_from_endpo
     assert (endpoints[0].host, endpoints[0].port, endpoints[0].source) == ("203.0.113.80", 49880, "bootstrap")
     assert endpoints[0].verification_kind == "bootstrap_snapshot"
     assert endpoints[0].proof_hash == signed["snapshot_hash"]
+
+
+def test_publish_local_presence_snapshots_exports_delivery_order_not_stale_registry_order() -> None:
+    run_migrations()
+    reset_default_connection()
+    conn = get_connection()
+    try:
+        for table in ("agent_capabilities", "peers", "peer_endpoints", "peer_endpoint_observations", "peer_endpoint_candidates"):
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute(
+            """
+            INSERT INTO agent_capabilities (
+                peer_id, status, capabilities_json, compute_class, supported_models_json,
+                capacity, trust_score, assist_filters_json, host_group_hint_hash,
+                last_seen_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "peer-export-order",
+                "idle",
+                '["research"]',
+                "cpu_basic",
+                "[]",
+                2,
+                0.7,
+                "{}",
+                None,
+                "2026-03-26T10:00:00+00:00",
+                "2026-03-26T10:00:00+00:00",
+                "2026-03-26T10:00:00+00:00",
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    register_peer_endpoint("peer-export-order", "203.0.113.90", 49890, source="self")
+    register_peer_endpoint("peer-export-order", "203.0.113.91", 49891, source="bootstrap")
+    record_verified_peer_endpoint_proof(
+        "peer-export-order",
+        "203.0.113.91",
+        49891,
+        source="bootstrap",
+        verification_kind="bootstrap_snapshot",
+        proof_message_id="bootstrap-proof",
+        proof_timestamp="2026-03-26T10:30:00+00:00",
+    )
+    note_verified_peer_endpoint_delivery_result("peer-export-order", "203.0.113.90", 49890, delivered=True)
+
+    records = bootstrap_sync._local_capability_records(limit=8)
+
+    assert len(records) == 1
+    assert records[0]["endpoint"] == {"host": "203.0.113.90", "port": 49890}
+    assert records[0]["endpoints"][:2] == [
+        {"host": "203.0.113.90", "port": 49890, "source": "self"},
+        {"host": "203.0.113.91", "port": 49891, "source": "bootstrap"},
+    ]
