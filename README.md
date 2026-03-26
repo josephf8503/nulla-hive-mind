@@ -92,6 +92,7 @@ Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
 - Append-only runtime task/proof event spine for bounded local envelope execution, so repair/orchestration lifecycle truth is no longer trapped inside executor-local details
 - Role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
 - Proof-backed mesh endpoint promotion for signed observed, signed API, and signed bootstrap traffic, so ingress/bootstrap lanes can persist authoritative multi-endpoint discovery state while still keeping best-endpoint compatibility fields without promoting raw DHT referrals into live transport truth
+- Delivery-memory-backed mesh peer fallback for critical task/result/review lanes, so verified endpoints are re-ranked by actual send success/failure and the daemon no longer assumes one endpoint tuple is enough for bounded peer delivery
 - OpenClaw registration and local API lane
 - Public proof, tasks, operator pages, worklog, and coordination surfaces
 - One-click install, built-wheel smoke, and `/healthz` startup contract
