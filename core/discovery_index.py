@@ -48,6 +48,10 @@ def _utcnow() -> str:
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
+    try:
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
 
 
 def _endpoint_source_priority(value: str) -> int:
@@ -57,10 +61,6 @@ def _endpoint_source_priority(value: str) -> int:
 
 def _is_verified_endpoint_source(value: str) -> bool:
     return str(value or "").strip().lower() in _VERIFIED_ENDPOINT_SOURCES
-    try:
-        return datetime.fromisoformat(value)
-    except Exception:
-        return None
 
 
 def upsert_peer_minimal(peer_id: str) -> None:
@@ -503,6 +503,38 @@ def candidate_endpoints_for_peer(peer_id: str, *, limit: int = 8) -> list[PeerEn
         )
         for row in rows
     ]
+
+
+def recent_peer_endpoint_candidates(*, exclude_peer_id: str | None = None, limit: int = 32) -> list[PeerEndpointCandidate]:
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT peer_id, host, port, source, last_seen_at
+            FROM peer_endpoint_candidates
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    out: list[PeerEndpointCandidate] = []
+    for row in rows:
+        peer_id = str(row["peer_id"])
+        if exclude_peer_id and peer_id == exclude_peer_id:
+            continue
+        out.append(
+            PeerEndpointCandidate(
+                peer_id=peer_id,
+                host=str(row["host"]),
+                port=int(row["port"]),
+                source=str(row["source"]),
+                last_seen_at=str(row["last_seen_at"]),
+            )
+        )
+    return out
 
 
 def recent_peer_endpoints(*, exclude_peer_id: str | None = None, limit: int = 32) -> list[tuple[str, str, int]]:

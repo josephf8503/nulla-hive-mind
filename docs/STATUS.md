@@ -4,7 +4,7 @@ Current status matrix. Updated 2026-03-26.
 
 ## Latest Stabilization Checkpoint
 
-The current `main` checkpoint materially improved one hundred and thirty-nine areas:
+The current `main` checkpoint materially improved one hundred and forty areas:
 
 1. **Provider routing and model orchestration**
    NULLA now has explicit drone-vs-queen provider roles. The helper/teacher lane can run a bounded local-first drone swarm, and the main slow-lane model router now honors the same role-aware routing instead of bypassing it with generic provider failover.
@@ -284,12 +284,14 @@ The current `main` checkpoint materially improved one hundred and thirty-nine ar
    Helper/teacher provider execution no longer bypasses the same health contract that routing already exposes. `core/model_teacher_pipeline.py` now skips circuit-open lanes, runs adapter `health_check()` before invoke, records provider failures for dead health checks / empty outputs / invoke errors, records provider success after a good response, and surfaces failed lane attempts in candidate provenance instead of silently shrinking the swarm. That closes one of the bigger remaining gaps between “smart provider routing” and “actually honest multi-lane execution.”
 139. **Quality-backed remote-shard reuse baseline**
    Hive reuse no longer treats every answer-backed shard like equally strong proof. `core/agent_runtime/turn_reasoning.py` now only marks the selected remote shard as `quality_backed` when the final decorated response stays clean and out of the safe-failure classes, `storage/shard_reuse_outcomes.py` now summarizes those stronger counts separately from weaker answer-backed history, `core/shard_ranker.py` now boosts cached remote shards from that stricter signal instead of raw answer-backed counts, and `core/tiered_context_loader.py` now says “improved clean answers” only when the stored proof actually earned it.
+140. **Bounded candidate-endpoint discovery baseline**
+   DHT discovery no longer depends only on already-verified endpoints while referral candidates sit idle, and helper freshness no longer collapses to a flat fallback score. `core/discovery_index.py` now parses capability timestamps correctly and exposes recent candidate endpoints without promoting them into live truth, while `core/maintenance.py` now probes a bounded set of candidate endpoints only when verified coverage is sparse. Those candidate endpoints still remain candidate-only until a stronger observed/bootstrap/self signal arrives.
 
 Current test gate on this checkpoint:
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1527 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1531 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Runtime posture | Alpha |
 | Beta verdict | Not ready |
 
@@ -322,9 +324,9 @@ Current test gate on this checkpoint:
 | **Contribution scoring** | **Works** | Glory scores, local credits, receipts, evidence-based grading, and partial-result paths are present. Credits here are local work/participation accounting, not blockchain tokens. |
 | **Knowledge sharing (shards)** | **Works** | Create, scope, promote, replicate knowledge across mesh. Remote fetches now also record explicit receipts, cached remote-shard reuse surfaces citation metadata, grounded turns persist downstream reuse outcomes with selected-vs-answer-backed attribution, selected shards now need counterfactual loss proof before they count as strongly answer-backed, and future cached-remote retrieval can prefer shards that have actually improved clean final answers before instead of replaying static trust/quality or weaker citation history only. |
 | **One-click installer** | **Works** | macOS, Linux, Windows (PowerShell). Auto hardware detection, explicit install profiles, single-volume free-space checks, built-wheel smoke coverage, and aligned `/healthz` startup checks. Doctor, receipt, and both installer launchers now derive profile truth from the same runtime provider snapshot seam, expose machine-readable `provider_capability_truth`, carry selected-lane health state, route around blocked local alternatives when a healthier local lane exists, and stop calling degraded required lanes “ready” just because the API key is present. |
-| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1524 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
+| **CI pipeline** | **Enforced** | GitHub Actions runs lint, matrix tests, build, and the fast LLM acceptance gate on every push. Local full gate currently `1531 passed, 13 skipped, 12 xfailed, 16 xpassed`; check Actions for the latest branch conclusion. |
 | **WAN transport** | **Partial** | Relay/STUN probes exist, NAT-mapped nodes now advertise `hole_punch` instead of pretending they are direct, and private-LAN nodes now stay `lan_only` unless a real relay is configured. This is more honest, but it is still not proven at scale over internet. |
-| **DHT routing** | **Partial** | Bucketed routing now has iterative lookup-frontier helpers that can exclude already-contacted peers, deterministic refresh targets for stale non-empty buckets, a bounded replacement-cache path so fresh full buckets queue challengers instead of evicting live incumbents immediately, and endpoint-provenance guardrails so referral-only `NODE_FOUND` / `BLOCK_FOUND` peers do not overwrite observed endpoint truth, do not refresh observed-peer liveness, and do not get re-exported in verified-only DHT replies. It is still not hardened as a public multi-hop routing layer. |
+| **DHT routing** | **Partial** | Bucketed routing now has iterative lookup-frontier helpers that can exclude already-contacted peers, deterministic refresh targets for stale non-empty buckets, a bounded replacement-cache path so fresh full buckets queue challengers instead of evicting live incumbents immediately, endpoint-provenance guardrails so referral-only `NODE_FOUND` / `BLOCK_FOUND` peers do not overwrite observed endpoint truth or refresh observed-peer liveness, and bounded maintenance-time candidate-endpoint probing when verified discovery coverage is sparse. Those candidate probes still do not become authoritative endpoint truth for free. It is still not hardened as a public multi-hop routing layer. |
 | **Meet cluster replication** | **Partial** | Pull-based sync works. Global convergence not proven across regions. |
 | **Channel gateway** | **Partial** | Platform-neutral gateway exists. Live surface wiring pending. |
 | **OpenClaw integration** | **Partial** | Agent registers and responds. Live-info routing and Hive create/confirm flow are better, but chat quality and product polish are still uneven. |
@@ -358,7 +360,7 @@ Credits in this repo are local proof-of-work / proof-of-participation accounting
 
 | Metric | Value |
 |--------|-------|
-| Full suite result | `1527 passed, 13 skipped, 12 xfailed, 16 xpassed` |
+| Full suite result | `1531 passed, 13 skipped, 12 xfailed, 16 xpassed` |
 | Passing | 1507 |
 | Skipped | 13 |
 | Expected failures (xfail) | 13 |

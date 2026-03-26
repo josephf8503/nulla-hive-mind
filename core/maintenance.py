@@ -11,7 +11,11 @@ from core.bootstrap_adapters import BootstrapMirrorAdapter
 from core.bootstrap_sync import prune_expired_topic_files, publish_local_presence_snapshots, sync_from_bootstrap_topics
 from core.control_plane_workspace import sync_control_plane_workspace
 from core.credit_ledger import award_presence_credits
-from core.discovery_index import prune_stale_capabilities
+from core.discovery_index import (
+    prune_stale_capabilities,
+    recent_peer_endpoint_candidates,
+    recent_peer_endpoints,
+)
 from core.hardware_challenge import initiate_random_hardware_challenge
 from core.knowledge_freshness import iso_now
 from core.reward_engine import finalize_confirmed_rewards, release_mature_pending_rewards
@@ -30,6 +34,44 @@ class MaintenanceConfig:
     stale_capability_hours: int = 24
     topic_file_max_age_minutes: int = 60
     stale_subtask_scan_limit: int = 200
+    dht_discovery_min_nodes: int = 20
+    dht_discovery_verified_limit: int = 10
+    dht_discovery_candidate_limit: int = 4
+    dht_discovery_min_verified_endpoints: int = 3
+
+
+def _dht_discovery_targets(
+    *,
+    local_peer_id: str,
+    verified_limit: int,
+    candidate_limit: int,
+    min_verified_endpoints: int,
+) -> tuple[list[tuple[str, str, int]], list[tuple[str, str, int]]]:
+    verified_targets = list(
+        recent_peer_endpoints(
+            exclude_peer_id=local_peer_id,
+            limit=max(1, int(verified_limit)),
+        )
+    )
+    if len(verified_targets) >= max(0, int(min_verified_endpoints)):
+        return verified_targets, []
+
+    seen_peers = {peer_id for peer_id, _, _ in verified_targets}
+    seen_endpoints = {(host, int(port)) for _, host, port in verified_targets}
+    candidate_targets: list[tuple[str, str, int]] = []
+    for candidate in recent_peer_endpoint_candidates(
+        exclude_peer_id=local_peer_id,
+        limit=max(1, int(candidate_limit)) * 3,
+    ):
+        endpoint = (candidate.host, int(candidate.port))
+        if candidate.peer_id in seen_peers or endpoint in seen_endpoints:
+            continue
+        candidate_targets.append((candidate.peer_id, candidate.host, int(candidate.port)))
+        seen_peers.add(candidate.peer_id)
+        seen_endpoints.add(endpoint)
+        if len(candidate_targets) >= max(0, int(candidate_limit)):
+            break
+    return verified_targets, candidate_targets
 
 
 class MaintenanceLoop:
@@ -108,26 +150,40 @@ class MaintenanceLoop:
             from network.dht import get_routing_table
             from network.signer import get_local_peer_id
             from network.transport import send_message
-            from storage.db import get_connection
 
             table = get_routing_table()
             table.prune_stale_nodes(max_age_seconds=float(self.config.stale_capability_hours) * 3600.0)
-            if len(table.nodes) < 20:
-                conn = get_connection()
-                rows = conn.execute(
-                    "SELECT peer_id, host, port FROM peer_endpoints WHERE peer_id != ? LIMIT 10",
-                    (get_local_peer_id(),),
-                ).fetchall()
-                conn.close()
-
-                if rows:
-                    payload = build_find_node_message(get_local_peer_id())
-                    sent = 0
-                    for row in rows:
-                        if send_message(row["host"], int(row["port"]), payload):
-                            sent += 1
-                    if sent > 0:
-                        audit_logger.log("dht_discovery_initiated", target_id="dht", target_type="maintenance", details={"sent": sent})
+            if len(table.nodes) < max(1, int(self.config.dht_discovery_min_nodes)):
+                local_peer_id = get_local_peer_id()
+                verified_targets, candidate_targets = _dht_discovery_targets(
+                    local_peer_id=local_peer_id,
+                    verified_limit=int(self.config.dht_discovery_verified_limit),
+                    candidate_limit=int(self.config.dht_discovery_candidate_limit),
+                    min_verified_endpoints=int(self.config.dht_discovery_min_verified_endpoints),
+                )
+                payload = build_find_node_message(local_peer_id)
+                verified_sent = 0
+                candidate_sent = 0
+                for _, host, port in verified_targets:
+                    if send_message(host, int(port), payload):
+                        verified_sent += 1
+                for _, host, port in candidate_targets:
+                    if send_message(host, int(port), payload):
+                        candidate_sent += 1
+                sent = verified_sent + candidate_sent
+                if sent > 0:
+                    audit_logger.log(
+                        "dht_discovery_initiated",
+                        target_id="dht",
+                        target_type="maintenance",
+                        details={
+                            "sent": sent,
+                            "verified_sent": verified_sent,
+                            "candidate_sent": candidate_sent,
+                            "verified_target_count": len(verified_targets),
+                            "candidate_target_count": len(candidate_targets),
+                        },
+                    )
         except Exception as e:
             audit_logger.log("dht_discovery_error", target_id="dht", target_type="maintenance", details={"error": str(e)})
 
