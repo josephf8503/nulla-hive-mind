@@ -874,6 +874,166 @@ class RuntimeExecutionOperatorPhase1Tests(unittest.TestCase):
             self.assertEqual(result.status, "completed")
             self.assertEqual((workspace / "helpers.py").read_text(encoding="utf-8"), "def answer_value():\n    return 42\n")
 
+    def test_planned_repair_can_follow_delegate_lookup_before_helper_read(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "app.py").write_text(
+                "from helpers import answer_value\n\n\ndef answer():\n    return answer_value()\n",
+                encoding="utf-8",
+            )
+            (workspace / "helpers.py").write_text("def answer_value():\n    return 41\n", encoding="utf-8")
+            (workspace / "test_app.py").write_text(
+                "from app import answer\n\n\ndef test_answer():\n    assert answer() == 42\n",
+                encoding="utf-8",
+            )
+
+            validation = plan_tool_workflow(
+                user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
+                task_class="debugging",
+                executed_steps=[],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+            validation_result = execute_runtime_tool(
+                validation.next_payload["intent"],
+                dict(validation.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-delegate-lookup-validation"},
+            )
+
+            validation_observation = {
+                "tool_name": "workspace.run_tests",
+                "arguments": dict(validation.next_payload["arguments"]),
+                "observation": dict(validation_result.details["observation"]),
+            }
+            test_read_observation = {
+                "tool_name": "workspace.read_file",
+                "arguments": {"path": "test_app.py", "start_line": 1, "max_lines": 60},
+                "observation": {
+                    "intent": "workspace.read_file",
+                    "tool_surface": "workspace",
+                    "ok": True,
+                    "status": "executed",
+                    "path": "test_app.py",
+                    "start_line": 1,
+                    "line_count": 4,
+                    "lines": [
+                        {"line_number": 1, "text": "from app import answer"},
+                        {"line_number": 4, "text": "    assert answer() == 42"},
+                    ],
+                },
+            }
+            answer_symbol_observation = {
+                "tool_name": "workspace.symbol_search",
+                "arguments": {"symbol": "answer", "limit": 10},
+                "observation": {
+                    "intent": "workspace.symbol_search",
+                    "tool_surface": "workspace",
+                    "ok": True,
+                    "status": "executed",
+                    "symbol": "answer",
+                    "match_count": 2,
+                    "matches": [
+                        {"path": "test_app.py", "line": 1, "kind": "reference", "snippet": "from app import answer"},
+                        {"path": "app.py", "line": 3, "kind": "function_definition", "snippet": "def answer():"},
+                    ],
+                },
+            }
+            app_read_observation = {
+                "tool_name": "workspace.read_file",
+                "arguments": {"path": "app.py", "start_line": 1, "max_lines": 60},
+                "observation": {
+                    "intent": "workspace.read_file",
+                    "tool_surface": "workspace",
+                    "ok": True,
+                    "status": "executed",
+                    "path": "app.py",
+                    "start_line": 1,
+                    "line_count": 4,
+                    "lines": [
+                        {"line_number": 1, "text": "from helpers import answer_value"},
+                        {"line_number": 3, "text": "def answer():"},
+                        {"line_number": 4, "text": "    return answer_value()"},
+                    ],
+                },
+            }
+
+            delegate_lookup = plan_tool_workflow(
+                user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
+                task_class="debugging",
+                executed_steps=[
+                    validation_observation,
+                    test_read_observation,
+                    answer_symbol_observation,
+                    app_read_observation,
+                ],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(delegate_lookup.handled)
+            self.assertEqual(delegate_lookup.reason, "planned_symbol_search_after_delegate_inspection")
+            lookup_result = execute_runtime_tool(
+                delegate_lookup.next_payload["intent"],
+                dict(delegate_lookup.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-delegate-lookup-symbols"},
+            )
+
+            delegate_symbol_observation = {
+                "tool_name": "workspace.symbol_search",
+                "arguments": dict(delegate_lookup.next_payload["arguments"]),
+                "observation": dict(lookup_result.details["observation"]),
+            }
+
+            helper_read = plan_tool_workflow(
+                user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
+                task_class="debugging",
+                executed_steps=[
+                    validation_observation,
+                    test_read_observation,
+                    answer_symbol_observation,
+                    app_read_observation,
+                    delegate_symbol_observation,
+                ],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(helper_read.handled)
+            self.assertEqual(helper_read.reason, "planned_read_after_symbol_search")
+            helper_read_result = execute_runtime_tool(
+                helper_read.next_payload["intent"],
+                dict(helper_read.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-delegate-helper-read"},
+            )
+
+            repair = plan_tool_workflow(
+                user_text="run `python3 -m pytest -q test_app.py` and fix the failing tests",
+                task_class="debugging",
+                executed_steps=[
+                    validation_observation,
+                    test_read_observation,
+                    answer_symbol_observation,
+                    app_read_observation,
+                    delegate_symbol_observation,
+                    {
+                        "tool_name": "workspace.read_file",
+                        "arguments": dict(helper_read.next_payload["arguments"]),
+                        "observation": dict(helper_read_result.details["observation"]),
+                    },
+                ],
+                source_context={"surface": "openclaw", "platform": "openclaw", "workspace": tmpdir},
+            )
+
+            self.assertTrue(repair.handled)
+            self.assertEqual(repair.reason, "planned_candidate_repair_after_validation_diagnosis")
+            result = execute_runtime_tool(
+                repair.next_payload["intent"],
+                dict(repair.next_payload["arguments"]),
+                source_context={"workspace": tmpdir, "session_id": "session-delegate-second-hop-repair"},
+            )
+
+            assert result is not None
+            self.assertTrue(result.ok)
+            self.assertEqual(result.status, "completed")
+            self.assertEqual((workspace / "helpers.py").read_text(encoding="utf-8"), "def answer_value():\n    return 42\n")
+
     def test_planned_repair_can_patch_same_file_literal_binding_after_diagnosis(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

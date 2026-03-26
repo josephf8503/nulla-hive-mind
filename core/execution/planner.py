@@ -828,25 +828,12 @@ def _infer_literal_candidate_repair(
         return None
     if not _looks_like_failing_test_repair_request(user_text, validation_step=latest_validation):
         return None
-    error_path = str(latest_validation.get("error_path") or "").strip()
+    error_path, function_name, expected_literal = _failing_test_expectation_from_steps(steps)
     current_path = str(current_read_hints.get("path") or "").strip()
     if not error_path or not current_path or current_path == error_path:
         return None
-    test_read_hints = _latest_read_file_hints(steps, path=error_path)
-    test_content = str(test_read_hints.get("content") or "").strip()
     implementation_content = str(current_read_hints.get("content") or "").strip()
-    if not test_content or not implementation_content:
-        return None
-
-    expected_match = re.search(
-        r"assert\s+(?P<call>[A-Za-z_][A-Za-z0-9_\.]*)\s*\(\s*\)\s*==\s*(?P<expected>-?\d+|True|False|None|'[^']*'|\"[^\"]*\")",
-        test_content,
-    )
-    if not expected_match:
-        return None
-    function_name = str(expected_match.group("call") or "").strip().split(".")[-1]
-    expected_literal = str(expected_match.group("expected") or "").strip()
-    if not function_name or not expected_literal:
+    if not function_name or not expected_literal or not implementation_content:
         return None
 
     direct_repair = _literal_return_candidate_repair(
@@ -910,6 +897,26 @@ def _infer_literal_candidate_repair(
         if delegated_binding_repair is not None:
             return delegated_binding_repair
     return None
+
+
+def _failing_test_expectation_from_steps(steps: list[dict[str, Any]]) -> tuple[str, str, str]:
+    latest_validation = _latest_failed_validation_observation(steps)
+    error_path = str(latest_validation.get("error_path") or "").strip()
+    if not error_path:
+        return "", "", ""
+    test_read_hints = _latest_read_file_hints(steps, path=error_path)
+    test_content = str(test_read_hints.get("content") or "").strip()
+    if not test_content:
+        return error_path, "", ""
+    expected_match = re.search(
+        r"assert\s+(?P<call>[A-Za-z_][A-Za-z0-9_\.]*)\s*\(\s*\)\s*==\s*(?P<expected>-?\d+|True|False|None|'[^']*'|\"[^\"]*\")",
+        test_content,
+    )
+    if not expected_match:
+        return error_path, "", ""
+    function_name = str(expected_match.group("call") or "").strip().split(".")[-1]
+    expected_literal = str(expected_match.group("expected") or "").strip()
+    return error_path, function_name, expected_literal
 
 
 def _read_hint_lines(read_hints: dict[str, Any]) -> list[str]:
@@ -1073,6 +1080,36 @@ def _single_delegate_function_name(*, lines: list[str], function_name: str) -> s
     if not delegate_match:
         return ""
     return str(delegate_match.group("callee") or "").strip()
+
+
+def _planned_delegate_lookup_after_read(
+    *,
+    user_text: str,
+    steps: list[dict[str, Any]],
+    current_read_hints: dict[str, Any],
+) -> WorkflowPlannerDecision | None:
+    latest_validation = _latest_failed_validation_observation(steps)
+    if str(latest_validation.get("intent") or "").strip() != "workspace.run_tests":
+        return None
+    if not _looks_like_failing_test_repair_request(user_text, validation_step=latest_validation):
+        return None
+    error_path, function_name, _ = _failing_test_expectation_from_steps(steps)
+    current_path = str(current_read_hints.get("path") or "").strip()
+    if not error_path or not function_name or not current_path or current_path == error_path:
+        return None
+    delegate_function = _single_delegate_function_name(
+        lines=_read_hint_lines(current_read_hints),
+        function_name=function_name,
+    )
+    if not delegate_function:
+        return None
+    if _workflow_step_exists(steps, "workspace.symbol_search", key="symbol", value=delegate_function):
+        return None
+    return WorkflowPlannerDecision(
+        handled=True,
+        reason="planned_symbol_search_after_delegate_inspection",
+        next_payload={"intent": "workspace.symbol_search", "arguments": {"symbol": delegate_function, "limit": 10}},
+    )
 
 
 def _explicit_replace_request(user_text: str) -> dict[str, str] | None:
@@ -1818,6 +1855,13 @@ def plan_tool_workflow(
                         },
                     },
                 )
+        delegate_lookup = _planned_delegate_lookup_after_read(
+            user_text=user_text,
+            steps=steps,
+            current_read_hints=hints,
+        )
+        if delegate_lookup is not None:
+            return delegate_lookup
         if explicit_command and not (
             _workflow_step_exists(steps, "sandbox.run_command", key="command", value=explicit_command)
             or _workflow_validation_command_already_attempted(steps, explicit_command)
