@@ -15,7 +15,7 @@ from core.discovery_index import (
     note_peer_endpoint_candidate_probe_result,
     prune_stale_capabilities,
     recent_peer_endpoint_candidates,
-    recent_peer_endpoints,
+    recent_peer_verified_endpoints,
 )
 from core.hardware_challenge import initiate_random_hardware_challenge
 from core.knowledge_freshness import iso_now
@@ -52,16 +52,17 @@ def _dht_discovery_targets(
     candidate_probe_cooldown_seconds: int,
     candidate_probe_failure_limit: int,
 ) -> tuple[list[tuple[str, str, int]], list[tuple[str, str, int, str]]]:
-    verified_targets = list(
-        recent_peer_endpoints(
+    verified_rows = list(
+        recent_peer_verified_endpoints(
             exclude_peer_id=local_peer_id,
             limit=max(1, int(verified_limit)),
+            per_peer_limit=2,
         )
     )
+    verified_targets = [(row.peer_id, row.host, int(row.port)) for row in verified_rows]
     if len(verified_targets) >= max(0, int(min_verified_endpoints)):
         return verified_targets, []
 
-    seen_peers = {peer_id for peer_id, _, _ in verified_targets}
     seen_endpoints = {(host, int(port)) for _, host, port in verified_targets}
     candidate_targets: list[tuple[str, str, int, str]] = []
     for candidate in recent_peer_endpoint_candidates(
@@ -71,10 +72,9 @@ def _dht_discovery_targets(
         max_consecutive_failures=int(candidate_probe_failure_limit),
     ):
         endpoint = (candidate.host, int(candidate.port))
-        if candidate.peer_id in seen_peers or endpoint in seen_endpoints:
+        if endpoint in seen_endpoints:
             continue
         candidate_targets.append((candidate.peer_id, candidate.host, int(candidate.port), str(candidate.source)))
-        seen_peers.add(candidate.peer_id)
         seen_endpoints.add(endpoint)
         if len(candidate_targets) >= max(0, int(candidate_limit)):
             break

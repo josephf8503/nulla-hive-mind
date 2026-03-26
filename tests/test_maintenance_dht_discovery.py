@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from unittest import mock
@@ -10,11 +11,16 @@ from core.discovery_index import (
     get_best_helpers,
     note_peer_endpoint_candidate_probe_result,
     recent_peer_endpoint_candidates,
+    recent_peer_verified_endpoints,
     record_bootstrap_presence,
+    record_signed_peer_endpoint_observation,
     register_peer_endpoint,
     register_peer_endpoint_candidate,
+    signed_observed_endpoints_for_peer,
 )
 from core.maintenance import MaintenanceConfig, MaintenanceLoop
+from network.protocol import Protocol, encode_message
+from network.signer import get_local_peer_id as local_peer_id
 from storage.db import get_connection
 from storage.migrations import run_migrations
 
@@ -34,6 +40,7 @@ def _clear_tables() -> None:
             "agent_capabilities",
             "peers",
             "peer_endpoints",
+            "peer_endpoint_observations",
             "peer_endpoint_candidates",
             "presence_leases",
             "replica_table",
@@ -43,6 +50,17 @@ def _clear_tables() -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+def _signed_envelope(*, msg_type: str = "PING", payload: dict[str, object] | None = None) -> dict[str, object]:
+    raw = encode_message(
+        msg_id=str(uuid.uuid4()),
+        msg_type=msg_type,
+        sender_peer_id=local_peer_id(),
+        nonce=uuid.uuid4().hex,
+        payload=payload or {},
+    )
+    return Protocol.decode_and_validate(raw)
 
 
 def test_get_best_helpers_prefers_fresher_capability_rows() -> None:
@@ -94,6 +112,50 @@ def test_recent_peer_endpoint_candidates_returns_candidate_rows_without_promotin
         "dht",
     )
     assert endpoint_for_peer("candidate-peer") is None
+
+
+def test_record_signed_peer_endpoint_observation_persists_liveness_proof_and_promotes_selected_endpoint() -> None:
+    run_migrations()
+    _clear_tables()
+    peer_id = local_peer_id()
+
+    record_signed_peer_endpoint_observation(
+        peer_id,
+        "198.51.100.70",
+        49570,
+        envelope=_signed_envelope(),
+    )
+
+    proofs = signed_observed_endpoints_for_peer(peer_id)
+    assert len(proofs) == 1
+    assert (proofs[0].host, proofs[0].port, proofs[0].source) == ("198.51.100.70", 49570, "observed")
+    assert proofs[0].verification_kind == "protocol_signature"
+    assert proofs[0].proof_message_type == "PING"
+    assert proofs[0].proof_message_id
+    assert proofs[0].proof_count == 1
+    assert proofs[0].proof_hash
+    assert endpoint_for_peer(peer_id) == ("198.51.100.70", 49570)
+
+
+def test_recent_peer_verified_endpoints_includes_signed_backup_before_candidates() -> None:
+    run_migrations()
+    _clear_tables()
+    peer_id = local_peer_id()
+    register_peer_endpoint(peer_id, "203.0.113.20", 49020, source="bootstrap")
+    record_signed_peer_endpoint_observation(
+        peer_id,
+        "203.0.113.21",
+        49021,
+        envelope=_signed_envelope(msg_type="HEARTBEAT"),
+    )
+    register_peer_endpoint_candidate("candidate-peer", "198.51.100.61", 49561, source="dht")
+
+    endpoints = recent_peer_verified_endpoints(limit=3, per_peer_limit=2)
+
+    assert [(item.peer_id, item.host, item.port) for item in endpoints[:2]] == [
+        (peer_id, "203.0.113.20", 49020),
+        (peer_id, "203.0.113.21", 49021),
+    ]
 
 
 def test_recent_peer_endpoint_candidates_skips_recent_failures_within_cooldown() -> None:
@@ -215,6 +277,59 @@ def test_maintenance_tick_prefers_verified_endpoints_before_candidates() -> None
         loop.run_tick()
 
     send_message.assert_called_once_with("203.0.113.20", 49020, b"find-node")
+
+
+def test_maintenance_tick_uses_signed_backup_endpoint_before_candidate_when_verified_truth_exists() -> None:
+    run_migrations()
+    _clear_tables()
+    peer_id = local_peer_id()
+    register_peer_endpoint(peer_id, "203.0.113.30", 49030, source="bootstrap")
+    record_signed_peer_endpoint_observation(
+        peer_id,
+        "203.0.113.31",
+        49031,
+        envelope=_signed_envelope(msg_type="HEARTBEAT"),
+    )
+    register_peer_endpoint_candidate("candidate-peer", "198.51.100.63", 49563, source="dht")
+    loop = MaintenanceLoop(
+        config=MaintenanceConfig(
+            bootstrap_topics=[],
+            dht_discovery_min_nodes=20,
+            dht_discovery_verified_limit=4,
+            dht_discovery_candidate_limit=2,
+            dht_discovery_min_verified_endpoints=1,
+        )
+    )
+
+    with mock.patch("core.maintenance.publish_local_presence_snapshots"), mock.patch(
+        "core.maintenance.sync_from_bootstrap_topics"
+    ), mock.patch("core.maintenance.prune_stale_capabilities", return_value=0), mock.patch(
+        "core.maintenance.prune_expired_presence",
+        return_value=0,
+    ), mock.patch("core.maintenance.prune_expired_holders", return_value=0), mock.patch(
+        "core.maintenance.reap_stale_subtasks",
+        return_value=0,
+    ), mock.patch("core.maintenance.release_mature_pending_rewards", return_value=0), mock.patch(
+        "core.maintenance.finalize_confirmed_rewards",
+        return_value=0,
+    ), mock.patch("core.maintenance.prune_expired_topic_files", return_value=0), mock.patch(
+        "core.maintenance.initiate_random_hardware_challenge"
+    ), mock.patch("core.maintenance.schedule_adaptation_autopilot_tick"), mock.patch(
+        "core.maintenance.sync_control_plane_workspace",
+        return_value={"ok": True, "writes": 0},
+    ), mock.patch("network.signer.get_local_peer_id", return_value="other-local-peer"), mock.patch(
+        "network.dht.get_routing_table",
+        return_value=mock.Mock(nodes={}),
+    ), mock.patch("network.assist_router.build_find_node_message", return_value=b"find-node"), mock.patch(
+        "network.transport.send_message",
+        return_value=True,
+    ) as send_message:
+        loop.run_tick()
+
+    assert send_message.call_args_list == [
+        mock.call("203.0.113.30", 49030, b"find-node"),
+        mock.call("203.0.113.31", 49031, b"find-node"),
+    ]
 
 
 def test_maintenance_tick_records_candidate_probe_failures_and_cools_down_retry() -> None:

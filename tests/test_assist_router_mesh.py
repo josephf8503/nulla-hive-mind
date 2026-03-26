@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from core.credit_ledger import get_credit_balance
-from core.discovery_index import candidate_endpoints_for_peer, endpoint_for_peer, register_peer_endpoint
+from core.discovery_index import (
+    candidate_endpoints_for_peer,
+    endpoint_for_peer,
+    register_peer_endpoint,
+    signed_observed_endpoints_for_peer,
+)
 from network.assist_router import handle_incoming_assist_message
 from network.dht import RoutingTable
 from network.protocol import Protocol, encode_message
@@ -27,6 +32,7 @@ class AssistRouterMeshTests(unittest.TestCase):
             conn.execute("DELETE FROM nonce_cache")
             conn.execute("DELETE FROM compute_credit_ledger")
             conn.execute("DELETE FROM peer_endpoints")
+            conn.execute("DELETE FROM peer_endpoint_observations")
             conn.execute("DELETE FROM peer_endpoint_candidates")
             conn.commit()
         finally:
@@ -220,6 +226,25 @@ class AssistRouterMeshTests(unittest.TestCase):
         candidates = candidate_endpoints_for_peer(target_peer)
         self.assertEqual(len(candidates), 1)
         self.assertEqual((candidates[0].host, candidates[0].port, candidates[0].source), ("198.51.100.77", 49977, "dht"))
+
+    def test_signed_assist_ingress_records_endpoint_liveness_proof(self) -> None:
+        peer_id = local_peer_id()
+        raw = encode_message(
+            msg_id=str(uuid.uuid4()),
+            msg_type="FIND_NODE",
+            sender_peer_id=peer_id,
+            nonce=uuid.uuid4().hex,
+            payload={"target_id": "a" * 64},
+        )
+
+        result = handle_incoming_assist_message(raw_bytes=raw, source_addr=("198.51.100.40", 49222))
+
+        self.assertTrue(result.ok)
+        proofs = signed_observed_endpoints_for_peer(peer_id)
+        self.assertEqual(len(proofs), 1)
+        self.assertEqual((proofs[0].host, proofs[0].port, proofs[0].source), ("198.51.100.40", 49222, "observed"))
+        self.assertEqual(proofs[0].proof_message_type, "FIND_NODE")
+        self.assertEqual(proofs[0].verification_kind, "protocol_signature")
 
     def test_block_found_records_candidate_without_authoritative_endpoint(self) -> None:
         target_peer = "e" * 64

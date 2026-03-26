@@ -8,7 +8,7 @@ from core import audit_logger, policy_engine
 from core.discovery_index import (
     peer_trust,
     recent_peer_endpoints,
-    register_peer_endpoint,
+    record_signed_peer_endpoint_observation,
     same_host_group_suspect,
     upsert_peer_minimal,
 )
@@ -123,7 +123,13 @@ def on_message(daemon: Any, raw: bytes, addr: tuple[str, int]) -> None:
         )
         return
     upsert_peer_minimal(sender)
-    register_peer_endpoint(sender, addr[0], int(addr[1]), source="observed")
+    record_signed_peer_endpoint_observation(
+        sender,
+        addr[0],
+        int(addr[1]),
+        envelope=envelope,
+        source="observed",
+    )
 
     msg_type = str(envelope["msg_type"])
     payload = envelope.get("payload") or {}

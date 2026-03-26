@@ -62,8 +62,8 @@ Core lane:
 ## Current WAN Transport Spine
 
 - `apps/nulla_daemon.py`: transport-mode discovery, capability advertising, and local presence broadcast entrypoint
-- `core/discovery_index.py`: endpoint-source priority, capability freshness scoring, authoritative-vs-candidate endpoint storage, candidate probe cooldown/failure memory, and recent discovery seed selection
-- `core/maintenance.py`: scheduled bootstrap sync, bounded DHT discovery seeding, and candidate-endpoint probing with cooldown/failure backoff when verified coverage is sparse
+- `core/discovery_index.py`: endpoint-source priority, capability freshness scoring, authoritative-vs-candidate endpoint storage, signed observed-endpoint proof memory for verified backups, candidate probe cooldown/failure memory, and recent discovery seed selection
+- `core/maintenance.py`: scheduled bootstrap sync, bounded DHT discovery seeding, and candidate-endpoint probing with cooldown/failure backoff when verified coverage is sparse while still preferring verified primary-plus-backup endpoints first
 - `network/nat_probe.py`: local vs public NAT classification seam
 - `network/relay_fallback.py`: honest advertised transport-mode selection seam
 - `network/hole_punch.py`: hole-punch connectivity classification and attempt helpers

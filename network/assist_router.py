@@ -16,8 +16,8 @@ from core.capability_tokens import (
 from core.discovery_index import (
     endpoint_for_peer,
     record_bootstrap_presence,
+    record_signed_peer_endpoint_observation,
     register_capability_ad,
-    register_peer_endpoint,
     register_peer_endpoint_candidate,
     upsert_peer_minimal,
 )
@@ -811,7 +811,13 @@ def handle_incoming_assist_message(
         return RouteResult(False, f"Envelope rejected: {e}", generated)
 
     if source_addr:
-        register_peer_endpoint(sender, source_addr[0], int(source_addr[1]), source="observed")
+        record_signed_peer_endpoint_observation(
+            sender,
+            source_addr[0],
+            int(source_addr[1]),
+            envelope=envelope_dict,
+            source="observed",
+        )
 
     if not rate_allow(sender):
         return RouteResult(False, "Rate limited.", generated)

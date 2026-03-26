@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
@@ -240,6 +241,10 @@ def _canonical_message_bytes(envelope_dict: dict[str, Any]) -> bytes:
     unsigned = dict(envelope_dict)
     unsigned.pop("signature", None)
     return json.dumps(unsigned, sort_keys=True, separators=(",", ":"), default=_json_default).encode("utf-8")
+
+
+def message_proof_hash(envelope_dict: dict[str, Any]) -> str:
+    return hashlib.sha256(_canonical_message_bytes(envelope_dict)).hexdigest()
 
 def _json_default(value: Any) -> Any:
     if isinstance(value, datetime):

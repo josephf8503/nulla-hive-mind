@@ -705,8 +705,38 @@ CREATE TABLE IF NOT EXISTS peer_endpoints (
     port INTEGER NOT NULL,
     source TEXT NOT NULL DEFAULT 'direct',   -- self, bootstrap, observed
     last_seen_at TEXT NOT NULL,
+    last_verified_at TEXT NOT NULL DEFAULT '',
+    verification_kind TEXT NOT NULL DEFAULT '',
+    proof_count INTEGER NOT NULL DEFAULT 0,
+    proof_message_id TEXT NOT NULL DEFAULT '',
+    proof_message_type TEXT NOT NULL DEFAULT '',
+    proof_hash TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS peer_endpoint_observations (
+    peer_id TEXT NOT NULL,
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'observed',
+    verification_kind TEXT NOT NULL DEFAULT 'protocol_signature',
+    proof_message_id TEXT NOT NULL DEFAULT '',
+    proof_message_type TEXT NOT NULL DEFAULT '',
+    proof_hash TEXT NOT NULL DEFAULT '',
+    proof_signature TEXT NOT NULL DEFAULT '',
+    proof_timestamp TEXT NOT NULL DEFAULT '',
+    first_verified_at TEXT NOT NULL,
+    last_verified_at TEXT NOT NULL,
+    proof_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (peer_id, host, port, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_peer_endpoint_observations_peer
+ON peer_endpoint_observations(peer_id, last_verified_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_peer_endpoint_observations_recent
+ON peer_endpoint_observations(last_verified_at DESC);
 
 CREATE TABLE IF NOT EXISTS peer_endpoint_candidates (
     peer_id TEXT NOT NULL,
@@ -1234,6 +1264,12 @@ def run_migrations(db_path=None) -> None:
         _add_column_if_missing(conn, "task_assignments", "lease_expires_at", "TEXT")
         _add_column_if_missing(conn, "task_assignments", "last_progress_state", "TEXT NOT NULL DEFAULT ''")
         _add_column_if_missing(conn, "task_assignments", "last_progress_note", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoints", "last_verified_at", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoints", "verification_kind", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoints", "proof_count", "INTEGER NOT NULL DEFAULT 0")
+        _add_column_if_missing(conn, "peer_endpoints", "proof_message_id", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoints", "proof_message_type", "TEXT NOT NULL DEFAULT ''")
+        _add_column_if_missing(conn, "peer_endpoints", "proof_hash", "TEXT NOT NULL DEFAULT ''")
         _add_column_if_missing(conn, "peer_endpoint_candidates", "last_probe_attempt_at", "TEXT NOT NULL DEFAULT ''")
         _add_column_if_missing(conn, "peer_endpoint_candidates", "last_probe_delivery_ok", "INTEGER NOT NULL DEFAULT 0")
         _add_column_if_missing(conn, "peer_endpoint_candidates", "consecutive_probe_failures", "INTEGER NOT NULL DEFAULT 0")
