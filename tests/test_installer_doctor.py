@@ -163,9 +163,6 @@ def test_build_report_exposes_provider_snapshot_truth_and_profile_mix() -> None:
             ),
         )
     )
-=======
-def test_build_report_resolves_ollama_binary_from_path_lookup() -> None:
->>>>>>> a3a6bd0 (fix(installer): harden one-line nulla bootstrap)
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         (root / ".venv").mkdir()
@@ -176,7 +173,6 @@ def test_build_report_resolves_ollama_binary_from_path_lookup() -> None:
         (root / "install_receipt.json").write_text("{}\n", encoding="utf-8")
         runtime_home = root / ".nulla_runtime"
         runtime_home.mkdir()
-<<<<<<< HEAD
         with mock.patch("core.trainable_base_manager.list_staged_trainable_bases", return_value=[]), mock.patch(
             "installer.doctor.build_provider_registry_snapshot",
             return_value=snapshot,
