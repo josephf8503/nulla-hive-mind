@@ -328,12 +328,20 @@ class UDPTransportServer:
                         sock.close()
                         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                         _configure_udp_socket_buffers(sock)
-                        sock.bind((self.host, 0))
+                        try:
+                            sock.bind((self.host, 0))
+                        except OSError as fallback_err:
+                            sock.close()
+                            _raise_udp_bind_conflict(self.host, requested_port, fallback_err)
                 else:
                     sock.close()
                     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                     _configure_udp_socket_buffers(sock)
-                    sock.bind((self.host, 0))
+                    try:
+                        sock.bind((self.host, 0))
+                    except OSError as fallback_err:
+                        sock.close()
+                        _raise_udp_bind_conflict(self.host, requested_port, fallback_err)
                 audit_logger.log(
                     "transport_bind_conflict_fallback",
                     target_id=f"{self.host}:{requested_port}",
