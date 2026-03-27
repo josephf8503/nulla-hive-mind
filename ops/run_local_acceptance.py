@@ -297,6 +297,10 @@ class AcceptanceRunner:
 
     def run_online(self) -> dict[str, Any]:
         health = _read_json(f"{self.base_url}/healthz")
+        capabilities = _read_json(f"{self.base_url}/api/runtime/capabilities")
+        runtime_version = dict(health.get("runtime") or {})
+        install_profile = dict(capabilities.get("install_profile") or {})
+        runtime_model = str(runtime_version.get("model_tag") or self.profile.model or "").strip() or self.profile.model
         results: dict[str, Any] = {}
 
         prompt = "hello"
@@ -439,14 +443,19 @@ class AcceptanceRunner:
 
         payload = {
             "captured_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "runtime_version": _sanitize_data(health.get("runtime", {}), repo_root=self.repo_root),
+            "runtime_version": _sanitize_data(runtime_version, repo_root=self.repo_root),
             "health": _sanitize_data(health, repo_root=self.repo_root),
+            "capabilities": _sanitize_data(capabilities, repo_root=self.repo_root),
             "profile": {
                 "id": self.profile.profile_id,
                 "display_name": self.profile.display_name,
+                "benchmark_model": self.profile.model,
+                "runtime_model": runtime_model,
+                "install_profile_id": str(install_profile.get("profile_id") or ""),
+                "install_profile_label": str(install_profile.get("label") or ""),
             },
             "machine": _sanitize_data(_machine_info(), repo_root=self.repo_root),
-            "model": self.profile.model,
+            "model": runtime_model,
             "workspaces": {
                 key: _sanitize_text(str(path.relative_to(self.run_root)), repo_root=self.repo_root)
                 for key, path in self.workspaces.items()
@@ -880,6 +889,21 @@ def render_report(
 
     machine = online_payload.get("machine", {})
     runtime = online_payload.get("runtime_version", {})
+    profile_meta = online_payload.get("profile", {})
+    capabilities = online_payload.get("capabilities", {})
+    install_profile = capabilities.get("install_profile", {}) if isinstance(capabilities, dict) else {}
+    benchmark_model = (
+        str(profile_meta.get("benchmark_model") or profile.model or "").strip() or profile.model
+    )
+    runtime_model = (
+        str(online_payload.get("model") or runtime.get("model_tag") or benchmark_model).strip() or benchmark_model
+    )
+    install_profile_id = str(
+        profile_meta.get("install_profile_id") or install_profile.get("profile_id") or ""
+    ).strip()
+    install_profile_label = str(
+        profile_meta.get("install_profile_label") or install_profile.get("label") or ""
+    ).strip()
     manual_lines = []
     if manual_btc_check is not None:
         manual_lines = [
@@ -895,7 +919,13 @@ def render_report(
         "# NULLA LOCAL ACCEPTANCE REPORT",
         "",
         f"Profile: {profile.profile_id} ({profile.display_name})",
-        f"Model: {online_payload.get('model', 'unknown')}",
+        f"Benchmark profile model: {benchmark_model}",
+        f"Runtime model: {runtime_model}",
+        (
+            f"Runtime install profile: {install_profile_id} ({install_profile_label})"
+            if install_profile_id
+            else "Runtime install profile: unknown"
+        ),
         f"Commit: {runtime.get('commit', 'unknown')}",
         f"Build: {runtime.get('build_id', 'unknown')}",
         f"Date: {online_payload.get('captured_at_utc', 'unknown')}",
@@ -942,7 +972,11 @@ def render_report(
         f"- offline: {_sanitize_text(str(output_path.parent / 'offline_honesty.json'), repo_root=repo_root)}",
         "",
         "Verdict:",
-        "NULLA on qwen2.5:7b is acceptable for local use under this test profile." if overall_green else "NULLA on qwen2.5:7b is not yet acceptable under this test profile.",
+        (
+            f"NULLA on {runtime_model} is acceptable for local use under this test profile."
+            if overall_green
+            else f"NULLA on {runtime_model} is not yet acceptable under this test profile."
+        ),
     ]
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")

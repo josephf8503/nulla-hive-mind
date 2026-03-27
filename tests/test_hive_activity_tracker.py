@@ -157,6 +157,33 @@ def test_pull_available_tasks_command_returns_topic_list() -> None:
     assert state["pending_topic_ids"] == ["topic-1"]
 
 
+def test_workspace_path_with_online_and_workspace_substrings_does_not_trigger_hive_overview() -> None:
+    tracker = _tracker(
+        {
+            "stats": {"active_agents": 4},
+            "topics": [
+                {
+                    "topic_id": "topic-1",
+                    "created_by_agent_id": "peer-remote-1",
+                    "title": "OpenClaw integration audit",
+                    "status": "open",
+                }
+            ],
+            "recent_posts": [],
+        }
+    )
+
+    handled, response = tracker.maybe_handle_command(
+        "Create a file named nulla_test_01.txt in "
+        "/Users/test/nulla-online-acceptance-proof/workspace/main "
+        "with exactly this content: ALPHA-LOCAL-FILE-01",
+        session_id="openclaw:no-hive-false-positive",
+    )
+
+    assert handled is False
+    assert response == ""
+
+
 def test_prune_stale_hive_interaction_state_clears_old_selection_context() -> None:
     session_id = "openclaw:stale-hive-selection"
     update_session_hive_state(

@@ -74,6 +74,13 @@ _AFFIRMATIVE_HIVE_FOLLOWUPS = {
 }
 
 
+def _contains_phrase_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered:
+        return False
+    return any(re.search(rf"\b{re.escape(marker)}\b", lowered) for marker in markers)
+
+
 @dataclass(frozen=True)
 class HiveActivityTrackerConfig:
     enabled: bool = True
@@ -583,8 +590,8 @@ def _looks_like_hive_overview_request(text: str) -> bool:
     if any(pattern.search(lowered) for pattern in _HIVE_OVERVIEW_PATTERNS):
         return True
     return (
-        ("online" in lowered or "agents" in lowered)
-        and any(marker in lowered for marker in ("hive", "hive mind", "brain hive", "tasks", "task", "work"))
+        _contains_phrase_marker(lowered, ("online", "agents"))
+        and _contains_phrase_marker(lowered, ("hive", "hive mind", "brain hive", "tasks", "task", "work"))
     )
 
 

@@ -7,7 +7,14 @@ from pathlib import Path
 import ops.run_local_acceptance as acceptance
 
 
-def _fake_online_payload(*, commit: str = "abc123", fast: bool = True) -> dict[str, object]:
+def _fake_online_payload(
+    *,
+    commit: str = "abc123",
+    fast: bool = True,
+    runtime_model: str = "qwen2.5:7b",
+    install_profile_id: str = "local-only",
+    install_profile_label: str = "Local only",
+) -> dict[str, object]:
     simple = 4.0 if fast else 10.0
     file_latency = 0.6 if fast else 20.0
     lookup_latency = 0.2 if fast else 50.0
@@ -43,9 +50,22 @@ def _fake_online_payload(*, commit: str = "abc123", fast: bool = True) -> dict[s
     }
     return {
         "captured_at_utc": "2026-03-21T00:00:00Z",
-        "model": "qwen2.5:7b",
-        "profile": {"id": "local-qwen25-7b-v1", "display_name": "NULLA local acceptance for qwen2.5:7b"},
-        "runtime_version": {"commit": commit, "build_id": f"0.4.0-closed-test+{commit}.dirty"},
+        "model": runtime_model,
+        "profile": {
+            "id": "local-qwen25-7b-v1",
+            "display_name": "NULLA local acceptance for qwen2.5:7b",
+            "benchmark_model": "qwen2.5:7b",
+            "runtime_model": runtime_model,
+            "install_profile_id": install_profile_id,
+            "install_profile_label": install_profile_label,
+        },
+        "runtime_version": {"commit": commit, "build_id": f"0.4.0-closed-test+{commit}.dirty", "model_tag": runtime_model},
+        "capabilities": {
+            "install_profile": {
+                "profile_id": install_profile_id,
+                "label": install_profile_label,
+            }
+        },
         "machine": {"platform": "macOS", "cpu": "Apple M4", "ram_gb": 24.0, "gpu": "Apple M4"},
         "results": results,
     }
@@ -136,8 +156,32 @@ def test_render_report_includes_profile_and_thresholds(tmp_path: Path) -> None:
     rendered = output.read_text(encoding="utf-8")
 
     assert "Profile: local-qwen25-7b-v1" in rendered
+    assert "Benchmark profile model: qwen2.5:7b" in rendered
     assert "Threshold gates:" in rendered
     assert "cold start <= 120.0s" in rendered
+
+
+def test_render_report_surfaces_runtime_model_and_install_profile(tmp_path: Path) -> None:
+    profile = acceptance.load_profile()
+    output = tmp_path / "evidence" / "NULLA_LOCAL_ACCEPTANCE_REPORT.md"
+    acceptance.render_report(
+        repo_root=Path("/tmp/repo"),
+        online_payload=_fake_online_payload(
+            commit="5fa1dcf",
+            runtime_model="qwen2.5:14b",
+            install_profile_id="local-only",
+            install_profile_label="Local only",
+        ),
+        offline_payload={"result": {"latency_seconds": 0.05, "pass": True}},
+        manual_btc_check={"pass": True, "source": "CoinGecko", "observed": "$70,573.00 at 2026-03-20 23:09 UTC", "assessment": "tight", "acceptance_response": "Bitcoin is $70,576.00 USD."},
+        output_path=output,
+        profile=profile,
+    )
+    rendered = output.read_text(encoding="utf-8")
+
+    assert "Runtime model: qwen2.5:14b" in rendered
+    assert "Runtime install profile: local-only (Local only)" in rendered
+    assert "NULLA on qwen2.5:14b is acceptable for local use under this test profile." in rendered
 
 
 def test_default_runtime_command_targets_api_server_and_base_url_port(tmp_path: Path, monkeypatch) -> None:
