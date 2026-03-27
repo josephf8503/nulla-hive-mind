@@ -97,13 +97,18 @@ def test_git_metadata_falls_back_to_build_source_json_when_git_checkout_is_missi
 
     monkeypatch.setattr(llm_eval, "REPO_ROOT", tmp_path)
 
+    seen_kwargs: list[dict[str, object]] = []
+
     def _raise_git_failure(*args, **kwargs):
+        seen_kwargs.append(dict(kwargs))
         raise subprocess.CalledProcessError(128, args[0])
 
     monkeypatch.setattr(llm_eval.subprocess, "check_output", _raise_git_failure)
 
     assert llm_eval._git_branch() == "main"
     assert llm_eval._git_commit() == "15b496e4992038cbd40a582c0e5aed9688d1d70e"
+    assert seen_kwargs
+    assert all(item.get("stderr") == subprocess.DEVNULL for item in seen_kwargs)
 
 
 def test_collect_recent_llm_inventory_returns_empty_inventory_when_git_history_is_unavailable(monkeypatch, tmp_path: Path) -> None:

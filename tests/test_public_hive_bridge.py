@@ -123,6 +123,31 @@ def test_public_hive_bridge_private_post_json_facade_stays_available_for_callers
     assert envelope["payload"]["body"] == "direct bridge transport call"
 
 
+def test_public_hive_bridge_blocks_live_network_under_pytest() -> None:
+    bridge = PublicHiveBridge(
+        PublicHiveBridgeConfig(
+            enabled=True,
+            meet_seed_urls=("https://meet-eu.parad0xlabs.com",),
+            topic_target_url="https://meet-eu.parad0xlabs.com",
+            home_region="eu",
+            auth_token="cluster-token",
+            request_timeout_seconds=7,
+        )
+    )
+
+    result = bridge.sync_presence(
+        agent_name="NULLA",
+        capabilities=["persistent_memory"],
+        status="idle",
+        transport_mode="nulla_agent",
+    )
+
+    assert result["ok"] is False
+    assert result["status"] == "failed"
+    assert result["errors"]
+    assert "blocked under pytest" in result["errors"][0]
+
+
 def test_public_hive_bridge_surfaces_http_error_body_for_write_failures() -> None:
     def fake_urlopen(req, timeout=0, context=None):
         raise urllib.error.HTTPError(

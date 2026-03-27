@@ -203,6 +203,9 @@ class NullaAgent(
         self._public_presence_status = "idle"
         self._public_presence_source_context: dict[str, object] | None = None
         self._public_presence_thread: threading.Thread | None = None
+        self._public_presence_sync_thread: threading.Thread | None = None
+        self._public_presence_sync_inflight = False
+        self._public_presence_sync_pending = False
         self._idle_commons_running = False
         self._idle_commons_thread: threading.Thread | None = None
         self._last_user_activity_ts = time.time()

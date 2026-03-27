@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import threading
 from collections.abc import Callable
 from typing import Any
 
@@ -18,26 +19,108 @@ def sync_public_presence(
         agent._public_presence_status = effective_status
         if source_context is not None:
             agent._public_presence_source_context = dict(source_context)
+    if _presence_sync_runs_inline(agent):
+        _run_public_presence_sync_now(
+            agent,
+            status=effective_status,
+            source_context=source_context,
+            get_agent_display_name_fn=get_agent_display_name_fn,
+            audit_log_fn=audit_log_fn,
+        )
+        return
+    _queue_public_presence_sync(
+        agent,
+        get_agent_display_name_fn=get_agent_display_name_fn,
+        audit_log_fn=audit_log_fn,
+    )
+
+
+def _presence_sync_runs_inline(agent: Any) -> bool:
+    backend_name = str(getattr(agent, "backend_name", "") or "").strip().lower()
+    device = str(getattr(agent, "device", "") or "").strip().lower()
+    return backend_name.startswith("test-") or device.endswith("-test")
+
+
+def _queue_public_presence_sync(
+    agent: Any,
+    *,
+    get_agent_display_name_fn: Callable[[], str],
+    audit_log_fn: Callable[..., Any],
+) -> None:
+    with agent._public_presence_lock:
+        agent._public_presence_sync_pending = True
+        if agent._public_presence_sync_inflight:
+            return
+        agent._public_presence_sync_inflight = True
+    thread = threading.Thread(
+        target=_public_presence_sync_worker,
+        name="nulla-public-presence-sync",
+        daemon=True,
+        kwargs={
+            "agent": agent,
+            "get_agent_display_name_fn": get_agent_display_name_fn,
+            "audit_log_fn": audit_log_fn,
+        },
+    )
+    with agent._public_presence_lock:
+        agent._public_presence_sync_thread = thread
+    thread.start()
+
+
+def _public_presence_sync_worker(
+    *,
+    agent: Any,
+    get_agent_display_name_fn: Callable[[], str],
+    audit_log_fn: Callable[..., Any],
+) -> None:
+    while True:
+        with agent._public_presence_lock:
+            agent._public_presence_sync_pending = False
+            effective_status = str(agent._public_presence_status or "idle")
+            source_context = dict(agent._public_presence_source_context or {})
+        _run_public_presence_sync_now(
+            agent,
+            status=effective_status,
+            source_context=source_context,
+            get_agent_display_name_fn=get_agent_display_name_fn,
+            audit_log_fn=audit_log_fn,
+        )
+        with agent._public_presence_lock:
+            if agent._public_presence_sync_pending:
+                continue
+            agent._public_presence_sync_inflight = False
+            agent._public_presence_sync_thread = None
+            return
+
+
+def _run_public_presence_sync_now(
+    agent: Any,
+    *,
+    status: str,
+    source_context: dict[str, object] | None,
+    get_agent_display_name_fn: Callable[[], str],
+    audit_log_fn: Callable[..., Any],
+) -> None:
     try:
         if agent._public_presence_registered:
             result = agent.public_hive_bridge.heartbeat_presence(
                 agent_name=get_agent_display_name_fn(),
                 capabilities=agent._public_capabilities(),
-                status=effective_status,
+                status=status,
                 transport_mode=agent._public_transport_mode(source_context),
             )
             if not result.get("ok"):
                 result = agent.public_hive_bridge.sync_presence(
                     agent_name=get_agent_display_name_fn(),
                     capabilities=agent._public_capabilities(),
-                    status=effective_status,
+                    status=status,
                     transport_mode=agent._public_transport_mode(source_context),
                 )
         else:
             result = agent.public_hive_bridge.sync_presence(
                 agent_name=get_agent_display_name_fn(),
                 capabilities=agent._public_capabilities(),
-                status=effective_status,
+                status=status,
                 transport_mode=agent._public_transport_mode(source_context),
             )
         if result.get("ok"):
@@ -47,7 +130,7 @@ def sync_public_presence(
             "public_hive_presence_sync_error",
             target_id=agent.persona_id,
             target_type="agent",
-            details={"error": str(exc), "status": effective_status},
+            details={"error": str(exc), "status": status},
         )
         return
     if not result.get("ok"):
@@ -55,7 +138,7 @@ def sync_public_presence(
             "public_hive_presence_sync_failed",
             target_id=agent.persona_id,
             target_type="agent",
-            details={"status": effective_status, **dict(result or {})},
+            details={"status": status, **dict(result or {})},
         )
 
 

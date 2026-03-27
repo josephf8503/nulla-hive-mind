@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from urllib.error import URLError
+from urllib.parse import urlsplit
 from unittest.mock import Mock
 
 import pytest
 
 from apps.nulla_agent import NullaAgent
+from core.public_hive import client as public_hive_client
 from core.memory_first_router import ModelExecutionDecision
 from core.persistent_memory import (
     conversation_log_path,
@@ -128,6 +131,20 @@ def runtime_storage_reset() -> None:
     user_heuristics_path().write_text("", encoding="utf-8")
     operator_dense_profile_path().write_text("{}", encoding="utf-8")
     save_preferences(default_preferences())
+
+
+@pytest.fixture(autouse=True)
+def block_live_public_hive_network(monkeypatch):
+    real_urlopen = public_hive_client.urllib.request.urlopen
+
+    def guarded_urlopen(request, *args, **kwargs):
+        target = getattr(request, "full_url", request)
+        host = str(urlsplit(str(target or "")).hostname or "").strip().lower()
+        if host in {"", "127.0.0.1", "localhost", "::1"}:
+            return real_urlopen(request, *args, **kwargs)
+        raise URLError(f"public hive live network blocked under pytest for host '{host or 'unknown'}'")
+
+    monkeypatch.setattr(public_hive_client.urllib.request, "urlopen", guarded_urlopen)
 
 
 @pytest.fixture

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from types import SimpleNamespace
 from unittest import mock
 
@@ -22,6 +24,41 @@ def test_sync_public_presence_uses_app_level_name_provider() -> None:
         agent._sync_public_presence(status="idle", source_context={"surface": "openclaw"})
 
     assert sync_presence.call_args.kwargs["agent_name"] == "Patched Agent"
+    assert agent._public_presence_registered is True
+
+
+def test_sync_public_presence_queues_async_for_live_runtime() -> None:
+    agent = NullaAgent(backend_name="torch-mps", device="mps", persona_id="default")
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    seen: dict[str, object] = {}
+
+    def slow_sync_presence(**kwargs):
+        seen.update(kwargs)
+        started.set()
+        release.wait(timeout=2.0)
+        finished.set()
+        return {"ok": True, "status": "posted"}
+
+    with mock.patch("apps.nulla_agent.get_agent_display_name", return_value="Async Agent"), mock.patch.object(
+        agent.public_hive_bridge,
+        "sync_presence",
+        side_effect=slow_sync_presence,
+    ):
+        started_at = time.perf_counter()
+        agent._sync_public_presence(status="idle", source_context={"surface": "openclaw"})
+        elapsed = time.perf_counter() - started_at
+        assert elapsed < 0.25
+        assert started.wait(timeout=1.0) is True
+        release.set()
+        assert finished.wait(timeout=1.0) is True
+
+    deadline = time.time() + 1.0
+    while time.time() < deadline and not agent._public_presence_registered:
+        time.sleep(0.01)
+
+    assert seen["agent_name"] == "Async Agent"
     assert agent._public_presence_registered is True
 
 

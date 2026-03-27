@@ -132,7 +132,12 @@ def _read_json_if_exists(path: Path) -> dict[str, Any] | None:
 
 def _expected_repo_commit(repo_root: Path) -> str:
     try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=str(repo_root), text=True).strip()
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(repo_root),
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
     except Exception:
         build_source = _read_json_if_exists(repo_root / "config" / "build-source.json") or {}
         commit = str(build_source.get("commit") or "").strip()

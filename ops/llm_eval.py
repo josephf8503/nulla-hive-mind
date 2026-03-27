@@ -215,7 +215,12 @@ PROVENANCE_SCENARIOS = [
 
 def _git_branch() -> str:
     try:
-        return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+        return subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(REPO_ROOT),
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
     except Exception:
         build_source_path = REPO_ROOT / "config" / "build-source.json"
         try:
@@ -227,7 +232,12 @@ def _git_branch() -> str:
 
 def _git_commit() -> str:
     try:
-        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(REPO_ROOT),
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
     except Exception:
         build_source_path = REPO_ROOT / "config" / "build-source.json"
         try:
