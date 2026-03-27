@@ -356,7 +356,7 @@ bootstrap_public_hive_auth() {
   local status=""
   status="$("${VENV_DIR}/bin/python" -c 'import json,sys; data=json.loads(sys.argv[1]) if sys.argv[1].strip() else {}; print(data.get("status",""))' "${result_json}" 2>/dev/null || true)"
   case "${status}" in
-    already_configured|hydrated_from_bundle|synced_from_ssh|no_auth_required|disabled)
+    already_configured|hydrated_from_bundle|hydrated_from_local_cluster|synced_from_ssh|no_auth_required|disabled)
       say "Public Hive auth/bootstrap status: ${status}."
       ;;
     *)

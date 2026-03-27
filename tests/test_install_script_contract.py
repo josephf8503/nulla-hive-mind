@@ -87,3 +87,4 @@ def test_install_script_runs_public_hive_auth_helper_from_project_root() -> None
 
     assert 'result_json="$(cd "${PROJECT_ROOT}" && NULLA_HOME="${runtime_home}" \\' in script
     assert '"${VENV_DIR}/bin/python" -m ops.ensure_public_hive_auth \\' in script
+    assert "hydrated_from_local_cluster" in script
