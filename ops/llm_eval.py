@@ -214,11 +214,27 @@ PROVENANCE_SCENARIOS = [
 
 
 def _git_branch() -> str:
-    return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+    except Exception:
+        build_source_path = REPO_ROOT / "config" / "build-source.json"
+        try:
+            payload = json.loads(build_source_path.read_text(encoding="utf-8"))
+        except Exception:
+            return "archive"
+        return str(payload.get("branch") or payload.get("ref") or "archive").strip() or "archive"
 
 
 def _git_commit() -> str:
-    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(REPO_ROOT), text=True).strip()
+    except Exception:
+        build_source_path = REPO_ROOT / "config" / "build-source.json"
+        try:
+            payload = json.loads(build_source_path.read_text(encoding="utf-8"))
+        except Exception:
+            return "archive"
+        return str(payload.get("commit") or "archive").strip() or "archive"
 
 
 def _write_json(path: Path, payload: Any) -> None:

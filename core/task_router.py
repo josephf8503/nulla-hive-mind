@@ -94,6 +94,7 @@ _GENERAL_ADVISORY_MARKERS = (
     "how do i handle",
 )
 _HIVE_MARKERS = ("hive", "hive mind", "brain hive", "public hive")
+_SEMANTIC_HIVE_FALLBACK_MARKERS = ("task", "tasks", "work", "queue", "open", "available", "online", "anything")
 _SEMANTIC_HIVE_PATTERNS = (
     re.compile(r"\b(?:check|show|list|see)\s+(?:the\s+)?(?:hive|hive mind|brain hive|public hive)\b"),
     re.compile(r"\bwhat(?:'s| is)\s+in\s+(?:the\s+)?(?:hive|hive mind|brain hive|public hive)\b"),
@@ -132,6 +133,13 @@ _WEB_SOCIAL_LOOKUP_MARKERS = (
     "online",
     "web",
 )
+
+
+def _contains_phrase_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered:
+        return False
+    return any(re.search(rf"\b{re.escape(marker)}\b", lowered) for marker in markers)
 _DIRECT_MATH_EXPRESSION_RE = re.compile(r"^[\d\s\.\+\-\*\/%\(\)]+$")
 _SAFE_ARITHMETIC_OPERATORS = {
     ast.Add: operator.add,
@@ -254,7 +262,10 @@ def looks_like_semantic_hive_request(text: str) -> bool:
         return False
     if any(pattern.search(lowered) for pattern in _SEMANTIC_HIVE_PATTERNS):
         return True
-    return bool(any(marker in lowered for marker in _HIVE_MARKERS) and any(marker in lowered for marker in ("task", "tasks", "work", "queue", "open", "available", "online", "anything")))
+    return bool(
+        _contains_phrase_marker(lowered, _HIVE_MARKERS)
+        and _contains_phrase_marker(lowered, _SEMANTIC_HIVE_FALLBACK_MARKERS)
+    )
 
 
 def looks_like_public_entity_lookup_request(text: str) -> bool:

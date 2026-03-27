@@ -3,6 +3,29 @@ from __future__ import annotations
 import re
 from typing import Any
 
+_HIVE_MARKERS = ("hive", "hive mind", "brain hive", "public hive")
+_HIVE_TASK_MARKERS = ("task", "tasks", "taks", "work")
+_HIVE_INQUIRY_MARKERS = (
+    "check",
+    "see",
+    "show",
+    "what",
+    "what's",
+    "whats",
+    "any",
+    "open",
+    "up",
+    "available",
+    "can we do",
+)
+
+
+def _contains_phrase_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered:
+        return False
+    return any(re.search(rf"\b{re.escape(marker)}\b", lowered) for marker in markers)
+
 
 def maybe_handle_hive_runtime_command(
     agent: Any,
@@ -43,7 +66,7 @@ def recover_hive_runtime_command_input(
         return ""
     if looks_like_semantic_hive_request_fn(lowered):
         return "show me the open hive tasks"
-    if not any(marker in lowered for marker in ("hive", "hive mind", "brain hive", "public hive")):
+    if not _contains_phrase_marker(lowered, _HIVE_MARKERS):
         return ""
     if any(
         marker in lowered
@@ -68,23 +91,8 @@ def recover_hive_runtime_command_input(
         compact,
     ):
         return "show me the open hive tasks"
-    has_task_marker = any(marker in lowered for marker in ("task", "tasks", "taks", "work"))
-    has_inquiry_marker = any(
-        marker in lowered
-        for marker in (
-            "check",
-            "see",
-            "show",
-            "what",
-            "what's",
-            "whats",
-            "any",
-            "open",
-            "up",
-            "available",
-            "can we do",
-        )
-    )
+    has_task_marker = _contains_phrase_marker(lowered, _HIVE_TASK_MARKERS)
+    has_inquiry_marker = _contains_phrase_marker(lowered, _HIVE_INQUIRY_MARKERS)
     if not (has_task_marker and has_inquiry_marker):
         return ""
     return "show me the open hive tasks"

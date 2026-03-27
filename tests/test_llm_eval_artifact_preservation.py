@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import ops.llm_eval as llm_eval
@@ -77,3 +78,28 @@ def test_preserve_previous_live_run_artifacts_copies_non_green_bundle(monkeypatc
 
     assert preserved == tmp_path / "llm_eval_live_preserved_fail_20260327T070500Z"
     assert (preserved / "evidence" / "online_acceptance.json").exists()
+
+
+def test_git_metadata_falls_back_to_build_source_json_when_git_checkout_is_missing(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "build-source.json").write_text(
+        json.dumps(
+            {
+                "ref": "main",
+                "branch": "main",
+                "commit": "15b496e4992038cbd40a582c0e5aed9688d1d70e",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(llm_eval, "REPO_ROOT", tmp_path)
+
+    def _raise_git_failure(*args, **kwargs):
+        raise subprocess.CalledProcessError(128, args[0])
+
+    monkeypatch.setattr(llm_eval.subprocess, "check_output", _raise_git_failure)
+
+    assert llm_eval._git_branch() == "main"
+    assert llm_eval._git_commit() == "15b496e4992038cbd40a582c0e5aed9688d1d70e"

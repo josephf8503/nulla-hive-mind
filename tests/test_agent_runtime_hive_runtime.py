@@ -96,3 +96,20 @@ def test_store_hive_topic_selection_state_preserves_existing_watched_topics() ->
         interaction_mode="hive_task_selection_pending",
         interaction_payload={"shown_topic_ids": ["topic-1", "topic-2"], "shown_titles": ["First topic", "Second topic"]},
     )
+
+
+def test_recover_hive_runtime_command_input_ignores_workspace_path_with_hive_and_work_substrings() -> None:
+    agent = _build_agent()
+    prompt = (
+        "Create a file named nulla_test_01.txt in "
+        "/Users/test/nulla-hive-mind/artifacts/acceptance_runs/2026-03-27-fresh-proof/workspace/main "
+        "with exactly this content: ALPHA-LOCAL-FILE-01"
+    )
+
+    recovered = hive_runtime.recover_hive_runtime_command_input(
+        agent,
+        prompt,
+        looks_like_semantic_hive_request_fn=mock.Mock(return_value=False),
+    )
+
+    assert recovered == ""
