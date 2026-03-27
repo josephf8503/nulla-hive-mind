@@ -7,7 +7,8 @@ name = "nulla-hive-mind"
 version = "0.4.0"
 description = "Nulla Hive Mind — local-first AI agent runtime with memory, tools, optional helpers, and visible proof"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [
     {name = "sls_0x"},

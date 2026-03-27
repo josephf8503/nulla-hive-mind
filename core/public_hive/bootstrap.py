@@ -6,6 +6,7 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from core.public_hive.config import (
     _clean_token,
@@ -18,6 +19,18 @@ from core.public_hive.config import (
     public_hive_write_requires_auth,
 )
 from core.runtime_paths import CONFIG_HOME_DIR, PROJECT_ROOT, config_path
+
+DEFAULT_PUBLIC_HIVE_REMOTE_CONFIG_PATH = "/etc/nulla-hive-mind/watch-config.json"
+
+
+def _watch_host_from_url(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    try:
+        return str(urlsplit(raw).hostname or "").strip()
+    except Exception:
+        return ""
 
 
 def ensure_public_hive_agent_bootstrap(
@@ -310,6 +323,27 @@ def sync_public_hive_auth_from_ssh(
     }
 
 
+def _build_public_hive_auth_suggestion(
+    *,
+    watch_host: str,
+    remote_config_path: str,
+) -> str:
+    host = str(watch_host or "").strip()
+    remote_path = str(remote_config_path or "").strip()
+    if not host:
+        return ""
+    command = [
+        "python",
+        "-m",
+        "ops.ensure_public_hive_auth",
+        "--watch-host",
+        host,
+    ]
+    if remote_path:
+        command.extend(["--remote-config-path", remote_path])
+    return " ".join(shlex.quote(part) for part in command)
+
+
 def find_public_hive_ssh_key(
     project_root: str | Path | None = None,
     *,
@@ -436,6 +470,19 @@ def ensure_public_hive_auth(
         existing.get("tls_insecure_skip_verify")
         or bundled.get("tls_insecure_skip_verify")
     )
+    resolved_watch_host = (
+        str(watch_host or "").strip()
+        or str(environ.get("NULLA_PUBLIC_HIVE_WATCH_HOST") or "").strip()
+        or str(existing.get("watch_host") or "").strip()
+        or str(bundled.get("watch_host") or "").strip()
+        or str(discovered.get("watch_host") or "").strip()
+        or str(sample.get("watch_host") or "").strip()
+    )
+    suggested_remote_config_path = str(
+        environ.get("NULLA_PUBLIC_HIVE_REMOTE_CONFIG")
+        or remote_config_path
+        or DEFAULT_PUBLIC_HIVE_REMOTE_CONFIG_PATH
+    ).strip() or DEFAULT_PUBLIC_HIVE_REMOTE_CONFIG_PATH
 
     if auth_token or merged_auth_tokens:
         written = write_public_hive_agent_bootstrap_fn(
@@ -485,6 +532,12 @@ def ensure_public_hive_auth(
             "seed_count": len(seed_urls),
             "target_path": str(destination),
             "requires_auth": True,
+            "watch_host": resolved_watch_host,
+            "suggested_remote_config_path": suggested_remote_config_path,
+            "suggested_command": _build_public_hive_auth_suggestion(
+                watch_host=resolved_watch_host,
+                remote_config_path=suggested_remote_config_path,
+            ),
         }
 
     resolved_remote_config_path = str(remote_config_path or environ.get("NULLA_PUBLIC_HIVE_REMOTE_CONFIG") or "").strip()
@@ -495,16 +548,48 @@ def ensure_public_hive_auth(
             "seed_count": len(seed_urls),
             "target_path": str(destination),
             "requires_auth": True,
+            "watch_host": resolved_watch_host,
+            "suggested_remote_config_path": suggested_remote_config_path,
+            "suggested_command": _build_public_hive_auth_suggestion(
+                watch_host=resolved_watch_host,
+                remote_config_path=suggested_remote_config_path,
+            ),
         }
 
-    sync_result = sync_public_hive_auth_from_ssh_fn(
-        ssh_key_path=str(ssh_key),
-        project_root=root,
-        watch_host=str(watch_host or environ.get("NULLA_PUBLIC_HIVE_WATCH_HOST") or "").strip(),
-        watch_user=str(watch_user or "root").strip() or "root",
-        remote_config_path=resolved_remote_config_path,
-        target_path=destination,
-    )
+    if not resolved_watch_host:
+        return {
+            "ok": False,
+            "status": "missing_watch_host" if not require_auth else "auth_required",
+            "seed_count": len(seed_urls),
+            "target_path": str(destination),
+            "requires_auth": True,
+            "suggested_remote_config_path": suggested_remote_config_path,
+        }
+
+    try:
+        sync_result = sync_public_hive_auth_from_ssh_fn(
+            ssh_key_path=str(ssh_key),
+            project_root=root,
+            watch_host=resolved_watch_host,
+            watch_user=str(watch_user or "root").strip() or "root",
+            remote_config_path=resolved_remote_config_path,
+            target_path=destination,
+        )
+    except Exception as exc:
+        return {
+            "ok": False,
+            "status": "sync_failed" if not require_auth else "auth_required",
+            "seed_count": len(seed_urls),
+            "target_path": str(destination),
+            "requires_auth": True,
+            "watch_host": resolved_watch_host,
+            "suggested_remote_config_path": suggested_remote_config_path,
+            "suggested_command": _build_public_hive_auth_suggestion(
+                watch_host=resolved_watch_host,
+                remote_config_path=resolved_remote_config_path,
+            ),
+            "error": str(exc),
+        }
     sync_result["ok"] = True
     sync_result["status"] = "synced_from_ssh"
     sync_result["ssh_key_path"] = str(ssh_key)
@@ -537,6 +622,7 @@ def discover_local_cluster_bootstrap(
     discovered_home_region = ""
     discovered_tls_ca_file = ""
     discovered_tls_insecure_skip_verify = False
+    discovered_watch_host = ""
 
     for cluster_dir in cluster_dirs:
         raw = load_json_file_fn(root / "config" / "meet_clusters" / cluster_dir / "watch-edge-1.json")
@@ -544,11 +630,14 @@ def discover_local_cluster_bootstrap(
         upstream = [str(url).strip() for url in list(raw.get("upstream_base_urls") or []) if str(url).strip()]
         tls_ca_file = str(raw.get("tls_ca_file") or "").strip()
         tls_insecure_skip_verify = bool(raw.get("tls_insecure_skip_verify", False))
+        watch_host = _watch_host_from_url(str(raw.get("public_url") or raw.get("public_base_url") or "").strip())
         if upstream or auth_token or tls_ca_file or tls_insecure_skip_verify:
             if not selected_cluster:
                 selected_cluster = cluster_dir
                 selected_watch_urls = upstream
                 selected_watch_auth_token = auth_token or ""
+            if watch_host and not discovered_watch_host:
+                discovered_watch_host = watch_host
             if tls_ca_file and not discovered_tls_ca_file:
                 discovered_tls_ca_file = tls_ca_file
             if tls_insecure_skip_verify:
@@ -614,4 +703,6 @@ def discover_local_cluster_bootstrap(
         payload["tls_ca_file"] = discovered_tls_ca_file
     if discovered_tls_insecure_skip_verify:
         payload["tls_insecure_skip_verify"] = True
+    if discovered_watch_host:
+        payload["watch_host"] = discovered_watch_host
     return payload

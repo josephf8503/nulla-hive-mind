@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--remote-config-path",
         default="",
-        help="Remote config path used when public Hive auth must be synced over SSH.",
+        help="Remote config path used when public Hive auth must be synced over SSH. Typical path: /etc/nulla-hive-mind/watch-config.json.",
     )
     parser.add_argument(
         "--require-auth",
@@ -53,6 +53,18 @@ def main(argv: list[str] | None = None) -> int:
         if target:
             message += f" target_path={target}"
         print(message)
+        watch_host = str(result.get("watch_host") or "").strip()
+        if watch_host:
+            print(f"watch_host={watch_host}")
+        suggested_remote_config_path = str(result.get("suggested_remote_config_path") or "").strip()
+        if suggested_remote_config_path:
+            print(f"suggested_remote_config_path={suggested_remote_config_path}")
+        suggested_command = str(result.get("suggested_command") or "").strip()
+        if suggested_command:
+            print(f"next_step={suggested_command}")
+        error = str(result.get("error") or "").strip()
+        if error:
+            print(f"error={error}")
     return 0 if bool(result.get("ok")) else 1
 
 

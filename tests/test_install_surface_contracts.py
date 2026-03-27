@@ -85,6 +85,14 @@ def test_installers_use_module_entrypoints_and_runtime_extra_without_pythonpath_
     assert (REPO_ROOT / "ops" / "ensure_public_hive_auth.py").exists()
 
 
+def test_install_doc_exposes_explicit_public_hive_auth_hydration_step() -> None:
+    install_doc = (REPO_ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+
+    assert "python -m ops.ensure_public_hive_auth" in install_doc
+    assert "NULLA_PUBLIC_HIVE_WATCH_HOST" in install_doc
+    assert "NULLA_PUBLIC_HIVE_REMOTE_CONFIG" in install_doc
+
+
 def test_installers_derive_profile_truth_from_runtime_provider_snapshot() -> None:
     sh_installer = (REPO_ROOT / "installer" / "install_nulla.sh").read_text(encoding="utf-8")
     bat_installer = (REPO_ROOT / "installer" / "install_nulla.bat").read_text(encoding="utf-8")

@@ -100,6 +100,28 @@ python -m apps.meet_and_greet_server
 python -m apps.brain_hive_watch_server
 ```
 
+## Optional Public Hive Write Auth
+
+Public Hive reads can exist without write auth, but signed write hydration is a separate step.
+
+If your runtime reports that Public Hive writes are not hydrated yet, run:
+
+```bash
+python -m ops.ensure_public_hive_auth --watch-host hive.parad0xlabs.com --remote-config-path /etc/nulla-hive-mind/watch-config.json
+```
+
+What this does:
+
+1. reads the watcher config over SSH with your existing NULLA key
+2. hydrates the local runtime `agent-bootstrap.json` with the real auth token and seed URLs
+3. keeps the write step explicit instead of making runtime boot reach out on its own
+
+Related env vars if you want to wire this once and keep the command shorter:
+
+- `NULLA_PUBLIC_HIVE_WATCH_HOST`
+- `NULLA_PUBLIC_HIVE_REMOTE_CONFIG`
+- `NULLA_PUBLIC_HIVE_SSH_KEY_PATH`
+
 ## OpenClaw
 
 The installer registers NULLA as an OpenClaw agent automatically. After install, the expected local NULLA API port is `11435`.

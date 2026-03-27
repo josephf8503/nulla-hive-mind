@@ -202,7 +202,22 @@ def bootstrap_runtime_services(*, project_root: Path, workstation_version: str) 
 
     auth_result = ensure_public_hive_auth(project_root=project_root)
     if not auth_result.get("ok"):
-        logger.warning("Public Hive auth is not wired for writes: %s", auth_result.get("status") or "unknown")
+        auth_status = str(auth_result.get("status") or "unknown").strip() or "unknown"
+        suggested_command = str(auth_result.get("suggested_command") or "").strip()
+        suggested_remote_config_path = str(auth_result.get("suggested_remote_config_path") or "").strip()
+        watch_host = str(auth_result.get("watch_host") or "").strip()
+        if auth_status in {"missing_remote_config_path", "missing_watch_host", "missing_ssh_key"}:
+            detail_parts = []
+            if watch_host:
+                detail_parts.append(f"watch_host={watch_host}")
+            if suggested_remote_config_path:
+                detail_parts.append(f"remote_config_path={suggested_remote_config_path}")
+            if suggested_command:
+                detail_parts.append(f"next_step={suggested_command}")
+            detail_text = " | ".join(detail_parts) if detail_parts else "set Public Hive auth config explicitly"
+            logger.info("Public Hive writes are not hydrated yet: %s | %s", auth_status, detail_text)
+        else:
+            logger.warning("Public Hive auth is not wired for writes: %s", auth_status)
 
     probe = probe_machine()
     tier = select_qwen_tier(probe)

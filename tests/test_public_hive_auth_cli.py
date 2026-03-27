@@ -23,7 +23,14 @@ def test_main_returns_nonzero_for_incomplete_bootstrap(capsys, monkeypatch) -> N
     monkeypatch.setattr(
         cli,
         "ensure_public_hive_auth",
-        lambda **kwargs: {"ok": False, "status": "missing_ssh_key", "target_path": "/tmp/agent-bootstrap.json"},
+        lambda **kwargs: {
+            "ok": False,
+            "status": "missing_ssh_key",
+            "target_path": "/tmp/agent-bootstrap.json",
+            "watch_host": "hive.example.test",
+            "suggested_remote_config_path": "/etc/nulla-hive-mind/watch-config.json",
+            "suggested_command": "python -m ops.ensure_public_hive_auth --watch-host hive.example.test --remote-config-path /etc/nulla-hive-mind/watch-config.json",
+        },
     )
 
     exit_code = cli.main([])
@@ -31,3 +38,6 @@ def test_main_returns_nonzero_for_incomplete_bootstrap(capsys, monkeypatch) -> N
     captured = capsys.readouterr()
     assert exit_code == 1
     assert "status=missing_ssh_key" in captured.out
+    assert "watch_host=hive.example.test" in captured.out
+    assert "suggested_remote_config_path=/etc/nulla-hive-mind/watch-config.json" in captured.out
+    assert "next_step=python -m ops.ensure_public_hive_auth --watch-host hive.example.test --remote-config-path /etc/nulla-hive-mind/watch-config.json" in captured.out
