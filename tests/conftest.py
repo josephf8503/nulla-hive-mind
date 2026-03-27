@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import Mock
 from urllib.error import URLError
 from urllib.parse import urlsplit
-from unittest.mock import Mock
 
 import pytest
 
 from apps.nulla_agent import NullaAgent
-from core.public_hive import client as public_hive_client
 from core.memory_first_router import ModelExecutionDecision
 from core.persistent_memory import (
     conversation_log_path,
@@ -19,6 +18,7 @@ from core.persistent_memory import (
     session_summaries_path,
     user_heuristics_path,
 )
+from core.public_hive import client as public_hive_client
 from core.runtime_continuity import configure_runtime_continuity_db_path, reset_runtime_continuity_state
 from core.user_preferences import default_preferences, save_preferences
 from storage.db import active_default_db_path, get_connection, reset_default_connection
