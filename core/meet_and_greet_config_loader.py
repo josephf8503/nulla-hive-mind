@@ -15,6 +15,9 @@ def load_meet_node_config(path: str | Path) -> MeetAndGreetNodeConfig:
     raw["tls_ca_file"] = resolve_optional_config_path(config_path.parent, raw.get("tls_ca_file"))
     service_config = MeetAndGreetConfig(**dict(raw.pop("service_config", {})))
     replication_payload = dict(raw.pop("replication_config", {}))
+    if "tls_insecure_skip_verify" not in replication_payload and "tls_insecure_skip_verify" in raw:
+        replication_payload["tls_insecure_skip_verify"] = bool(raw.get("tls_insecure_skip_verify", False))
+    raw.pop("tls_insecure_skip_verify", None)
     replication_payload["tls_ca_file"] = resolve_optional_config_path(
         config_path.parent,
         replication_payload.get("tls_ca_file"),

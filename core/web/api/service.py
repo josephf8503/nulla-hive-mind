@@ -113,7 +113,7 @@ def capability_snapshot_with_runtime(
         for item in capabilities:
             if str(item.get("name") or "").strip() != "public_hive_surface":
                 continue
-            if ok or status in {"already_configured", "hydrated_from_bundle", "synced_from_ssh", "no_auth_required", "disabled"}:
+            if ok or status in {"already_configured", "hydrated_from_bundle", "hydrated_from_local_cluster", "synced_from_ssh", "no_auth_required", "disabled"}:
                 item["state"] = "implemented"
                 item["reason"] = f"Public Hive surface is live for this runtime ({status or 'ready'})."
             else:

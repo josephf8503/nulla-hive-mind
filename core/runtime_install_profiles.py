@@ -31,6 +31,8 @@ _MODEL_SIZE_GB = {
     "qwen2.5:72b": 80.0,
 }
 _INSTALL_PROFILE_RECORD_RELATIVE_PATH = Path("config") / "install-profile.json"
+_KIMI_API_KEY_ENV_KEYS = ("KIMI_API_KEY", "MOONSHOT_API_KEY", "NULLA_KIMI_API_KEY")
+_KIMI_API_KEY_REASON = "KIMI_API_KEY or MOONSHOT_API_KEY"
 
 
 @dataclass(frozen=True)
@@ -268,7 +270,7 @@ def _resolve_profile_id(
             return requested, "env_override", reasons
         reasons.append(f"Unknown install profile `{requested}`. Falling back to auto-recommended.")
 
-    if _has_any_env(env, "KIMI_API_KEY") and tier.tier_name in {"nano", "lite", "base"}:
+    if _has_any_env(env, *_KIMI_API_KEY_ENV_KEYS) and tier.tier_name in {"nano", "lite", "base"}:
         reasons.append("Auto-selected hybrid-kimi because local tier is limited and Kimi is configured.")
         return "hybrid-kimi", "auto", reasons
     if tier.tier_name in {"mid", "heavy", "titan"}:
@@ -351,40 +353,40 @@ def _provider_mix(
             )
         )
     if profile_id == "hybrid-kimi":
-        configured = _has_any_env(env, "KIMI_API_KEY")
+        configured = _has_any_env(env, *_KIMI_API_KEY_ENV_KEYS)
         providers.append(
             InstallProfileProvider(
                 provider_id=kimi_provider_id,
                 role="queen",
                 locality="remote",
                 required=True,
-                api_key_envs=("KIMI_API_KEY",),
+                api_key_envs=_KIMI_API_KEY_ENV_KEYS,
                 configured=configured,
                 availability_state=_provider_availability_state(kimi_provider_id, truth_index),
                 notes="Remote reasoning/synthesis lane.",
             )
         )
         if not configured:
-            reasons.append("hybrid-kimi needs KIMI_API_KEY before the remote queen lane is usable.")
+            reasons.append(f"hybrid-kimi needs {_KIMI_API_KEY_REASON} before the remote queen lane is usable.")
     elif profile_id == "hybrid-fallback":
-        configured = _has_any_env(env, "OPENAI_API_KEY", "KIMI_API_KEY")
+        configured = _has_any_env(env, "OPENAI_API_KEY", *_KIMI_API_KEY_ENV_KEYS)
         providers.append(
             InstallProfileProvider(
                 provider_id=fallback_provider_id,
                 role="queen",
                 locality="remote",
                 required=True,
-                api_key_envs=("OPENAI_API_KEY", "KIMI_API_KEY"),
+                api_key_envs=("OPENAI_API_KEY", *_KIMI_API_KEY_ENV_KEYS),
                 configured=configured,
                 availability_state=_provider_availability_state(fallback_provider_id, truth_index),
                 notes="Remote fallback lane for when local quality or availability is insufficient.",
             )
         )
         if not configured:
-            reasons.append("hybrid-fallback needs OPENAI_API_KEY or KIMI_API_KEY.")
+            reasons.append(f"hybrid-fallback needs OPENAI_API_KEY or {_KIMI_API_KEY_REASON}.")
     elif profile_id == "full-orchestrated":
-        kimi_configured = _has_any_env(env, "KIMI_API_KEY")
-        fallback_configured = _has_any_env(env, "OPENAI_API_KEY", "KIMI_API_KEY")
+        kimi_configured = _has_any_env(env, *_KIMI_API_KEY_ENV_KEYS)
+        fallback_configured = _has_any_env(env, "OPENAI_API_KEY", *_KIMI_API_KEY_ENV_KEYS)
         providers.extend(
             [
                 InstallProfileProvider(
@@ -392,7 +394,7 @@ def _provider_mix(
                     role="queen",
                     locality="remote",
                     required=True,
-                    api_key_envs=("KIMI_API_KEY",),
+                    api_key_envs=_KIMI_API_KEY_ENV_KEYS,
                     configured=kimi_configured,
                     availability_state=_provider_availability_state(kimi_provider_id, truth_index),
                     notes="Primary remote synthesis lane.",
@@ -402,7 +404,7 @@ def _provider_mix(
                     role="researcher",
                     locality="remote",
                     required=True,
-                    api_key_envs=("OPENAI_API_KEY", "KIMI_API_KEY"),
+                    api_key_envs=("OPENAI_API_KEY", *_KIMI_API_KEY_ENV_KEYS),
                     configured=fallback_configured,
                     availability_state=_provider_availability_state(fallback_provider_id, truth_index),
                     notes="Remote fallback/research lane.",
@@ -410,9 +412,9 @@ def _provider_mix(
             ]
         )
         if not kimi_configured:
-            reasons.append("full-orchestrated needs KIMI_API_KEY for the queen lane.")
+            reasons.append(f"full-orchestrated needs {_KIMI_API_KEY_REASON} for the queen lane.")
         if not fallback_configured:
-            reasons.append("full-orchestrated needs OPENAI_API_KEY or KIMI_API_KEY for the remote fallback lane.")
+            reasons.append(f"full-orchestrated needs OPENAI_API_KEY or {_KIMI_API_KEY_REASON} for the remote fallback lane.")
 
     return tuple(providers), reasons
 

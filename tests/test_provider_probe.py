@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import subprocess
+from unittest import mock
 
 from core.hardware_tier import MachineProbe
 from core.provider_routing import ProviderCapabilityTruth
-from installer.provider_probe import build_probe_report, list_ollama_models, render_probe_report
+from installer.provider_probe import build_probe_report, list_ollama_models, remote_env_statuses, render_probe_report
 
 
 def test_probe_report_prefers_dual_local_stack_on_24gb_host_with_required_models() -> None:
@@ -172,3 +173,21 @@ def test_list_ollama_models_preserves_size_and_modified_columns(monkeypatch) -> 
             "modified": "3 minutes ago",
         }
     ]
+
+
+def test_remote_env_statuses_accepts_moonshot_aliases_for_kimi() -> None:
+    with mock.patch.dict(
+        "os.environ",
+        {
+            "MOONSHOT_API_KEY": "test-key",
+            "MOONSHOT_BASE_URL": "https://api.moonshot.ai/v1",
+            "MOONSHOT_MODEL": "kimi-k2",
+        },
+        clear=True,
+    ):
+        statuses = remote_env_statuses()
+
+    assert statuses["kimi"]["api_key_present"] is True
+    assert statuses["kimi"]["base_url_present"] is True
+    assert statuses["kimi"]["model_present"] is True
+    assert statuses["kimi"]["configured"] is True

@@ -54,10 +54,13 @@ def list_ollama_models(ollama_binary: str | None = None) -> list[dict[str, str]]
 
 
 def remote_env_statuses() -> dict[str, dict[str, Any]]:
+    def _present(*names: str) -> bool:
+        return any(bool(os.environ.get(name)) for name in names)
+
     kimi = {
-        "api_key_present": bool(os.environ.get("KIMI_API_KEY")),
-        "base_url_present": bool(os.environ.get("KIMI_BASE_URL")),
-        "model_present": bool(os.environ.get("NULLA_KIMI_MODEL")),
+        "api_key_present": _present("KIMI_API_KEY", "MOONSHOT_API_KEY", "NULLA_KIMI_API_KEY"),
+        "base_url_present": _present("KIMI_BASE_URL", "NULLA_KIMI_BASE_URL", "MOONSHOT_BASE_URL"),
+        "model_present": _present("KIMI_MODEL", "NULLA_KIMI_MODEL", "MOONSHOT_MODEL"),
     }
     generic_remote = {
         "api_key_present": bool(os.environ.get("NULLA_REMOTE_API_KEY")),
@@ -201,7 +204,7 @@ def build_probe_report(
             kimi_reason = "Kimi credentials are present, but runtime bootstrap did not register a usable Kimi lane."
     else:
         kimi_status = "needs_config"
-        kimi_reason = "Kimi becomes a real remote queen lane when KIMI_API_KEY is configured."
+        kimi_reason = "Kimi becomes a real remote queen lane when KIMI_API_KEY or MOONSHOT_API_KEY is configured."
     stacks.append(
         {
             "stack_id": "local_plus_kimi",

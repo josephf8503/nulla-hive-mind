@@ -30,7 +30,7 @@ def sync_presence(
     )
     return bridge._post_many(
         "/v1/presence/register",
-        payload=request.model_dump(mode="json"),
+        payload=request.model_dump(mode="json", exclude_defaults=True, exclude_none=True),
         base_urls=bridge.config.meet_seed_urls,
     )
 
@@ -57,7 +57,7 @@ def heartbeat_presence(
     )
     return bridge._post_many(
         "/v1/presence/heartbeat",
-        payload=request.model_dump(mode="json"),
+        payload=request.model_dump(mode="json", exclude_defaults=True, exclude_none=True),
         base_urls=bridge.config.meet_seed_urls,
     )
 

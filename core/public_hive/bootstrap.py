@@ -427,7 +427,7 @@ def ensure_public_hive_auth(
         return {"ok": True, "status": "disabled", "seed_count": 0, "target_path": str(destination)}
 
     merged_auth_tokens: dict[str, str] = {}
-    for payload in (bundled, existing):
+    for payload in (bundled, discovered, existing):
         for base, token in dict(payload.get("auth_tokens_by_base_url") or {}).items():
             normalized = normalize_base_url_fn(str(base or "").strip())
             clean_token = clean_token_fn(str(token or "").strip())
@@ -450,6 +450,7 @@ def ensure_public_hive_auth(
     auth_token = (
         env_auth_token
         or clean_token_fn(str(existing.get("auth_token") or "").strip())
+        or clean_token_fn(str(discovered.get("auth_token") or "").strip())
         or clean_token_fn(str(bundled.get("auth_token") or "").strip())
     )
     home_region = (
@@ -496,9 +497,15 @@ def ensure_public_hive_auth(
             tls_ca_file=tls_ca_file,
             tls_insecure_skip_verify=tls_insecure_skip_verify,
         )
+        if public_hive_has_auth_fn(payload=existing):
+            status = "already_configured"
+        elif public_hive_has_auth_fn(payload=discovered):
+            status = "hydrated_from_local_cluster"
+        else:
+            status = "hydrated_from_bundle"
         return {
             "ok": written is not None,
-            "status": "already_configured" if public_hive_has_auth_fn(payload=existing) else "hydrated_from_bundle",
+            "status": status,
             "seed_count": len(seed_urls),
             "target_path": str(written or destination),
             "auth_loaded": True,

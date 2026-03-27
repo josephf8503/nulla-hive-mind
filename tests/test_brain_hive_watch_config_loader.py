@@ -35,9 +35,11 @@ class BrainHiveWatchConfigLoaderTests(unittest.TestCase):
         )
         self.assertEqual(config.host, "0.0.0.0")
         self.assertEqual(config.port, 8788)
-        self.assertTrue(str(config.tls_certfile or "").endswith("watch-edge-1-cert.pem"))
-        self.assertTrue(str(config.tls_keyfile or "").endswith("watch-edge-1-key.pem"))
-        self.assertTrue(str(config.tls_ca_file or "").endswith("cluster-ca.pem"))
+        self.assertIn("https://104.248.81.71:8766", config.upstream_base_urls)
+        self.assertTrue(config.tls_insecure_skip_verify)
+        self.assertIsNone(config.tls_certfile)
+        self.assertIsNone(config.tls_keyfile)
+        self.assertIsNone(config.tls_ca_file)
 
     def test_resolves_relative_tls_paths_from_config_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

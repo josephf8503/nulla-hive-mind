@@ -9,6 +9,9 @@ from storage.model_provider_manifest import ModelProviderManifest
 
 _DEFAULT_KIMI_BASE_URL = "https://api.moonshot.ai/v1"
 _DEFAULT_KIMI_MODEL = "kimi-k2"
+_KIMI_API_KEY_ENV_NAMES = ("KIMI_API_KEY", "MOONSHOT_API_KEY", "NULLA_KIMI_API_KEY")
+_KIMI_BASE_URL_ENV_NAMES = ("KIMI_BASE_URL", "NULLA_KIMI_BASE_URL", "MOONSHOT_BASE_URL")
+_KIMI_MODEL_ENV_NAMES = ("KIMI_MODEL", "NULLA_KIMI_MODEL", "MOONSHOT_MODEL")
 _DEFAULT_VLLM_BASE_URL = "http://127.0.0.1:8000/v1"
 _DEFAULT_VLLM_CONTEXT_WINDOW = 131072
 _DEFAULT_LLAMACPP_BASE_URL = "http://127.0.0.1:8080/v1"
@@ -96,15 +99,16 @@ def _ensure_kimi_provider(
     *,
     env: Mapping[str, str],
 ) -> str:
-    api_key = _env_first(env, "KIMI_API_KEY")
+    api_key = _env_first(env, *_KIMI_API_KEY_ENV_NAMES)
     if not api_key:
         return ""
-    model_name = _env_first(env, "KIMI_MODEL", "NULLA_KIMI_MODEL") or _DEFAULT_KIMI_MODEL
+    api_key_env = next((name for name in _KIMI_API_KEY_ENV_NAMES if str(env.get(name) or "").strip()), "KIMI_API_KEY")
+    model_name = _env_first(env, *_KIMI_MODEL_ENV_NAMES) or _DEFAULT_KIMI_MODEL
     existing = registry.get_manifest("kimi-remote", model_name)
     has_base_url = bool(str(getattr(existing, "runtime_config", {}).get("base_url") or "").strip()) if existing else False
     if existing and existing.enabled and has_base_url:
         return existing.provider_id
-    base_url = _env_first(env, "KIMI_BASE_URL", "NULLA_KIMI_BASE_URL") or _DEFAULT_KIMI_BASE_URL
+    base_url = _env_first(env, *_KIMI_BASE_URL_ENV_NAMES) or _DEFAULT_KIMI_BASE_URL
     manifest = ModelProviderManifest(
         provider_name="kimi-remote",
         model_name=model_name,
@@ -116,7 +120,7 @@ def _ensure_kimi_provider(
         weight_location="external",
         redistribution_allowed=False,
         runtime_dependency="remote-openai-compatible-provider",
-        notes="Kimi via Moonshot OpenAI-compatible API — auto-registered when KIMI_API_KEY is configured.",
+        notes="Kimi via Moonshot OpenAI-compatible API — auto-registered when a Kimi/Moonshot API key is configured.",
         capabilities=["summarize", "classify", "format", "extract", "code_basic", "code_complex", "structured_json", "long_context"],
         runtime_config={
             "base_url": base_url,
@@ -126,7 +130,7 @@ def _ensure_kimi_provider(
             "health_timeout_seconds": 10,
             "temperature": 0.3,
             "supports_json_mode": True,
-            "api_key_env": "KIMI_API_KEY",
+            "api_key_env": api_key_env,
         },
         metadata={
             "runtime_family": "openai-compatible",

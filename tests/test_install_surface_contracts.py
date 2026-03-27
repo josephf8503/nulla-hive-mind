@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
 
@@ -91,6 +92,31 @@ def test_install_doc_exposes_explicit_public_hive_auth_hydration_step() -> None:
     assert "python -m ops.ensure_public_hive_auth" in install_doc
     assert "NULLA_PUBLIC_HIVE_WATCH_HOST" in install_doc
     assert "NULLA_PUBLIC_HIVE_REMOTE_CONFIG" in install_doc
+
+
+def test_do_ip_first_cluster_pack_is_shipped_with_direct_ip_runtime_defaults() -> None:
+    cluster_root = REPO_ROOT / "config" / "meet_clusters" / "do_ip_first_4node"
+    assert (cluster_root / "README.md").exists()
+    assert (cluster_root / "cluster_manifest.json").exists()
+    assert (cluster_root / "watch-edge-1.json").exists()
+
+    agent_bootstrap = json.loads((cluster_root / "agent-bootstrap.sample.json").read_text(encoding="utf-8"))
+    watch_edge = json.loads((cluster_root / "watch-edge-1.json").read_text(encoding="utf-8"))
+
+    assert agent_bootstrap["meet_seed_urls"] == [
+        "https://104.248.81.71:8766",
+        "https://157.245.211.185:8766",
+        "https://159.65.136.157:8766",
+    ]
+    assert agent_bootstrap["tls_insecure_skip_verify"] is True
+    assert watch_edge["public_url"] == "https://161.35.145.74:8788"
+    assert watch_edge["upstream_base_urls"] == [
+        "https://104.248.81.71:8766",
+        "https://157.245.211.185:8766",
+        "https://159.65.136.157:8766",
+    ]
+    assert watch_edge["tls_insecure_skip_verify"] is True
+    assert not str(watch_edge.get("auth_token") or "").strip()
 
 
 def test_installers_derive_profile_truth_from_runtime_provider_snapshot() -> None:

@@ -84,6 +84,8 @@ def test_public_hive_bridge_syncs_presence_with_signed_envelope_and_token() -> N
     assert envelope["target_path"] == "/v1/presence/register"
     assert envelope["payload"]["status"] == "busy"
     assert envelope["payload"]["home_region"] == "eu"
+    assert "endpoint" not in envelope["payload"]
+    assert "endpoints" not in envelope["payload"]
 
 
 def test_public_hive_bridge_private_post_json_facade_stays_available_for_callers() -> None:
@@ -587,6 +589,76 @@ def test_ensure_public_hive_auth_hydrates_target_from_bundled_project_config() -
     assert result["status"] == "hydrated_from_bundle"
     assert payload["auth_token"] == "bundle-token"
     assert payload["meet_seed_urls"] == ["https://seed-eu.example.test:8766"]
+
+
+def test_ensure_public_hive_auth_hydrates_target_from_discovered_local_cluster_without_ssh() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        project_root = Path(tmp_dir)
+        cluster_dir = project_root / "config" / "meet_clusters" / "do_ip_first_4node"
+        cluster_dir.mkdir(parents=True, exist_ok=True)
+        (cluster_dir / "watch-edge-1.json").write_text(
+            json.dumps(
+                {
+                    "public_base_url": "https://161.35.145.74:8788",
+                    "upstream_base_urls": [
+                        "https://104.248.81.71:8766",
+                        "https://157.245.211.185:8766",
+                        "https://159.65.136.157:8766",
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (cluster_dir / "seed-eu-1.json").write_text(
+            json.dumps(
+                {
+                    "public_base_url": "https://104.248.81.71:8766",
+                    "auth_token": "eu-token",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (cluster_dir / "seed-us-1.json").write_text(
+            json.dumps(
+                {
+                    "public_base_url": "https://157.245.211.185:8766",
+                    "auth_token": "us-token",
+                }
+            ),
+            encoding="utf-8",
+        )
+        (cluster_dir / "seed-apac-1.json").write_text(
+            json.dumps(
+                {
+                    "public_base_url": "https://159.65.136.157:8766",
+                    "auth_token": "apac-token",
+                }
+            ),
+            encoding="utf-8",
+        )
+        target_path = project_root / "runtime" / "agent-bootstrap.json"
+
+        with mock.patch("core.public_hive_bridge.find_public_hive_ssh_key") as find_ssh_key, mock.patch(
+            "core.public_hive_bridge.sync_public_hive_auth_from_ssh"
+        ) as sync_ssh:
+            result = ensure_public_hive_auth(project_root=project_root, target_path=target_path)
+
+        payload = json.loads(target_path.read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert result["status"] == "hydrated_from_local_cluster"
+    assert payload["meet_seed_urls"] == [
+        "https://104.248.81.71:8766",
+        "https://157.245.211.185:8766",
+        "https://159.65.136.157:8766",
+    ]
+    assert payload["auth_tokens_by_base_url"] == {
+        "https://104.248.81.71:8766": "eu-token",
+        "https://157.245.211.185:8766": "us-token",
+        "https://159.65.136.157:8766": "apac-token",
+    }
+    find_ssh_key.assert_not_called()
+    sync_ssh.assert_not_called()
 
 
 def test_ensure_public_hive_auth_facade_uses_patchable_writer() -> None:
