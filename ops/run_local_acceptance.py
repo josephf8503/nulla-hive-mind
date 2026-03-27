@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import signal
 import socket
 import statistics
@@ -118,6 +119,26 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _read_json_if_exists(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _copy_tree_with_timestamp(root: Path, *, status: str) -> Path:
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    archive_root = root.parent / f"{root.name}_preserved_{status}_{stamp}"
+    suffix = 1
+    while archive_root.exists():
+        archive_root = root.parent / f"{root.name}_preserved_{status}_{stamp}_{suffix}"
+        suffix += 1
+    shutil.copytree(root, archive_root)
+    return archive_root
 
 
 def _runtime_endpoint_parts(base_url: str) -> tuple[str, int]:
@@ -572,6 +593,31 @@ def build_acceptance_summary(
     }
 
 
+def _preserve_previous_run_artifacts(*, run_root: Path, profile: AcceptanceProfile) -> Path | None:
+    evidence_dir = run_root / "evidence"
+    if not evidence_dir.exists():
+        return None
+    online_payload = _read_json_if_exists(evidence_dir / "online_acceptance.json")
+    offline_payload = _read_json_if_exists(evidence_dir / "offline_honesty.json")
+    manual_payload = _read_json_if_exists(evidence_dir / "manual_btc_verification.json")
+    if online_payload is None and offline_payload is None and manual_payload is None:
+        return None
+    if online_payload is None or offline_payload is None or manual_payload is None:
+        return _copy_tree_with_timestamp(run_root, status="incomplete")
+    try:
+        summary = build_acceptance_summary(
+            online_payload=online_payload,
+            offline_payload=offline_payload,
+            manual_btc_check=manual_payload,
+            profile=profile,
+        )
+    except Exception:
+        return _copy_tree_with_timestamp(run_root, status="incomplete")
+    if summary["overall_green"]:
+        return None
+    return _copy_tree_with_timestamp(run_root, status="fail")
+
+
 def fetch_manual_btc_verification(
     *,
     repo_root: Path,
@@ -707,6 +753,7 @@ def run_full_acceptance(
     workspace_root: Path,
     start_script: Path,
 ) -> int:
+    _preserve_previous_run_artifacts(run_root=run_root, profile=profile)
     expected_commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=str(repo_root), text=True).strip()
     daemon_bind_port = _pick_isolated_daemon_bind_port(host="127.0.0.1")
     _stop_runtime(base_url)

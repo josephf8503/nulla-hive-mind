@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -230,6 +231,15 @@ def _write_markdown(path: Path, text: str) -> None:
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
+def _read_json_if_exists(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 def _display_path(path: Path | None) -> str:
     if not path:
         return ""
@@ -258,6 +268,33 @@ def _write_latency_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow({name: row.get(name) for name in fieldnames})
+
+
+def _copy_tree_with_timestamp(root: Path, *, status: str) -> Path:
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    archive_root = root.parent / f"{root.name}_preserved_{status}_{stamp}"
+    suffix = 1
+    while archive_root.exists():
+        archive_root = root.parent / f"{root.name}_preserved_{status}_{stamp}_{suffix}"
+        suffix += 1
+    shutil.copytree(root, archive_root)
+    return archive_root
+
+
+def _preserve_previous_live_run_artifacts(*, run_root: Path, profile_path: Path) -> Path | None:
+    profile = local_acceptance.load_profile(profile_path)
+    return local_acceptance._preserve_previous_run_artifacts(run_root=run_root, profile=profile)
+
+
+def _preserve_previous_output_bundle(output_root: Path) -> Path | None:
+    summary_payload = _read_json_if_exists(output_root / "summary.json")
+    if summary_payload is None:
+        return None
+    live_status = str(dict(summary_payload.get("live_acceptance") or {}).get("status") or "").strip().lower()
+    status = "pass" if bool(summary_payload.get("overall_full_green")) else live_status or "fail"
+    if status == "pass":
+        return None
+    return _copy_tree_with_timestamp(output_root, status=status)
 
 
 def _scenario_group_result(name: str, scenarios: list[dict[str, str]]) -> dict[str, Any]:
@@ -366,6 +403,7 @@ def _run_live_acceptance(
     profile_path: Path,
     run_root: Path,
 ) -> dict[str, Any]:
+    preserved_run_root = _preserve_previous_live_run_artifacts(run_root=run_root, profile_path=profile_path)
     profile = local_acceptance.load_profile(profile_path)
     exit_code = local_acceptance.run_full_acceptance(
         base_url=base_url.rstrip("/"),
@@ -398,6 +436,7 @@ def _run_live_acceptance(
         "offline": offline_payload,
         "manual_btc": manual_payload,
         "report_path": _display_path(run_root / "evidence" / "NULLA_LOCAL_ACCEPTANCE_REPORT.md"),
+        "preserved_previous_run": _display_path(preserved_run_root),
     }
 
 
@@ -472,6 +511,16 @@ def _render_summary_markdown(payload: dict[str, Any]) -> str:
         f"- recent baseline comparison: {payload['regression_48h']['comparison']['status']}",
         f"- overall full gate: {'GREEN' if payload['overall_full_green'] else 'NOT GREEN'}",
         f"- ci fast gate: {'GREEN' if payload['ci_fast_green'] else 'NOT GREEN'}",
+        (
+            f"- preserved previous non-green output bundle: {payload['preserved_previous_output_root']}"
+            if payload.get("preserved_previous_output_root")
+            else "- preserved previous non-green output bundle: none"
+        ),
+        (
+            f"- preserved previous live acceptance bundle: {payload['live_acceptance'].get('preserved_previous_run')}"
+            if payload["live_acceptance"].get("preserved_previous_run")
+            else "- preserved previous live acceptance bundle: none"
+        ),
         "",
         "## Pass / Fail Summary",
         "",
@@ -603,6 +652,7 @@ def run(args: argparse.Namespace) -> int:
     profile_path = Path(args.profile).expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     baseline_root.mkdir(parents=True, exist_ok=True)
+    preserved_output_root = _preserve_previous_output_bundle(output_root)
 
     timestamp_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     commit_sha = _git_commit()
@@ -690,6 +740,7 @@ def run(args: argparse.Namespace) -> int:
         "nullabook_provenance": nullabook_provenance,
         "blockers": blockers,
         "failing_targets": sorted(set(failing_targets)),
+        "preserved_previous_output_root": _display_path(preserved_output_root),
         "overall_full_green": not blockers,
         "ci_fast_green": regression_48h["status"] == "pass"
         and context_discipline["status"] == "pass"

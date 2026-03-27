@@ -24,6 +24,8 @@ def test_install_script_hardens_openclaw_launcher_bootstrap() -> None:
     script = (PROJECT_ROOT / "installer" / "install_nulla.sh").read_text(encoding="utf-8")
 
     assert "--install-profile <profile>" in script
+    assert 'validate_selected_install_profile() {' in script
+    assert '"${SCRIPT_DIR}/validate_install_profile.py"' in script
     assert 'export NULLA_INSTALL_PROFILE="\\${NULLA_INSTALL_PROFILE:-${install_profile}}"' in script
     assert 'Recommended profile: ${recommended_install_profile}' in script
     assert 'wait_for_http_ready() {' in script
@@ -47,10 +49,13 @@ def test_install_wrappers_forward_install_profile_and_extra_args() -> None:
     install_and_run = (PROJECT_ROOT / "Install_And_Run_NULLA.sh").read_text(encoding="utf-8")
     install_and_run_bat = (PROJECT_ROOT / "Install_And_Run_NULLA.bat").read_text(encoding="utf-8")
     install_bat = (PROJECT_ROOT / "Install_NULLA.bat").read_text(encoding="utf-8")
+    install_bat_script = (PROJECT_ROOT / "installer" / "install_nulla.bat").read_text(encoding="utf-8")
 
     assert '--start "$@"' in install_and_run
     assert "%*" in install_and_run_bat
     assert "%*" in install_bat
+    assert "requested_profile=r'%NULLA_INSTALL_PROFILE%'" in install_bat_script
+    assert '"%SCRIPT_DIR%validate_install_profile.py"' in install_bat_script
 
 
 def test_install_script_surfaces_machine_probe_command() -> None:

@@ -122,6 +122,7 @@ def build_probe_report(
     ollama_binary: str | None = None,
     env_statuses: dict[str, dict[str, Any]] | None = None,
     provider_capability_truth: tuple[ProviderCapabilityTruth, ...] | None = None,
+    show_unsupported: bool = False,
 ) -> dict[str, Any]:
     summary = tier_summary(machine)
     probe = machine
@@ -213,29 +214,31 @@ def build_probe_report(
         }
     )
 
-    stacks.append(
-        {
-            "stack_id": "local_plus_tether",
-            "status": "not_implemented",
-            "recommended": False,
-            "reason": "Tether does not have a real first-class installer/runtime lane in this repo yet.",
-            "primary_model": primary_tier.ollama_tag,
-            "helper_model": "",
-        }
-    )
-    stacks.append(
-        {
-            "stack_id": "local_plus_qvac",
-            "status": "not_implemented",
-            "recommended": False,
-            "reason": "QVAC does not have a real first-class installer/runtime lane in this repo yet.",
-            "primary_model": primary_tier.ollama_tag,
-            "helper_model": "",
-        }
-    )
+    unsupported_stacks: list[dict[str, Any]] = []
+    if show_unsupported:
+        unsupported_stacks.extend(
+            [
+                {
+                    "stack_id": "local_plus_tether",
+                    "status": "not_implemented",
+                    "recommended": False,
+                    "reason": "Tether does not have a real first-class installer/runtime lane in this repo yet.",
+                    "primary_model": primary_tier.ollama_tag,
+                    "helper_model": "",
+                },
+                {
+                    "stack_id": "local_plus_qvac",
+                    "status": "not_implemented",
+                    "recommended": False,
+                    "reason": "QVAC does not have a real first-class installer/runtime lane in this repo yet.",
+                    "primary_model": primary_tier.ollama_tag,
+                    "helper_model": "",
+                },
+            ]
+        )
 
     recommended = next((item for item in stacks if item.get("recommended")), stacks[0])
-    return {
+    report = {
         "schema": "nulla.provider_probe.v1",
         "machine": summary,
         "ollama": {
@@ -248,12 +251,16 @@ def build_probe_report(
         "recommended_stack_id": str(recommended.get("stack_id") or ""),
         "stacks": stacks,
     }
+    if unsupported_stacks:
+        report["unsupported_stacks"] = unsupported_stacks
+    return report
 
 
 def render_probe_report(report: dict[str, Any]) -> str:
     machine = dict(report.get("machine") or {})
     ollama = dict(report.get("ollama") or {})
     stacks = [dict(item) for item in list(report.get("stacks") or []) if isinstance(item, dict)]
+    unsupported_stacks = [dict(item) for item in list(report.get("unsupported_stacks") or []) if isinstance(item, dict)]
     lines = [
         "NULLA machine/provider probe",
         f"- machine: {machine.get('cpu_cores')} cores, {machine.get('ram_gb')} GiB RAM, {machine.get('gpu') or 'no gpu'}",
@@ -268,15 +275,24 @@ def render_probe_report(report: dict[str, Any]) -> str:
     lines.append("- stack status:")
     for stack in stacks:
         lines.append(f"  - {stack.get('stack_id')}: {stack.get('status')} — {stack.get('reason')}")
+    if unsupported_stacks:
+        lines.append("- unsupported stacks:")
+        for stack in unsupported_stacks:
+            lines.append(f"  - {stack.get('stack_id')}: {stack.get('status')} — {stack.get('reason')}")
     return "\n".join(lines)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="nulla-provider-probe")
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of human-readable text.")
+    parser.add_argument(
+        "--show-unsupported",
+        action="store_true",
+        help="Include unsupported remote ideas like Tether or QVAC in a separate section.",
+    )
     args = parser.parse_args()
 
-    report = build_probe_report()
+    report = build_probe_report(show_unsupported=bool(args.show_unsupported))
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:

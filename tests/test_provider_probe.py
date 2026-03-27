@@ -59,11 +59,12 @@ def test_probe_report_marks_kimi_lane_real_but_unwired_remote_lanes_honestly() -
                 availability_state="ready",
             ),
         ),
+        show_unsupported=True,
     )
 
     kimi = next(item for item in report["stacks"] if item["stack_id"] == "local_plus_kimi")
-    tether = next(item for item in report["stacks"] if item["stack_id"] == "local_plus_tether")
-    qvac = next(item for item in report["stacks"] if item["stack_id"] == "local_plus_qvac")
+    tether = next(item for item in report["unsupported_stacks"] if item["stack_id"] == "local_plus_tether")
+    qvac = next(item for item in report["unsupported_stacks"] if item["stack_id"] == "local_plus_qvac")
 
     assert kimi["status"] == "ready"
     assert "real remote kimi queen lane" in kimi["reason"].lower()
@@ -126,6 +127,24 @@ def test_render_probe_report_surfaces_installed_models_and_recommendation() -> N
     assert "recommended stack" in rendered.lower()
     assert "qwen2.5:7b" in rendered
     assert "local_only" in rendered
+    assert "local_plus_tether" not in rendered
+
+
+def test_default_probe_report_hides_unsupported_remote_ideas() -> None:
+    report = build_probe_report(
+        machine=MachineProbe(cpu_cores=8, ram_gb=12.0, gpu_name=None, vram_gb=None, accelerator="cpu"),
+        ollama_binary="/usr/local/bin/ollama",
+        ollama_models=[{"name": "qwen2.5:7b", "id": "b", "size": "4.7 GB", "modified": "today"}],
+        env_statuses={
+            "kimi": {"configured": False},
+            "generic_remote": {"configured": False},
+            "tether": {"configured": True},
+            "qvac": {"configured": True},
+        },
+    )
+
+    assert "unsupported_stacks" not in report
+    assert all(item["stack_id"] not in {"local_plus_tether", "local_plus_qvac"} for item in report["stacks"])
 
 
 def test_list_ollama_models_preserves_size_and_modified_columns(monkeypatch) -> None:

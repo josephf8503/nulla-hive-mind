@@ -101,6 +101,27 @@ def test_fetch_manual_btc_verification_writes_json(monkeypatch, tmp_path: Path) 
     assert saved["observed"] == "$70,573.00 at 2026-03-20 23:09 UTC"
 
 
+def test_preserve_previous_run_artifacts_copies_non_green_bundle(monkeypatch, tmp_path: Path) -> None:
+    profile = acceptance.load_profile()
+    run_root = tmp_path / "llm_eval_live"
+    evidence_dir = run_root / "evidence"
+    evidence_dir.mkdir(parents=True)
+    online_payload = _fake_online_payload()
+    online_payload["results"]["P0.1a_boot_hello"]["pass"] = False
+    (evidence_dir / "online_acceptance.json").write_text(json.dumps(online_payload), encoding="utf-8")
+    (evidence_dir / "offline_honesty.json").write_text(
+        json.dumps({"result": {"latency_seconds": 0.05, "pass": True}}),
+        encoding="utf-8",
+    )
+    (evidence_dir / "manual_btc_verification.json").write_text(json.dumps({"pass": True}), encoding="utf-8")
+    monkeypatch.setattr(acceptance.time, "strftime", lambda fmt, now=None: "20260327T071000Z")
+
+    preserved = acceptance._preserve_previous_run_artifacts(run_root=run_root, profile=profile)
+
+    assert preserved == tmp_path / "llm_eval_live_preserved_fail_20260327T071000Z"
+    assert (preserved / "evidence" / "online_acceptance.json").exists()
+
+
 def test_render_report_includes_profile_and_thresholds(tmp_path: Path) -> None:
     profile = acceptance.load_profile()
     output = tmp_path / "evidence" / "NULLA_LOCAL_ACCEPTANCE_REPORT.md"

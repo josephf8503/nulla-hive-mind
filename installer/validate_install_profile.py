@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from core.runtime_backbone import build_provider_registry_snapshot
+from core.runtime_install_profiles import build_install_profile_truth
+
+
+def validate_install_profile(
+    *,
+    runtime_home: str,
+    selected_model: str,
+    requested_profile: str | None,
+) -> tuple[bool, str]:
+    snapshot = build_provider_registry_snapshot()
+    profile = build_install_profile_truth(
+        requested_profile=str(requested_profile or "").strip() or None,
+        selected_model=selected_model,
+        runtime_home=runtime_home,
+        provider_capability_truth=snapshot.capability_truth,
+    )
+    if profile.profile_id != "hybrid-kimi":
+        return True, ""
+    if profile.ready:
+        return True, ""
+    reasons = "; ".join(profile.reasons) or "KIMI_API_KEY is missing or the Kimi lane is not healthy."
+    return False, (
+        "ERROR: hybrid-kimi needs KIMI_API_KEY and a healthy kimi-remote lane before install can continue.\n"
+        f"{reasons}"
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="validate_install_profile")
+    parser.add_argument("runtime_home")
+    parser.add_argument("selected_model")
+    parser.add_argument("requested_profile", nargs="?", default="")
+    args = parser.parse_args(argv)
+    ok, message = validate_install_profile(
+        runtime_home=args.runtime_home,
+        selected_model=args.selected_model,
+        requested_profile=args.requested_profile,
+    )
+    if message:
+        print(message)
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

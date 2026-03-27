@@ -285,13 +285,13 @@ if "%INSTALL_PROFILE_OVERRIDE%"=="" (
 )
 set "NULLA_INSTALL_PROFILE=%INSTALL_PROFILE_OVERRIDE%"
 set "INSTALL_PROFILE_SUMMARY=%RECOMMENDED_INSTALL_PROFILE% -> %MODEL_TAG%"
-"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).display_summary())" 2>nul > "%TEMP%\nulla_install_profile_summary.txt"
+"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(requested_profile=r'%NULLA_INSTALL_PROFILE%', selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).display_summary())" 2>nul > "%TEMP%\nulla_install_profile_summary.txt"
 if exist "%TEMP%\nulla_install_profile_summary.txt" (
   set /p INSTALL_PROFILE_SUMMARY=<"%TEMP%\nulla_install_profile_summary.txt"
   del /f /q "%TEMP%\nulla_install_profile_summary.txt" >nul 2>&1
 )
 set "INSTALL_PROFILE=%RECOMMENDED_INSTALL_PROFILE%"
-"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).profile_id)" 2>nul > "%TEMP%\nulla_selected_install_profile.txt"
+"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(requested_profile=r'%NULLA_INSTALL_PROFILE%', selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).profile_id)" 2>nul > "%TEMP%\nulla_selected_install_profile.txt"
 if exist "%TEMP%\nulla_selected_install_profile.txt" (
   set /p INSTALL_PROFILE=<"%TEMP%\nulla_selected_install_profile.txt"
   del /f /q "%TEMP%\nulla_selected_install_profile.txt" >nul 2>&1
@@ -302,6 +302,12 @@ echo Selected model: %MODEL_TAG%
 echo Recommended profile: %RECOMMENDED_INSTALL_PROFILE%
 echo Install profile: %INSTALL_PROFILE%
 echo Profile summary: %INSTALL_PROFILE_SUMMARY%
+"%VENV_DIR%\Scripts\python.exe" "%SCRIPT_DIR%validate_install_profile.py" "%NULLA_HOME%" "%MODEL_TAG%" "%INSTALL_PROFILE%" >"%TEMP%\nulla_install_profile_validate.txt" 2>&1
+if %errorlevel% neq 0 (
+  type "%TEMP%\nulla_install_profile_validate.txt"
+  exit /b 1
+)
+if exist "%TEMP%\nulla_install_profile_validate.txt" del /f /q "%TEMP%\nulla_install_profile_validate.txt" >nul 2>&1
 
 echo Step 7/14: Creating launchers...
 (

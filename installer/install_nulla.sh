@@ -437,6 +437,21 @@ prompt_install_profile() {
 }
 
 
+validate_selected_install_profile() {
+  local runtime_home="$1"
+  local model_tag="$2"
+  local install_profile="$3"
+  local validation_output=""
+
+  if ! validation_output="$(NULLA_HOME="${runtime_home}" NULLA_INSTALL_PROFILE="${install_profile}" \
+    "${VENV_DIR}/bin/python" "${SCRIPT_DIR}/validate_install_profile.py" \
+    "${runtime_home}" "${model_tag}" "${install_profile}" 2>&1)"; then
+    say "${validation_output}"
+    exit 1
+  fi
+}
+
+
 install_playwright_runtime() {
   say "Step 3/14: Installing Playwright browser runtime..."
   if "${VENV_DIR}/bin/python" -m playwright install "${DEFAULT_BROWSER_ENGINE}" >/tmp/nulla_playwright_install.log 2>&1; then
@@ -1075,6 +1090,7 @@ main() {
   say "Recommended profile: ${recommended_install_profile}"
   say "Install profile: ${install_profile}"
   say "Profile summary: ${install_profile_summary}"
+  validate_selected_install_profile "${runtime_home}" "${model_tag}" "${install_profile}"
 
   say "Step 7/14: Creating launchers..."
   write_launcher "${PROJECT_ROOT}/Start_NULLA.sh" "${runtime_home}" "${install_profile}"
