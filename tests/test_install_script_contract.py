@@ -80,3 +80,10 @@ def test_public_hive_auth_helper_is_tracked() -> None:
     content = helper.read_text(encoding="utf-8")
     assert 'default=""' in content
     assert "from core.public_hive_bridge import ensure_public_hive_auth" in content
+
+
+def test_install_script_runs_public_hive_auth_helper_from_project_root() -> None:
+    script = (PROJECT_ROOT / "installer" / "install_nulla.sh").read_text(encoding="utf-8")
+
+    assert 'result_json="$(cd "${PROJECT_ROOT}" && NULLA_HOME="${runtime_home}" \\' in script
+    assert '"${VENV_DIR}/bin/python" -m ops.ensure_public_hive_auth \\' in script

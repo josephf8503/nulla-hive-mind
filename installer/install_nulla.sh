@@ -348,7 +348,7 @@ bootstrap_public_hive_auth() {
   local runtime_home="$1"
   say "Step 5b/14: Ensuring public Hive auth/bootstrap..."
   local result_json=""
-  result_json="$(NULLA_HOME="${runtime_home}" \
+  result_json="$(cd "${PROJECT_ROOT}" && NULLA_HOME="${runtime_home}" \
     "${VENV_DIR}/bin/python" -m ops.ensure_public_hive_auth \
       --project-root "${PROJECT_ROOT}" \
       --watch-host "${PUBLIC_HIVE_WATCH_HOST}" \
