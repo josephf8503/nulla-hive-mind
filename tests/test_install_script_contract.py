@@ -31,19 +31,19 @@ def test_install_script_hardens_openclaw_launcher_bootstrap() -> None:
     assert 'PROVIDER_ENV_FILE="\\${NULLA_HOME}/config/provider-env.sh"' in script
     assert 'Recommended profile: ${recommended_install_profile}' in script
     assert 'wait_for_http_ready() {' in script
+    assert 'spawn_detached() {' in script
     assert 'curl -sf --max-time 2 "\\${url}" >/dev/null 2>&1' in script
     assert 'cd "${PROJECT_ROOT}"' in script
     assert 'export NULLA_HOME="\\${NULLA_HOME:-${runtime_home}}"' in script
     assert 'export NULLA_OPENCLAW_API_URL="\\${NULLA_OPENCLAW_API_URL:-http://127.0.0.1:\\${NULLA_OPENCLAW_API_PORT}}"' in script
-    assert 'nohup "\\${VENV_PY}" -m apps.nulla_api_server --port "\\${NULLA_OPENCLAW_API_PORT}"' in script
+    assert 'start_new_session=True' in script
+    assert 'api_pid="\\$(spawn_detached /tmp/nulla_api_server.log "\\${VENV_PY}" -m apps.nulla_api_server --port "\\${NULLA_OPENCLAW_API_PORT}")"' in script
     assert 'wait_for_http_ready "\\${NULLA_OPENCLAW_API_URL}/healthz" 30 "\\${api_pid}" 3' in script
-    assert 'launch openclaw --yes --model "\\${MODEL_TAG}"' in script
+    assert 'spawn_detached /tmp/nulla_openclaw.log ollama launch openclaw --yes --model "\\${MODEL_TAG}"' in script
     assert 'launch openclaw --yes --config --model "${model_tag}"' in script
     assert 'openclaw gateway run --force' in script
     assert '${HOME}/.openclaw-default' in script
     assert 'Skipping Ollama OpenClaw auto-config for isolated home' in script
-    assert 'disown "\\${api_pid}"' in script
-    assert 'disown "\\${openclaw_pid}"' in script
     assert 'say "Verifying live launch through the shell launcher..."' in script
     assert 'exec "${PROJECT_ROOT}/OpenClaw_NULLA.sh"' in script
 

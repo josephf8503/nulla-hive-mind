@@ -656,30 +656,44 @@ wait_for_http_ready() {
   return 1
 }
 
+spawn_detached() {
+  local log_path="\$1"
+  shift
+  "\${VENV_PY}" - "\${log_path}" "\$@" <<'PY'
+import subprocess
+import sys
+
+log_path = sys.argv[1]
+command = sys.argv[2:]
+with open(log_path, "ab", buffering=0) as log_stream:
+    child = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=log_stream,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        close_fds=True,
+    )
+print(child.pid)
+PY
+}
+
 if ! wait_for_http_ready "\${NULLA_OPENCLAW_API_URL}/healthz" 2 ""; then
-  nohup "\${VENV_PY}" -m apps.nulla_api_server --port "\${NULLA_OPENCLAW_API_PORT}" >/tmp/nulla_api_server.log 2>&1 </dev/null &
-  api_pid=\$!
-  disown "\${api_pid}" 2>/dev/null || true
+  api_pid="\$(spawn_detached /tmp/nulla_api_server.log "\${VENV_PY}" -m apps.nulla_api_server --port "\${NULLA_OPENCLAW_API_PORT}")"
   wait_for_http_ready "\${NULLA_OPENCLAW_API_URL}/healthz" 30 "\${api_pid}" 3
 fi
 
 if ! curl -sf --max-time 2 "http://127.0.0.1:\${NULLA_OPENCLAW_GATEWAY_PORT}" >/dev/null 2>&1; then
   if command -v openclaw >/dev/null 2>&1; then
-    nohup openclaw gateway run --force >/tmp/nulla_openclaw.log 2>&1 </dev/null &
-    openclaw_pid=\$!
-    disown "\${openclaw_pid}" 2>/dev/null || true
+    openclaw_pid="\$(spawn_detached /tmp/nulla_openclaw.log openclaw gateway run --force)"
   elif command -v ollama >/dev/null 2>&1; then
-    nohup ollama launch openclaw --yes --model "\${MODEL_TAG}" >/tmp/nulla_openclaw.log 2>&1 </dev/null &
-    openclaw_pid=\$!
-    disown "\${openclaw_pid}" 2>/dev/null || true
+    openclaw_pid="\$(spawn_detached /tmp/nulla_openclaw.log ollama launch openclaw --yes --model "\${MODEL_TAG}")"
   fi
   wait_for_http_ready "http://127.0.0.1:\${NULLA_OPENCLAW_GATEWAY_PORT}" 30 "\${openclaw_pid:-}" 2
 fi
 
 if ! curl -sf --max-time 2 "http://127.0.0.1:\${NULLA_OPENCLAW_GATEWAY_PORT}" >/dev/null 2>&1 && command -v openclaw >/dev/null 2>&1; then
-  nohup openclaw gateway run --force >/tmp/nulla_openclaw.log 2>&1 </dev/null &
-  openclaw_pid=\$!
-  disown "\${openclaw_pid}" 2>/dev/null || true
+  openclaw_pid="\$(spawn_detached /tmp/nulla_openclaw.log openclaw gateway run --force)"
   wait_for_http_ready "http://127.0.0.1:\${NULLA_OPENCLAW_GATEWAY_PORT}" 30 "\${openclaw_pid}" 2
 fi
 
