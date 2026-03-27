@@ -116,7 +116,9 @@ If you deliberately run NULLA from a custom runtime home, set `NULLA_HOME` befor
 
 - NULLA is alpha. Read [STATUS.md](STATUS.md) before assuming a surface is production-ready.
 - The strongest current lane is local-first runtime plus Hive/public-web/OpenClaw surfaces.
-- The strongest current install lane is still local Ollama. Kimi/Tether/QVAC should not be treated as first-class installed stacks yet.
+- The strongest default install lane is still local Ollama.
+- A configured Kimi lane is now real through the shared OpenAI-compatible runtime bootstrap, but it is still optional rather than the default local-first path.
+- Tether and QVAC are still not first-class supported stacks yet.
 - Safe machine reads are intentionally narrow: Desktop, Downloads, and Documents are supported; arbitrary filesystem reads outside the active workspace are not.
 - Broader WAN hardening and some payment/economy claims are still partial or simulated.
 

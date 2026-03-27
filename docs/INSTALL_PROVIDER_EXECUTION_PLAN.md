@@ -124,7 +124,7 @@ Evidence:
 - live probe on the Apple M4 / 24 GiB machine reports:
   - `local_only`: ready
   - `local_dual_ollama`: ready and recommended
-  - `local_plus_kimi`: not implemented yet
+  - `local_plus_kimi`: real when `KIMI_API_KEY` is configured; still optional, not the default local-first lane
   - `local_plus_tether`: not implemented yet
   - `local_plus_qvac`: not implemented yet
 

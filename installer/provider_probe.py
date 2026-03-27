@@ -14,6 +14,8 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from core.hardware_tier import MachineProbe, select_qwen_tier, tier_summary
+from core.provider_routing import ProviderCapabilityTruth
+from core.runtime_backbone import build_provider_registry_snapshot
 
 
 def detect_ollama_binary() -> str:
@@ -73,11 +75,27 @@ def remote_env_statuses() -> dict[str, dict[str, Any]]:
         "model_present": bool(os.environ.get("NULLA_QVAC_MODEL")),
     }
     return {
-        "kimi": kimi | {"configured": kimi["api_key_present"] and kimi["base_url_present"]},
+        "kimi": kimi | {"configured": kimi["api_key_present"]},
         "generic_remote": generic_remote | {"configured": all(generic_remote.values())},
         "tether": tether | {"configured": tether["api_key_present"] and tether["base_url_present"]},
         "qvac": qvac | {"configured": qvac["api_key_present"] and qvac["base_url_present"]},
     }
+
+
+def _provider_state_for_prefix(
+    capability_truth: tuple[ProviderCapabilityTruth, ...],
+    prefix: str,
+) -> tuple[str, str]:
+    matches = [item for item in capability_truth if item.provider_id.lower().startswith(prefix)]
+    if not matches:
+        return "unregistered", ""
+    for candidate in matches:
+        if candidate.availability_state == "ready":
+            return candidate.availability_state, candidate.provider_id
+    for candidate in matches:
+        if candidate.availability_state == "degraded":
+            return candidate.availability_state, candidate.provider_id
+    return matches[0].availability_state, matches[0].provider_id
 
 
 def local_multi_llm_fit(summary: dict[str, Any]) -> str:
@@ -103,6 +121,7 @@ def build_probe_report(
     ollama_models: list[dict[str, str]] | None = None,
     ollama_binary: str | None = None,
     env_statuses: dict[str, dict[str, Any]] | None = None,
+    provider_capability_truth: tuple[ProviderCapabilityTruth, ...] | None = None,
 ) -> dict[str, Any]:
     summary = tier_summary(machine)
     probe = machine
@@ -117,6 +136,10 @@ def build_probe_report(
     model_names = {str(item.get("name") or "").strip() for item in models if str(item.get("name") or "").strip()}
     envs = dict(env_statuses or remote_env_statuses())
     local_fit = local_multi_llm_fit(summary)
+    capability_truth = tuple(provider_capability_truth or build_provider_registry_snapshot().capability_truth)
+    kimi_state, kimi_provider_id = _provider_state_for_prefix(capability_truth, "kimi-remote:")
+    kimi_configured = bool(envs.get("kimi", {}).get("configured"))
+    kimi_usable = kimi_state in {"ready", "degraded"}
 
     stacks: list[dict[str, Any]] = []
     local_only_ready = bool(binary)
@@ -124,7 +147,7 @@ def build_probe_report(
         {
             "stack_id": "local_only",
             "status": "ready" if local_only_ready else "needs_install",
-            "recommended": local_fit == "single_model_only",
+            "recommended": local_fit == "single_model_only" and not (kimi_configured and kimi_usable),
             "reason": (
                 "Local Ollama lane is ready."
                 if local_only_ready
@@ -162,19 +185,31 @@ def build_probe_report(
         }
     )
 
-    kimi_configured = bool(envs.get("kimi", {}).get("configured"))
+    if kimi_configured:
+        if kimi_state == "ready":
+            kimi_status = "ready"
+            kimi_reason = "Kimi credentials are present and runtime bootstrap exposes a real remote Kimi queen lane."
+        elif kimi_state == "degraded":
+            kimi_status = "degraded"
+            kimi_reason = "Kimi credentials are present and the remote Kimi queen lane exists, but it is currently degraded."
+        elif kimi_state == "blocked":
+            kimi_status = "blocked"
+            kimi_reason = "Kimi credentials are present, but the remote Kimi queen lane is blocked by current health state."
+        else:
+            kimi_status = "misconfigured"
+            kimi_reason = "Kimi credentials are present, but runtime bootstrap did not register a usable Kimi lane."
+    else:
+        kimi_status = "needs_config"
+        kimi_reason = "Kimi becomes a real remote queen lane when KIMI_API_KEY is configured."
     stacks.append(
         {
             "stack_id": "local_plus_kimi",
-            "status": "not_implemented",
-            "recommended": False,
-            "reason": (
-                "Kimi credentials are present, but the installer/runtime profile is not wired yet."
-                if kimi_configured
-                else "Kimi is not configured on this machine, and the installer/runtime profile is not wired yet."
-            ),
+            "status": kimi_status,
+            "recommended": kimi_usable and primary_tier.tier_name in {"nano", "lite", "base"},
+            "reason": kimi_reason,
             "primary_model": primary_tier.ollama_tag,
             "helper_model": helper_model if local_fit != "single_model_only" else "",
+            "provider_id": kimi_provider_id,
         }
     )
 

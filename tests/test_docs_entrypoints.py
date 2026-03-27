@@ -45,6 +45,7 @@ def test_docs_root_is_curated_after_archive_sweep() -> None:
         "CUMULATIVE_STABILIZATION.md",
         "CONTROL_PLANE.md",
         "INSTALL.md",
+        "INSTALL_PROVIDER_EXECUTION_PLAN.md",
         "LICENSING_MATRIX.md",
         "LLM_ACCEPTANCE_REPORT.md",
         "LOCAL_ACCEPTANCE.md",
