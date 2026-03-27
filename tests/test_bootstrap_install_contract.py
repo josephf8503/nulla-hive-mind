@@ -12,6 +12,10 @@ def test_shell_bootstrap_falls_back_to_canonical_installer() -> None:
 
     assert "--install-profile <id>" in script
     assert "NULLA_INSTALL_PROFILE" in script
+    assert 'BUILD_COMMIT=""' in script
+    assert 'resolve_archive_commit() {' in script
+    assert 'write_build_metadata() {' in script
+    assert 'config/build-source.json' in script
     assert 'profile_args=(--install-profile "${INSTALL_PROFILE}")' in script
     assert 'exec_with_profile_args() {' in script
     assert 'if [[ ${#profile_args[@]} -gt 0 ]]; then' in script
@@ -28,6 +32,9 @@ def test_powershell_bootstrap_falls_back_to_canonical_installer() -> None:
     script = (PROJECT_ROOT / "installer" / "bootstrap_nulla.ps1").read_text(encoding="utf-8")
 
     assert '[string]$InstallProfile = $env:NULLA_INSTALL_PROFILE' in script
+    assert 'function Resolve-ArchiveCommit' in script
+    assert 'function Write-BuildMetadata' in script
+    assert 'build-source.json' in script
     assert '/INSTALLPROFILE=$InstallProfile' in script
     assert 'install_nulla.bat' in script
     assert 'installer\\\\install_nulla.bat' in script
@@ -71,3 +78,8 @@ def test_shell_bootstrap_executes_launcher_without_profile_override(tmp_path: Pa
 
     assert marker_path.exists()
     assert marker_path.read_text(encoding="utf-8") == "\n"
+    metadata_path = install_dir / "config" / "build-source.json"
+    assert metadata_path.exists()
+    metadata = metadata_path.read_text(encoding="utf-8")
+    assert '"ref": "main"' in metadata
+    assert f'"source_url": "{archive_path.resolve().as_uri()}"' in metadata

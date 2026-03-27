@@ -43,6 +43,7 @@ from network.signer import get_local_peer_id
 logger = logging.getLogger("nulla.api")
 
 MODEL_NAME = "nulla"
+BUILD_SOURCE_PATH = Path("config") / "build-source.json"
 _OPENCLAW_SENDER_WRAPPER_RE = re.compile(
     r"^Sender \(untrusted metadata\):\s*```json\s*\{.*?\}\s*```\s*\[[^\]]+\]\s*(.*)$",
     re.DOTALL,
@@ -77,6 +78,22 @@ def git_output(project_root: Path, *args: str) -> str:
     except Exception:
         return ""
     return str(completed.stdout or "").strip()
+
+
+def build_source_metadata(project_root: Path) -> dict[str, str]:
+    metadata_path = project_root / BUILD_SOURCE_PATH
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    metadata: dict[str, str] = {}
+    for key in ("ref", "branch", "commit", "source_url"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            metadata[key] = value
+    return metadata
 
 
 def env_int(name: str, default: int) -> int:
@@ -124,8 +141,9 @@ def parameter_count_for_model(model_tag: str) -> int:
 
 def build_runtime_version_stamp(*, project_root: Path, runtime_model_tag: str, workstation_version: str) -> dict[str, Any]:
     release = dict(release_manifest_snapshot())
-    branch = git_output(project_root, "branch", "--show-current")
-    commit = git_output(project_root, "rev-parse", "--short=12", "HEAD")
+    build_source = build_source_metadata(project_root)
+    branch = git_output(project_root, "branch", "--show-current") or str(build_source.get("branch") or build_source.get("ref") or "")
+    commit = git_output(project_root, "rev-parse", "--short=12", "HEAD") or str(build_source.get("commit") or "").strip()[:12]
     dirty = bool(git_output(project_root, "status", "--short"))
     release_version = str(release.get("release_version") or "").strip() or "unknown-release"
     build_parts = [release_version]

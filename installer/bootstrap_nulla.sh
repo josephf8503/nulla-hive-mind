@@ -10,6 +10,7 @@ ARCHIVE_SHA256="${NULLA_ARCHIVE_SHA256:-}"
 TMP_DIR=""
 AUTO_START=1
 INSTALL_PROFILE="${NULLA_INSTALL_PROFILE:-}"
+BUILD_COMMIT=""
 
 
 say() {
@@ -46,6 +47,14 @@ Environment overrides:
   NULLA_ARCHIVE_SHA256
   NULLA_INSTALL_PROFILE
 EOF
+}
+
+
+json_escape() {
+  local value="${1//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  printf '%s' "${value}"
 }
 
 
@@ -173,6 +182,34 @@ download_and_extract() {
 }
 
 
+resolve_archive_commit() {
+  case "${ARCHIVE_URL}" in
+    "https://github.com/${OWNER}/${REPO}/archive/refs/"*|"https://codeload.github.com/${OWNER}/${REPO}/tar.gz/"*)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+  local commit_payload
+  commit_payload="$(curl -fsSL "https://api.github.com/repos/${OWNER}/${REPO}/commits/${REF}" 2>/dev/null || true)"
+  BUILD_COMMIT="$(printf '%s' "${commit_payload}" | sed -n 's/^[[:space:]]*"sha":[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)"
+}
+
+
+write_build_metadata() {
+  local metadata_path="${INSTALL_DIR}/config/build-source.json"
+  mkdir -p "$(dirname "${metadata_path}")"
+  cat > "${metadata_path}" <<EOF
+{
+  "ref": "$(json_escape "${REF}")",
+  "branch": "$(json_escape "${REF}")",
+  "commit": "$(json_escape "${BUILD_COMMIT}")",
+  "source_url": "$(json_escape "${ARCHIVE_URL}")"
+}
+EOF
+}
+
+
 launch_installer() {
   local launcher="${INSTALL_DIR}/Install_And_Run_NULLA.sh"
   local guided="${INSTALL_DIR}/Install_NULLA.sh"
@@ -223,6 +260,8 @@ main() {
   require_command bash
   prepare_install_dir
   download_and_extract
+  resolve_archive_commit
+  write_build_metadata
   launch_installer
 }
 

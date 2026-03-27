@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import tempfile
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 from unittest import mock
 from urllib import request
 
@@ -25,7 +28,7 @@ from apps.nulla_api_server import (
 )
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
 from core.runtime_task_events import emit_runtime_event
-from core.web.api.runtime import RuntimeServices
+from core.web.api.runtime import RuntimeServices, build_runtime_version_stamp
 from tests.asgi_harness import asgi_request
 
 
@@ -107,6 +110,41 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
     def test_parameter_count_for_model_handles_fractional_billion_sizes(self) -> None:
         self.assertEqual(_parameter_count_for_model("qwen2.5:32b"), 32_000_000_000)
         self.assertEqual(_parameter_count_for_model("qwen2.5:0.5b"), 500_000_000)
+
+    def test_prioritize_project_root_on_sys_path_prefers_local_checkout(self) -> None:
+        with mock.patch.object(sys, "path", ["/tmp/shadow-core", str(PROJECT_ROOT), "/tmp/elsewhere"]):
+            from apps import nulla_api_server
+
+            nulla_api_server._prioritize_project_root_on_sys_path()
+            self.assertEqual(sys.path[0], str(PROJECT_ROOT))
+            self.assertEqual(sys.path.count(str(PROJECT_ROOT)), 1)
+
+    def test_runtime_version_stamp_uses_build_source_metadata_when_git_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            project_root = Path(tmp_dir)
+            config_dir = project_root / "config"
+            config_dir.mkdir(parents=True)
+            (config_dir / "build-source.json").write_text(
+                json.dumps(
+                    {
+                        "branch": "main",
+                        "ref": "main",
+                        "commit": "1234567890abcdef1234567890abcdef12345678",
+                        "source_url": "https://github.com/Parad0x-Labs/nulla-hive-mind/archive/refs/heads/main.tar.gz",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stamp = build_runtime_version_stamp(
+                project_root=project_root,
+                runtime_model_tag="qwen2.5:14b",
+                workstation_version="test-workstation",
+            )
+
+        self.assertEqual(stamp["branch"], "main")
+        self.assertEqual(stamp["commit"], "1234567890ab")
+        self.assertEqual(stamp["dirty"], False)
 
     def test_ensure_default_provider_registers_kimi_when_key_is_present(self) -> None:
         manifests = {}

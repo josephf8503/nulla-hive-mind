@@ -77,6 +77,36 @@ function Download-And-Extract {
     }
 }
 
+function Resolve-ArchiveCommit {
+    if (($ArchiveUrl -notlike "https://github.com/$RepoOwner/$RepoName/archive/refs/*") -and
+        ($ArchiveUrl -notlike "https://codeload.github.com/$RepoOwner/$RepoName/tar.gz/*")) {
+        return ""
+    }
+    try {
+        $payload = Invoke-RestMethod -Uri "https://api.github.com/repos/$RepoOwner/$RepoName/commits/$Ref" -UseBasicParsing
+        return [string]$payload.sha
+    }
+    catch {
+        return ""
+    }
+}
+
+function Write-BuildMetadata {
+    param([string]$Commit)
+
+    $configDir = Join-Path $InstallDir "config"
+    if (-not (Test-Path -LiteralPath $configDir)) {
+        New-Item -ItemType Directory -Path $configDir | Out-Null
+    }
+    $metadataPath = Join-Path $configDir "build-source.json"
+    @{
+        ref = $Ref
+        branch = $Ref
+        commit = $Commit
+        source_url = $ArchiveUrl
+    } | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+}
+
 function Run-Installer {
     $launcher = Join-Path $InstallDir "Install_And_Run_NULLA.bat"
     $guided = Join-Path $InstallDir "Install_NULLA.bat"
@@ -130,4 +160,6 @@ function Run-Installer {
 
 Test-InstallDir
 Download-And-Extract
+$resolvedCommit = Resolve-ArchiveCommit
+Write-BuildMetadata -Commit $resolvedCommit
 Run-Installer

@@ -17,6 +17,19 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _prioritize_project_root_on_sys_path(*, project_root: Path = PROJECT_ROOT) -> None:
+    root_text = str(project_root)
+    with contextlib.suppress(ValueError):
+        sys.path.remove(root_text)
+    sys.path.insert(0, root_text)
+
+
+if __package__ in {None, ""}:
+    _prioritize_project_root_on_sys_path()
+
 from core.nulla_workstation_ui import NULLA_WORKSTATION_DEPLOYMENT_VERSION
 from core.runtime_capabilities import runtime_capability_snapshot
 from core.web.api.app import create_api_app
@@ -60,7 +73,6 @@ from core.web.api.service import apply_runtime_headers, dispatch_get, dispatch_p
 logger = logging.getLogger("nulla.api")
 
 NULLA_API_PORT = 11435
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 _runtime_services: RuntimeServices | None = None
 _agent = None
