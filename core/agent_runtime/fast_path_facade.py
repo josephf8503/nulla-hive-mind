@@ -219,6 +219,22 @@ class FastPathFacadeMixin:
             source_context=source_context,
         )
 
+    def _maybe_handle_direct_machine_write_request(
+        self,
+        user_input: str,
+        *,
+        session_id: str,
+        source_surface: str,
+        source_context: dict[str, object] | None,
+    ) -> dict[str, Any] | None:
+        return agent_fast_paths.maybe_handle_direct_machine_write_request(
+            self,
+            user_input,
+            session_id=session_id,
+            source_surface=source_surface,
+            source_context=source_context,
+        )
+
     def _live_info_search_notes(
         self,
         *,

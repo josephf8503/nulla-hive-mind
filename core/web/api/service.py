@@ -96,8 +96,32 @@ def capability_snapshot_with_runtime(
 ) -> dict[str, Any]:
     payload = dict(capability_snapshot_provider() or {})
     public_hive_auth = dict(runtime.public_hive_auth or {})
+    capabilities = [dict(item) for item in list(payload.get("capabilities") or []) if isinstance(item, dict)]
+    feature_flags = dict(payload.get("feature_flags") or {})
+
+    if feature_flags.get("helper_mesh_enabled"):
+        for item in capabilities:
+            if str(item.get("name") or "").strip() == "helper_mesh":
+                item["state"] = "implemented"
+                item["reason"] = "Helper coordination lanes are enabled for this runtime."
+                break
+
     if public_hive_auth:
         payload["public_hive_auth"] = public_hive_auth
+        status = str(public_hive_auth.get("status") or "").strip()
+        ok = bool(public_hive_auth.get("ok"))
+        for item in capabilities:
+            if str(item.get("name") or "").strip() != "public_hive_surface":
+                continue
+            if ok or status in {"already_configured", "hydrated_from_bundle", "synced_from_ssh", "no_auth_required", "disabled"}:
+                item["state"] = "implemented"
+                item["reason"] = f"Public Hive surface is live for this runtime ({status or 'ready'})."
+            else:
+                item["state"] = "blocked_by_configuration"
+                item["reason"] = f"Public Hive surface is enabled but not ready for writes ({status or 'unknown'})."
+            break
+    if capabilities:
+        payload["capabilities"] = capabilities
     return payload
 
 

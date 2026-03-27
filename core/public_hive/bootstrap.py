@@ -540,7 +540,11 @@ def ensure_public_hive_auth(
             ),
         }
 
-    resolved_remote_config_path = str(remote_config_path or environ.get("NULLA_PUBLIC_HIVE_REMOTE_CONFIG") or "").strip()
+    resolved_remote_config_path = str(
+        remote_config_path
+        or environ.get("NULLA_PUBLIC_HIVE_REMOTE_CONFIG")
+        or suggested_remote_config_path
+    ).strip()
     if not resolved_remote_config_path:
         return {
             "ok": False,

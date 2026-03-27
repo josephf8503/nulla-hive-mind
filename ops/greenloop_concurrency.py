@@ -11,8 +11,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 DEFAULT_BASE_URL = "http://127.0.0.1:18080"
 DEFAULT_LEVELS = (1, 2, 4)
 
@@ -84,7 +82,7 @@ def summarize_measurements(
 
 
 async def _run_one(
-    client: httpx.AsyncClient,
+    client: Any,
     *,
     base_url: str,
     workspace_root: Path,
@@ -140,6 +138,10 @@ async def _measure_level(
     requests_per_level: int,
     timeout_seconds: float,
 ) -> tuple[list[RequestMeasurement], float]:
+    try:
+        import httpx
+    except ModuleNotFoundError as exc:  # pragma: no cover - only exercised in stripped test envs
+        raise RuntimeError("httpx is required to run the greenloop concurrency probe.") from exc
     total_requests = max(concurrency, concurrency * requests_per_level)
     started = time.perf_counter()
     rows: list[RequestMeasurement] = []

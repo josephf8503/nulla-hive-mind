@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 from unittest import mock
 
 from core.hardware_tier import MachineProbe, QwenTier
@@ -114,6 +116,65 @@ def test_auto_recommended_override_still_resolves_to_real_auto_profile() -> None
     )
 
     assert profile.profile_id == "hybrid-kimi"
+
+
+def test_installed_profile_record_is_used_when_no_env_override_is_present() -> None:
+    probe = MachineProbe(
+        cpu_cores=8,
+        ram_gb=12.0,
+        gpu_name=None,
+        vram_gb=None,
+        accelerator="cpu",
+    )
+    tier = QwenTier("base", "qwen2.5:7b", 7.0, 4.0, 12.0)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        from pathlib import Path
+        target = Path(tmpdir) / "config" / "install-profile.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps({"profile_id": "hybrid-kimi"}), encoding="utf-8")
+        profile = build_install_profile_truth(
+            probe=probe,
+            tier=tier,
+            env={"KIMI_API_KEY": "test-key"},
+            provider_capability_truth=(
+                ProviderCapabilityTruth(
+                    provider_id="local-qwen-http:qwen2.5:7b",
+                    model_id="qwen2.5:7b",
+                    role_fit="drone",
+                    context_window=32768,
+                    tool_support=("structured_json",),
+                    structured_output_support=True,
+                    tokens_per_second=14.0,
+                    ram_budget_gb=12.0,
+                    vram_budget_gb=0.0,
+                    quantization="Q4_K_M",
+                    locality="local",
+                    privacy_class="local_private",
+                    queue_depth=0,
+                    max_safe_concurrency=1,
+                ),
+                ProviderCapabilityTruth(
+                    provider_id="kimi-remote:kimi-k2",
+                    model_id="kimi-k2",
+                    role_fit="queen",
+                    context_window=131072,
+                    tool_support=("tool_calls", "structured_json"),
+                    structured_output_support=True,
+                    tokens_per_second=0.0,
+                    ram_budget_gb=0.0,
+                    vram_budget_gb=0.0,
+                    quantization="provider",
+                    locality="remote",
+                    privacy_class="remote_provider",
+                    queue_depth=0,
+                    max_safe_concurrency=4,
+                ),
+            ),
+            runtime_home=tmpdir,
+        )
+
+    assert profile.profile_id == "hybrid-kimi"
+    assert profile.selection_source == "installed_default"
 
 
 def test_explicit_full_orchestrated_profile_fails_closed_when_keys_and_space_are_missing() -> None:

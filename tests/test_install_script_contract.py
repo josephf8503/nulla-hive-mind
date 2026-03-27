@@ -26,7 +26,9 @@ def test_install_script_hardens_openclaw_launcher_bootstrap() -> None:
     assert "--install-profile <profile>" in script
     assert 'validate_selected_install_profile() {' in script
     assert '"${SCRIPT_DIR}/validate_install_profile.py"' in script
-    assert 'export NULLA_INSTALL_PROFILE="\\${NULLA_INSTALL_PROFILE:-${install_profile}}"' in script
+    assert 'persist_install_profile_record() {' in script
+    assert 'persist_provider_env_file() {' in script
+    assert 'PROVIDER_ENV_FILE="\\${NULLA_HOME}/config/provider-env.sh"' in script
     assert 'Recommended profile: ${recommended_install_profile}' in script
     assert 'wait_for_http_ready() {' in script
     assert 'curl -sf --max-time 2 "\\${url}" >/dev/null 2>&1' in script

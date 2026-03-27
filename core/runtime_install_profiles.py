@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import platform
 import re
@@ -29,6 +30,7 @@ _MODEL_SIZE_GB = {
     "qwen2.5:32b": 36.0,
     "qwen2.5:72b": 80.0,
 }
+_INSTALL_PROFILE_RECORD_RELATIVE_PATH = Path("config") / "install-profile.json"
 
 
 @dataclass(frozen=True)
@@ -138,8 +140,14 @@ def build_install_profile_truth(
     active_probe = probe or probe_machine()
     active_tier = tier or select_qwen_tier(active_probe)
     requested = str(requested_profile or env_map.get("NULLA_INSTALL_PROFILE") or "").strip().lower()
+    requested_source = "env_override" if requested else ""
+    if not requested:
+        requested = _installed_profile_id(runtime_home)
+        if requested:
+            requested_source = "installed_record"
     profile_id, selection_source, selection_reasons = _resolve_profile_id(
         requested=requested,
+        requested_source=requested_source,
         probe=active_probe,
         tier=active_tier,
         env=env_map,
@@ -220,9 +228,29 @@ def default_ollama_models_path(env: Mapping[str, str] | None = None) -> Path:
     return (home / ".ollama" / "models").resolve()
 
 
+def _installed_profile_id(runtime_home: str | Path | None) -> str:
+    if runtime_home is None:
+        return ""
+    try:
+        record_path = Path(runtime_home).expanduser().resolve() / _INSTALL_PROFILE_RECORD_RELATIVE_PATH
+    except Exception:
+        return ""
+    try:
+        payload = json.loads(record_path.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    profile_id = str(payload.get("profile_id") or "").strip().lower()
+    if profile_id in _PROFILE_IDS:
+        return profile_id
+    return ""
+
+
 def _resolve_profile_id(
     *,
     requested: str,
+    requested_source: str,
     probe: MachineProbe,
     tier: QwenTier,
     env: Mapping[str, str],
@@ -233,6 +261,9 @@ def _resolve_profile_id(
         requested = ""
     if requested:
         if requested in _PROFILE_IDS:
+            if requested_source == "installed_record":
+                reasons.append(f"Install profile came from the installed runtime profile `{requested}`.")
+                return requested, "installed_default", reasons
             reasons.append(f"Install profile came from NULLA_INSTALL_PROFILE={requested}.")
             return requested, "env_override", reasons
         reasons.append(f"Unknown install profile `{requested}`. Falling back to auto-recommended.")

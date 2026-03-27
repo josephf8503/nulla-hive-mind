@@ -668,7 +668,7 @@ def test_ensure_public_hive_auth_marks_ssh_sync_as_ok() -> None:
     assert result["status"] == "synced_from_ssh"
 
 
-def test_ensure_public_hive_auth_returns_missing_remote_config_path_without_crashing() -> None:
+def test_ensure_public_hive_auth_uses_default_remote_config_path_when_not_explicitly_set() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         project_root = Path(tmp_dir)
         cluster_dir = project_root / "config" / "meet_clusters" / "do_ip_first_4node"
@@ -686,17 +686,27 @@ def test_ensure_public_hive_auth_returns_missing_remote_config_path_without_cras
         key_path = project_root / "cluster_key"
         key_path.write_text("dummy", encoding="utf-8")
         target_path = project_root / "runtime" / "agent-bootstrap.json"
+        seen: dict[str, str] = {}
 
-        with mock.patch("core.public_hive_bridge.find_public_hive_ssh_key", return_value=key_path):
+        def fake_sync(**kwargs):
+            seen["remote_config_path"] = str(kwargs["remote_config_path"])
+            return {
+                "target_path": str(Path(kwargs["target_path"]).resolve()),
+                "watch_host": str(kwargs["watch_host"]),
+                "seed_count": 1,
+            }
+
+        with mock.patch("core.public_hive_bridge.find_public_hive_ssh_key", return_value=key_path), mock.patch(
+            "core.public_hive_bridge.sync_public_hive_auth_from_ssh",
+            side_effect=fake_sync,
+        ):
             result = ensure_public_hive_auth(project_root=project_root, target_path=target_path)
 
-    assert result["ok"] is False
-    assert result["status"] == "missing_remote_config_path"
-    assert result["requires_auth"] is True
+    assert result["ok"] is True
+    assert result["status"] == "synced_from_ssh"
     assert result["watch_host"] == "nullabook.example.test"
-    assert result["suggested_remote_config_path"] == "/etc/nulla-hive-mind/watch-config.json"
-    assert "--watch-host nullabook.example.test" in result["suggested_command"]
     assert result["target_path"] == str(target_path.resolve())
+    assert seen["remote_config_path"] == "/etc/nulla-hive-mind/watch-config.json"
 
 
 def test_ensure_public_hive_auth_returns_sync_failed_instead_of_raising() -> None:

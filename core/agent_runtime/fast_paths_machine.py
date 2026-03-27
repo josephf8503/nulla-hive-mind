@@ -129,6 +129,19 @@ def looks_like_safe_machine_write_request(user_input: str) -> bool:
     return False
 
 
+def looks_like_supported_machine_directory_create_request(user_input: str) -> bool:
+    lowered = " " + " ".join(str(user_input or "").split()).strip().lower() + " "
+    if not lowered.strip():
+        return False
+    if not any(marker in lowered for marker in (" create ", " make ", " mkdir ")):
+        return False
+    if not any(marker in lowered for marker in (" folder ", " directory ", " dir ")):
+        return False
+    if any(marker in lowered for marker in (" write ", " file ", " append ", " edit ", " change ", " delete ", " remove ", " rename ", " move ")):
+        return False
+    return any(marker in lowered for marker in (" desktop ", " downloads ", " documents ", " docs ", " on my desktop ", " my desktop "))
+
+
 def safe_machine_write_targets_workspace(
     *,
     user_input: str,
@@ -163,6 +176,8 @@ def maybe_handle_safe_machine_write_guard(
         return None
     if not looks_like_safe_machine_write_request(user_input):
         return None
+    if looks_like_supported_machine_directory_create_request(user_input):
+        return None
     if safe_machine_write_targets_workspace(
         user_input=user_input,
         source_context=source_context,
@@ -178,6 +193,45 @@ def maybe_handle_safe_machine_write_guard(
         confidence=0.95,
         source_context=source_context,
         reason="machine_write_guard",
+    )
+
+
+def maybe_handle_direct_machine_write_request(
+    agent: Any,
+    user_input: str,
+    *,
+    session_id: str,
+    source_surface: str,
+    source_context: dict[str, object] | None,
+) -> dict[str, Any] | None:
+    if source_surface not in {"channel", "openclaw", "api"}:
+        return None
+    if not looks_like_supported_machine_directory_create_request(user_input):
+        return None
+    decision = agent._plan_tool_workflow(
+        user_text=user_input,
+        task_class="unknown",
+        executed_steps=[],
+        source_context=dict(source_context or {}),
+    )
+    payload = dict(decision.next_payload or {})
+    intent = str(payload.get("intent") or "").strip()
+    if intent != "machine.ensure_directory":
+        return None
+    execution = execute_runtime_tool(
+        intent,
+        dict(payload.get("arguments") or {}),
+        source_context=dict(source_context or {}),
+    )
+    if execution is None:
+        return None
+    return agent._fast_path_result(
+        session_id=session_id,
+        user_input=user_input,
+        response=str(execution.response_text or "").strip(),
+        confidence=0.98 if execution.ok else 0.9,
+        source_context=source_context,
+        reason="machine_write_fast_path",
     )
 
 

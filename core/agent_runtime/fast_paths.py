@@ -18,8 +18,10 @@ from core.agent_runtime.fast_paths_companion import (
 )
 from core.agent_runtime.fast_paths_machine import (
     looks_like_safe_machine_write_request,
+    looks_like_supported_machine_directory_create_request,
     looks_like_supported_machine_read_request,
     maybe_handle_direct_machine_read_request,
+    maybe_handle_direct_machine_write_request,
     maybe_handle_safe_machine_write_guard,
     safe_machine_write_targets_workspace,
 )
@@ -79,9 +81,11 @@ __all__ = [
     "looks_like_malformed_time_followup",
     "looks_like_personalized_plan_request",
     "looks_like_safe_machine_write_request",
+    "looks_like_supported_machine_directory_create_request",
     "looks_like_supported_machine_read_request",
     "maybe_handle_companion_memory_fast_path",
     "maybe_handle_direct_machine_read_request",
+    "maybe_handle_direct_machine_write_request",
     "maybe_handle_live_info_fast_path",
     "maybe_handle_safe_machine_write_guard",
     "normalize_live_info_query",

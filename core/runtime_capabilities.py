@@ -22,15 +22,15 @@ def runtime_capability_statuses(context: RuntimeContext | None = None) -> list[R
     runtime = context or build_runtime_context(mode="runtime_capabilities")
     flags = flag_map()
 
-    helper_mesh_state = "partial" if runtime.feature_flags.helper_mesh_enabled else "disabled_by_policy"
+    helper_mesh_state = "implemented" if runtime.feature_flags.helper_mesh_enabled else "disabled_by_policy"
     helper_mesh_reason = (
-        flags["MEET_AND_GREET_SERVER"].reason
+        "Helper coordination lanes are enabled for this runtime."
         if runtime.feature_flags.helper_mesh_enabled
         else "Helper coordination is disabled by runtime policy for this process."
     )
-    public_hive_state = "partial" if runtime.feature_flags.public_hive_enabled else "disabled_by_policy"
+    public_hive_state = "implemented" if runtime.feature_flags.public_hive_enabled else "disabled_by_policy"
     public_hive_reason = (
-        "Public/operator Hive surfaces are enabled for this runtime, but they remain alpha and not production-proof."
+        "Public/operator Hive surfaces are enabled for this runtime. Write auth truth is exposed separately."
         if runtime.feature_flags.public_hive_enabled
         else "Public Hive surfaces are disabled by runtime policy for this process."
     )

@@ -174,6 +174,25 @@ class RuntimeExecutionToolsTests(unittest.TestCase):
             self.assertEqual(hints["chip_name"], "Apple M4")
             self.assertEqual(hints["recommended_model"], "qwen2.5:14b")
 
+    def test_machine_ensure_directory_creates_requested_safe_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch("core.runtime_execution_tools.Path.home", return_value=Path(tmpdir)), mock.patch.dict(
+            os.environ,
+            {"HOME": tmpdir},
+            clear=False,
+        ):
+            created = execute_runtime_tool(
+                "machine.ensure_directory",
+                {"path": "~/Desktop/MarchTest"},
+                source_context={"workspace": tmpdir},
+            )
+            assert created is not None
+            self.assertTrue(created.ok)
+            self.assertIn("Created directory `~/Desktop/MarchTest`", created.response_text)
+            self.assertTrue((Path(tmpdir) / "Desktop" / "MarchTest").is_dir())
+            hints = extract_observation_followup_hints(created.details["observation"])
+            self.assertEqual(hints["path"], "~/Desktop/MarchTest")
+            self.assertEqual(hints["action"], "created")
+
     def test_workspace_ensure_directory_creates_requested_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             created = execute_runtime_tool(

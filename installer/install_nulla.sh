@@ -366,6 +366,56 @@ bootstrap_public_hive_auth() {
 }
 
 
+persist_install_profile_record() {
+  local runtime_home="$1"
+  local install_profile="$2"
+  local model_tag="$3"
+  "${VENV_DIR}/bin/python" - "$runtime_home" "$install_profile" "$model_tag" <<'PY' >/dev/null 2>&1 || true
+from pathlib import Path
+import json
+import sys
+
+runtime_home = Path(sys.argv[1]).expanduser().resolve()
+payload = {
+    "schema": "nulla.install_profile_record.v1",
+    "profile_id": str(sys.argv[2]).strip(),
+    "selected_model": str(sys.argv[3]).strip(),
+}
+target = runtime_home / "config" / "install-profile.json"
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+}
+
+
+persist_provider_env_file() {
+  local runtime_home="$1"
+  local provider_env_file="${runtime_home}/config/provider-env.sh"
+  local persisted=0
+  mkdir -p "${runtime_home}/config"
+  : > "${provider_env_file}"
+  chmod 600 "${provider_env_file}"
+  printf '#!/usr/bin/env bash\n' >> "${provider_env_file}"
+  for name in \
+    KIMI_API_KEY KIMI_BASE_URL NULLA_KIMI_BASE_URL KIMI_MODEL NULLA_KIMI_MODEL \
+    OPENAI_API_KEY \
+    VLLM_BASE_URL NULLA_VLLM_BASE_URL VLLM_MODEL NULLA_VLLM_MODEL VLLM_CONTEXT_WINDOW NULLA_VLLM_CONTEXT_WINDOW \
+    LLAMACPP_BASE_URL NULLA_LLAMACPP_BASE_URL LLAMA_CPP_BASE_URL NULLA_LLAMA_CPP_BASE_URL \
+    LLAMACPP_MODEL NULLA_LLAMACPP_MODEL LLAMACPP_CONTEXT_WINDOW NULLA_LLAMACPP_CONTEXT_WINDOW; do
+    local value="${!name:-}"
+    if [[ -n "${value}" ]]; then
+      printf 'export %s=%q\n' "${name}" "${value}" >> "${provider_env_file}"
+      persisted=1
+    fi
+  done
+  if [[ "${persisted}" -eq 0 ]]; then
+    rm -f "${provider_env_file}"
+    return
+  fi
+  say "Persisted provider runtime env to ${provider_env_file}"
+}
+
+
 detect_model_tag() {
   local override_model="${NULLA_OLLAMA_MODEL:-${NULLA_FORCE_OLLAMA_MODEL:-}}"
   if [[ -n "${override_model}" ]]; then
@@ -507,7 +557,11 @@ cd "${PROJECT_ROOT}"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
 export NULLA_HOME="\${NULLA_HOME:-${runtime_home}}"
-export NULLA_INSTALL_PROFILE="\${NULLA_INSTALL_PROFILE:-${install_profile}}"
+PROVIDER_ENV_FILE="\${NULLA_HOME}/config/provider-env.sh"
+if [[ -f "\${PROVIDER_ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  . "\${PROVIDER_ENV_FILE}"
+fi
 $(web_runtime_exports)
 echo "Starting NULLA (API + mesh daemon)..."
 echo "OpenClaw connects to http://127.0.0.1:11435"
@@ -531,7 +585,11 @@ cd "${PROJECT_ROOT}"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
 export NULLA_HOME="\${NULLA_HOME:-${runtime_home}}"
-export NULLA_INSTALL_PROFILE="\${NULLA_INSTALL_PROFILE:-${install_profile}}"
+PROVIDER_ENV_FILE="\${NULLA_HOME}/config/provider-env.sh"
+if [[ -f "\${PROVIDER_ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  . "\${PROVIDER_ENV_FILE}"
+fi
 $(web_runtime_exports)
 exec "\${VENV_PY}" -m apps.nulla_chat --platform openclaw --device openclaw
 EOF
@@ -556,7 +614,11 @@ LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
 MODEL_TAG="${model_tag}"
 export NULLA_HOME="\${NULLA_HOME:-${runtime_home}}"
-export NULLA_INSTALL_PROFILE="\${NULLA_INSTALL_PROFILE:-${install_profile}}"
+PROVIDER_ENV_FILE="\${NULLA_HOME}/config/provider-env.sh"
+if [[ -f "\${PROVIDER_ENV_FILE}" ]]; then
+  # shellcheck disable=SC1090
+  . "\${PROVIDER_ENV_FILE}"
+fi
 export NULLA_OLLAMA_MODEL="\${NULLA_OLLAMA_MODEL:-\${MODEL_TAG}}"
 export NULLA_OPENCLAW_API_PORT="\${NULLA_OPENCLAW_API_PORT:-11435}"
 export NULLA_OPENCLAW_API_URL="\${NULLA_OPENCLAW_API_URL:-http://127.0.0.1:\${NULLA_OPENCLAW_API_PORT}}"
@@ -1082,7 +1144,6 @@ main() {
   fi
   install_profile="$(detect_install_profile "${runtime_home}" "${model_tag}" "${requested_install_profile}")"
   install_profile_summary="$(detect_install_profile_summary "${runtime_home}" "${model_tag}" "${requested_install_profile}")"
-  export NULLA_INSTALL_PROFILE="${install_profile}"
   openclaw_home_override="$(resolve_openclaw_home_override)"
   say "Step 6/14: Hardware probe complete."
   say "Detected: ${hardware_summary}"
@@ -1091,6 +1152,8 @@ main() {
   say "Install profile: ${install_profile}"
   say "Profile summary: ${install_profile_summary}"
   validate_selected_install_profile "${runtime_home}" "${model_tag}" "${install_profile}"
+  persist_install_profile_record "${runtime_home}" "${install_profile}" "${model_tag}"
+  persist_provider_env_file "${runtime_home}"
 
   say "Step 7/14: Creating launchers..."
   write_launcher "${PROJECT_ROOT}/Start_NULLA.sh" "${runtime_home}" "${install_profile}"

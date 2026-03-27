@@ -16,6 +16,7 @@ def fast_path_response_class(agent: Any, *, reason: str, response: str) -> Any:
         "user_preference_command",
         "live_info_fast_path",
         "machine_read_fast_path",
+        "machine_write_fast_path",
         "capability_truth_query",
         "builder_capability_gap",
         "builder_controller_direct_response",

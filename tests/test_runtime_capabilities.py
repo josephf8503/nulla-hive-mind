@@ -47,6 +47,13 @@ def test_runtime_capability_statuses_reflect_policy_disabled_surfaces() -> None:
     assert statuses["simulated_payments"].state == "simulated"
 
 
+def test_runtime_capability_statuses_mark_enabled_helper_and_hive_surfaces_as_implemented() -> None:
+    statuses = {item.name: item for item in runtime_capability_statuses(_context())}
+
+    assert statuses["helper_mesh"].state == "implemented"
+    assert statuses["public_hive_surface"].state == "implemented"
+
+
 def test_runtime_capability_snapshot_exposes_feature_flags_and_capability_rows() -> None:
     install_profile = InstallProfileTruth(
         profile_id="local-only",

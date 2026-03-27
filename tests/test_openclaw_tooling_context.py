@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import tempfile
 import unittest
 import uuid
@@ -3140,17 +3141,21 @@ class OpenClawToolingContextTests(unittest.TestCase):
         self.assertIn("Apple M4", result["response"])
         self.assertIn("24.0 GiB", result["response"])
 
-    def test_openclaw_non_workspace_machine_write_fails_closed(self) -> None:
+    def test_openclaw_safe_desktop_directory_create_uses_real_machine_write_lane(self) -> None:
         agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")
         agent.start()
-
-        result = agent.run_once(
-            "create a folder named MarchTest on my desktop",
-            session_id_override="openclaw:machine-write-unsupported",
-            source_context={"surface": "openclaw", "platform": "openclaw"},
-        )
-
-        self.assertIn("do not have a real non-workspace write lane", result["response"])
+        with tempfile.TemporaryDirectory() as tmpdir, mock.patch("core.runtime_execution_tools.Path.home", return_value=Path(tmpdir)), mock.patch.dict(
+            os.environ,
+            {"HOME": tmpdir},
+            clear=False,
+        ):
+            result = agent.run_once(
+                "create a folder named MarchTest on my desktop",
+                session_id_override="openclaw:machine-write-supported",
+                source_context={"surface": "openclaw", "platform": "openclaw"},
+            )
+            self.assertIn("~/Desktop/MarchTest", result["response"])
+            self.assertTrue((Path(tmpdir) / "Desktop" / "MarchTest").is_dir())
 
     def test_openclaw_workspace_path_under_desktop_is_not_blocked_as_machine_write(self) -> None:
         agent = NullaAgent(backend_name="test-backend", device="channel-test", persona_id="default")

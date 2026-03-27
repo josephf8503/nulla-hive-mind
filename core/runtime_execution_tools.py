@@ -256,6 +256,13 @@ def extract_observation_followup_hints(observation: dict[str, Any] | None) -> di
             "accelerator": str(payload.get("accelerator") or "").strip(),
             "recommended_model": str(payload.get("recommended_model") or "").strip(),
         }
+    if intent == "machine.ensure_directory":
+        return {
+            "intent": intent,
+            "path": str(payload.get("path") or "").strip(),
+            "action": str(payload.get("action") or "").strip(),
+            "already_present": bool(payload.get("already_present", False)),
+        }
     if intent == "workspace.search_text":
         matches = [dict(item) for item in list(payload.get("matches") or []) if isinstance(item, dict)]
         primary = dict((matches[:1] or [{}])[0] or {})
@@ -437,6 +444,8 @@ def execute_runtime_tool(
             return _list_machine_directory(arguments)
         if intent == "machine.inspect_specs":
             return _inspect_machine_specs()
+        if intent == "machine.ensure_directory":
+            return _ensure_machine_directory(arguments)
         if intent == "workspace.list_tree":
             return _list_tree(arguments, workspace_root=workspace_root)
         if intent == "workspace.search_text":
@@ -890,6 +899,70 @@ def _inspect_machine_specs() -> RuntimeExecutionResult:
             "recommended_model": selected_tier.ollama_tag,
             "selected_tier": selected_tier.tier_name,
             "observation": observation,
+        },
+    )
+
+
+def _ensure_machine_directory(arguments: dict[str, Any]) -> RuntimeExecutionResult:
+    if not policy_engine.get("filesystem.allow_write_workspace", False):
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="disabled",
+            response_text="Safe local machine writes are disabled by policy.",
+            details={
+                "observation": _tool_observation(
+                    intent="machine.ensure_directory",
+                    tool_surface="machine",
+                    ok=False,
+                    status="disabled",
+                ),
+            },
+        )
+    try:
+        target = _resolve_machine_directory(arguments.get("path"))
+    except ValueError as exc:
+        return RuntimeExecutionResult(
+            handled=True,
+            ok=False,
+            status="not_allowed",
+            response_text=str(exc).replace("inspect safe local directories in", "write inside"),
+            details={
+                "observation": _tool_observation(
+                    intent="machine.ensure_directory",
+                    tool_surface="machine",
+                    ok=False,
+                    status="not_allowed",
+                    allowed_roots=[_home_relative_label(root) for root in _safe_machine_roots()],
+                ),
+            },
+        )
+    already_present = target.exists()
+    target.mkdir(parents=True, exist_ok=True)
+    status = "already_exists" if already_present else "executed"
+    action = "already_present" if already_present else "created"
+    return RuntimeExecutionResult(
+        handled=True,
+        ok=True,
+        status=status,
+        response_text=(
+            f"Directory `{_home_relative_label(target)}` already existed."
+            if already_present
+            else f"Created directory `{_home_relative_label(target)}`."
+        ),
+        details={
+            "path": _home_relative_label(target),
+            "action": action,
+            "already_present": already_present,
+            "observation": _tool_observation(
+                intent="machine.ensure_directory",
+                tool_surface="machine",
+                ok=True,
+                status=status,
+                path=_home_relative_label(target),
+                action=action,
+                already_present=already_present,
+            ),
         },
     )
 

@@ -492,6 +492,7 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
                 self.assertEqual(payload["mode"], "api_server")
                 self.assertEqual(payload["feature_flags"]["helper_mesh_enabled"], True)
                 self.assertEqual(payload["capabilities"][0]["name"], "helper_mesh")
+                self.assertEqual(payload["capabilities"][0]["state"], "implemented")
                 self.assertEqual(payload["public_hive_auth"]["status"], "synced_from_ssh")
                 self.assertEqual(payload["public_hive_auth"]["ok"], True)
         finally:

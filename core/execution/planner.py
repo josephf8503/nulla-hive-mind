@@ -288,6 +288,31 @@ def _extract_safe_machine_directory_listing(text: str) -> dict[str, Any] | None:
     return {"path": path, "directories_only": directories_only, "limit": 200}
 
 
+def _extract_safe_machine_directory_create(text: str) -> dict[str, Any] | None:
+    lowered = " ".join(str(text or "").strip().lower().split())
+    if not lowered:
+        return None
+    if not any(marker in lowered for marker in _DIRECTORY_CREATE_MARKERS):
+        return None
+    if any(marker in lowered for marker in (" write ", " file ", " append ", " edit ", " change ", " delete ", " remove ", " rename ", " move ")):
+        return None
+    if not any(marker in lowered for marker in (" folder", " directory", " dir ", "mkdir")):
+        return None
+    root = ""
+    if "desktop" in lowered:
+        root = "~/Desktop"
+    elif "downloads" in lowered:
+        root = "~/Downloads"
+    elif "documents" in lowered or "docs" in lowered:
+        root = "~/Documents"
+    if not root:
+        return None
+    relative_path = _extract_workspace_bootstrap_path(text)
+    if not relative_path:
+        return None
+    return {"path": f"{root.rstrip('/')}/{relative_path}".replace("//", "/")}
+
+
 def _extract_machine_specs_request(text: str) -> dict[str, Any] | None:
     lowered = " ".join(str(text or "").strip().lower().split())
     if not lowered:
@@ -1567,6 +1592,7 @@ def plan_tool_workflow(
     explicit_lookup = looks_like_explicit_lookup_request(research_text) or public_entity_lookup
     tool_inventory_request = _looks_like_tool_inventory_request(text)
     machine_directory_list = _extract_safe_machine_directory_listing(text)
+    machine_directory_create = _extract_safe_machine_directory_create(text)
     machine_specs_request = _extract_machine_specs_request(text)
     workspace_bootstrap_path = _extract_workspace_bootstrap_path(text)
     workspace_bootstrap_request = _looks_like_workspace_bootstrap_request(text)
@@ -1609,33 +1635,6 @@ def plan_tool_workflow(
                     reason="planned_research_search",
                     next_payload={"intent": "web.search", "arguments": {"query": research_text, "limit": 4}},
                 )
-        if any(marker in lowered for marker in create_task_markers) or _create_task_fuzzy(lowered) or _proceed_with_task(lowered):
-            raw_title = text.strip()
-            for prefix in _HIVE_CREATE_PREFIXES:
-                if raw_title.lower().startswith(prefix):
-                    raw_title = raw_title[len(prefix):].strip().lstrip("-:–").strip()
-                    break
-            if "task:" in lowered:
-                task_match = re.search(r"\btask\b\s*[:=-]\s*(.+?)(?=(?:\b(?:goal|summary)\b\s*[:=-])|(?:\b(?:topic tags?|tags?)\b\s*[:=-])|$)", text, re.IGNORECASE)
-                if task_match is not None:
-                    raw_title = str(task_match.group(1) or "").strip()
-            title = _normalize_hive_title_candidate(raw_title[:180])
-            if _is_generic_hive_title_candidate(title):
-                recovered = _recover_hive_create_from_history(source_context)
-                if recovered is None:
-                    return WorkflowPlannerDecision(handled=False, reason="no_workflow_plan")
-                title, recovered_summary = recovered
-                summary = recovered_summary[:4000] or title
-            else:
-                summary = text.strip()[:4000] or title
-            return WorkflowPlannerDecision(
-                handled=True,
-                reason="planned_hive_create_topic",
-                next_payload={
-                    "intent": "hive.create_topic",
-                    "arguments": {"title": title, "summary": summary, "topic_tags": ["research"]},
-                },
-            )
         if tool_inventory_request:
             return WorkflowPlannerDecision(
                 handled=True,
@@ -1653,6 +1652,12 @@ def plan_tool_workflow(
                 handled=True,
                 reason="planned_safe_machine_directory_list",
                 next_payload={"intent": "machine.list_directory", "arguments": machine_directory_list},
+            )
+        if machine_directory_create:
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_safe_machine_directory_create",
+                next_payload={"intent": "machine.ensure_directory", "arguments": machine_directory_create},
             )
         if workspace_file_plan is not None:
             pending_writes = _pending_workspace_writes(workspace_file_plan, steps)
@@ -1703,6 +1708,33 @@ def plan_tool_workflow(
                 handled=True,
                 reason="planned_workspace_directory_bootstrap",
                 next_payload={"intent": "workspace.ensure_directory", "arguments": {"path": workspace_bootstrap_path}},
+            )
+        if any(marker in lowered for marker in create_task_markers) or _create_task_fuzzy(lowered) or _proceed_with_task(lowered):
+            raw_title = text.strip()
+            for prefix in _HIVE_CREATE_PREFIXES:
+                if raw_title.lower().startswith(prefix):
+                    raw_title = raw_title[len(prefix):].strip().lstrip("-:–").strip()
+                    break
+            if "task:" in lowered:
+                task_match = re.search(r"\btask\b\s*[:=-]\s*(.+?)(?=(?:\b(?:goal|summary)\b\s*[:=-])|(?:\b(?:topic tags?|tags?)\b\s*[:=-])|$)", text, re.IGNORECASE)
+                if task_match is not None:
+                    raw_title = str(task_match.group(1) or "").strip()
+            title = _normalize_hive_title_candidate(raw_title[:180])
+            if _is_generic_hive_title_candidate(title):
+                recovered = _recover_hive_create_from_history(source_context)
+                if recovered is None:
+                    return WorkflowPlannerDecision(handled=False, reason="no_workflow_plan")
+                title, recovered_summary = recovered
+                summary = recovered_summary[:4000] or title
+            else:
+                summary = text.strip()[:4000] or title
+            return WorkflowPlannerDecision(
+                handled=True,
+                reason="planned_hive_create_topic",
+                next_payload={
+                    "intent": "hive.create_topic",
+                    "arguments": {"title": title, "summary": summary, "topic_tags": ["research"]},
+                },
             )
         orchestrated_payload = _planned_orchestrated_operator_payload(
             user_text=raw_text,

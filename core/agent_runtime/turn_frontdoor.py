@@ -182,6 +182,15 @@ def handle_turn_frontdoor(
             )
         }
 
+    machine_write = agent._maybe_handle_direct_machine_write_request(
+        effective_input,
+        session_id=session_id,
+        source_surface=source_surface,
+        source_context=source_context,
+    )
+    if machine_write is not None:
+        return {"result": machine_write}
+
     machine_write_guard = agent._maybe_handle_safe_machine_write_guard(
         effective_input,
         session_id=session_id,
