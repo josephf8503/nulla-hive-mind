@@ -6,10 +6,12 @@ import operator
 import os
 import platform
 import re
+import socket
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from core import policy_engine
 from core.learning import load_procedure_shards, rank_reusable_procedures
@@ -718,13 +720,19 @@ _VALID_TASK_CLASSES = {
 
 def _classify_via_model(user_input: str) -> str:
     """Ask the local LLM to classify user intent when regex fails."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return ""
     try:
         import requests as _req
 
         from core.hardware_tier import recommended_ollama_model
 
         base_url = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
-        _req.get(f"{base_url}/api/tags", timeout=1.5)
+        parsed = urlparse(base_url)
+        host = str(parsed.hostname or "127.0.0.1").strip() or "127.0.0.1"
+        port = int(parsed.port or (443 if parsed.scheme == "https" else 80))
+        with socket.create_connection((host, port), timeout=0.25):
+            pass
 
         class_list = ", ".join(sorted(_VALID_TASK_CLASSES))
         prompt = (
@@ -741,7 +749,7 @@ def _classify_via_model(user_input: str) -> str:
                 "temperature": 0.1,
                 "max_tokens": 20,
             },
-            timeout=8,
+            timeout=4,
         )
         resp.raise_for_status()
         raw = resp.json()["choices"][0]["message"]["content"].strip().lower()

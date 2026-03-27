@@ -159,6 +159,34 @@ class TransportLargePayloadTests(unittest.TestCase):
         finally:
             server.stop()
 
+    def test_bind_conflict_falls_back_to_ephemeral_udp_port(self) -> None:
+        primary = UDPTransportServer(host="127.0.0.1", port=0, on_message=lambda *_args: None)
+        secondary: UDPTransportServer | None = None
+        try:
+            with patch("network.stun_client.discover_public_endpoint", return_value=None), patch(
+                "network.transport.policy_engine.get",
+                side_effect=self._transport_policy,
+            ):
+                primary_runtime = primary.start()
+                secondary = UDPTransportServer(
+                    host="127.0.0.1",
+                    port=primary_runtime.port,
+                    on_message=lambda *_args: None,
+                )
+                secondary_runtime = secondary.start()
+        except PermissionError:
+            self.skipTest("Local UDP socket binds are not permitted in this sandbox.")
+        finally:
+            if secondary is not None:
+                secondary.stop()
+            primary.stop()
+
+        self.assertEqual(primary.port, primary_runtime.port)
+        self.assertNotEqual(secondary_runtime.port, primary_runtime.port)
+        self.assertGreater(secondary_runtime.port, 0)
+        self.assertEqual(secondary.port, secondary_runtime.port)
+        self.assertEqual(secondary_runtime.public_port, secondary_runtime.port)
+
     def test_stream_frame_reassembly_dispatches_completed_payload(self) -> None:
         received: list[bytes] = []
         signal = threading.Event()

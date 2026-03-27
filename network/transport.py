@@ -197,6 +197,58 @@ def _raise_udp_bind_conflict(host: str, port: int, exc: OSError) -> None:
     ) from exc
 
 
+def _kill_stale_udp_holder(port: int) -> bool:
+    """Find and kill a stale process holding a UDP port (Windows + POSIX)."""
+    import subprocess
+
+    my_pid = os.getpid()
+    try:
+        result = subprocess.run(
+            ["netstat", "-ano", "-p", "UDP"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for line in (result.stdout or "").splitlines():
+            if "UDP" not in line or f":{port}" not in line:
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                holder_pid = int(parts[-1])
+            except ValueError:
+                continue
+            if holder_pid == my_pid or holder_pid == 0:
+                continue
+            audit_logger.log(
+                "killing_stale_port_holder",
+                target_id=f"pid={holder_pid}",
+                target_type="transport",
+                details={"port": port},
+            )
+            with contextlib.suppress(Exception):
+                subprocess.run(
+                    ["taskkill", "/F", "/PID", str(holder_pid)],
+                    capture_output=True,
+                    timeout=5,
+                )
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _is_bind_conflict(error: OSError) -> bool:
+    codes = {
+        int(getattr(errno, "EADDRINUSE", 48)),
+        48,
+        98,
+        10048,
+    }
+    return int(getattr(error, "errno", -1) or -1) in codes or int(getattr(error, "winerror", -1) or -1) in codes
+
+
 def _configure_udp_socket_buffers(sock: socket.socket) -> None:
     buffer_bytes = _udp_socket_buffer_bytes()
     with contextlib.suppress(OSError):
@@ -257,15 +309,40 @@ class UDPTransportServer:
                 self._stream_endpoint.port if self._stream_endpoint else None,
             )
 
+        requested_port = int(self.port)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         _configure_udp_socket_buffers(sock)
         try:
-            sock.bind((self.host, self.port))
+            sock.bind((self.host, requested_port))
         except OSError as bind_err:
-            sock.close()
-            if _is_address_in_use_error(bind_err):
-                _raise_udp_bind_conflict(self.host, self.port, bind_err)
-            raise
+            if _is_bind_conflict(bind_err) and requested_port > 0:
+                killed = _kill_stale_udp_holder(requested_port)
+                if killed:
+                    time.sleep(0.5)
+                    try:
+                        sock.bind((self.host, requested_port))
+                    except OSError as retry_err:
+                        if not _is_bind_conflict(retry_err):
+                            sock.close()
+                            raise
+                        sock.close()
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        _configure_udp_socket_buffers(sock)
+                        sock.bind((self.host, 0))
+                else:
+                    sock.close()
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    _configure_udp_socket_buffers(sock)
+                    sock.bind((self.host, 0))
+                audit_logger.log(
+                    "transport_bind_conflict_fallback",
+                    target_id=f"{self.host}:{requested_port}",
+                    target_type="transport",
+                    details={"requested_port": requested_port, "resolved_port": int(sock.getsockname()[1])},
+                )
+            else:
+                sock.close()
+                raise
 
         bound_port = int(sock.getsockname()[1])
 

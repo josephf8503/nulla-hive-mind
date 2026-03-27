@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from core.task_router import classify, evaluate_word_math_request, looks_like_live_recency_lookup
+from unittest import mock
+
+from core.task_router import _classify_via_model, classify, evaluate_word_math_request, looks_like_live_recency_lookup
 
 
 def test_word_math_request_classifies_as_chat_conversation() -> None:
@@ -29,6 +31,13 @@ def test_live_recency_lookup_classifies_as_research() -> None:
     assert result["task_class"] == "research"
 
 
+def test_model_classifier_is_disabled_under_pytest(monkeypatch) -> None:
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_task_router.py::test_model_classifier_is_disabled_under_pytest")
+
+    with mock.patch("requests.post", side_effect=AssertionError("model classifier should not hit network under pytest")):
+        assert _classify_via_model("do you think boredom is useful?") == ""
+
+
 def test_patch_and_pytest_prompt_classifies_as_debugging() -> None:
     result = classify(
         "apply this patch, then run `python3 -m pytest -q test_app.py`\n"
@@ -52,3 +61,11 @@ def test_replace_and_ruff_format_check_prompt_is_not_risky_and_classifies_as_deb
 
     assert result["task_class"] == "debugging"
     assert result["risk_flags"] == []
+
+
+def test_model_classifier_returns_empty_when_ollama_port_is_unreachable(monkeypatch) -> None:
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:9")
+
+    with mock.patch("requests.post", side_effect=AssertionError("post should not run when socket preflight fails")):
+        assert _classify_via_model("do you think boredom is useful?") == ""

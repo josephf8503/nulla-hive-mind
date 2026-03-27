@@ -164,6 +164,7 @@ class NullaDaemon:
         )
         runtime = self.transport.start()
         self._runtime = runtime
+        self.config.bind_port = int(runtime.port)
         from network.bootstrap_node import upsert_bootstrap_peer
         from network.nat_probe import classify_nat, detect_local_host
         from network.relay_fallback import choose_relay_mode
@@ -179,7 +180,7 @@ class NullaDaemon:
         configured_advertise = str(self.config.advertise_host or "").strip()
         if configured_advertise and configured_advertise not in {"127.0.0.1", "localhost", "0.0.0.0"}:
             advertised_host = configured_advertise
-            advertised_port = int(self.config.bind_port)
+            advertised_port = int(runtime.port)
         else:
             advertised_host = runtime.public_host
             advertised_port = runtime.public_port
