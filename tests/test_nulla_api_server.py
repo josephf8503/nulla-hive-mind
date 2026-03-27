@@ -365,7 +365,19 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
             "dirty": True,
             "branch": "feature/local-bootstrap",
         }
-        server = self._server_with_runtime(RuntimeServices(display_name="NULLA", runtime_version_stamp=stamp))
+        server = self._server_with_runtime(
+            RuntimeServices(
+                display_name="NULLA",
+                runtime_version_stamp=stamp,
+                public_hive_auth={
+                    "ok": False,
+                    "status": "missing_remote_config_path",
+                    "watch_host": "hive.example.test",
+                    "remote_config_path": "/etc/nulla-hive-mind/watch-config.json",
+                    "next_step": "python -m ops.ensure_public_hive_auth --watch-host hive.example.test --remote-config-path /etc/nulla-hive-mind/watch-config.json",
+                },
+            )
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -383,6 +395,8 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
                 self.assertEqual(payload["runtime"]["build_id"], "0.4.0-closed-test+abc123def456.dirty")
                 self.assertEqual(payload["capabilities"]["feature_flags"]["public_hive_enabled"], True)
                 self.assertEqual(payload["capabilities"]["capabilities"][0]["name"], "local_runtime")
+                self.assertEqual(payload["capabilities"]["public_hive_auth"]["status"], "missing_remote_config_path")
+                self.assertEqual(payload["capabilities"]["public_hive_auth"]["watch_host"], "hive.example.test")
         finally:
             server.shutdown()
             server.server_close()
@@ -414,7 +428,15 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
             thread.join(timeout=1)
 
     def test_runtime_capabilities_route_returns_current_runtime_capability_snapshot(self) -> None:
-        server = self._server_with_runtime()
+        server = self._server_with_runtime(
+            RuntimeServices(
+                display_name="NULLA",
+                public_hive_auth={
+                    "ok": True,
+                    "status": "synced_from_ssh",
+                },
+            )
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -432,6 +454,8 @@ class NullaAPIServerModelMetadataTests(unittest.TestCase):
                 self.assertEqual(payload["mode"], "api_server")
                 self.assertEqual(payload["feature_flags"]["helper_mesh_enabled"], True)
                 self.assertEqual(payload["capabilities"][0]["name"], "helper_mesh")
+                self.assertEqual(payload["public_hive_auth"]["status"], "synced_from_ssh")
+                self.assertEqual(payload["public_hive_auth"]["ok"], True)
         finally:
             server.shutdown()
             server.server_close()

@@ -90,6 +90,17 @@ def apply_runtime_headers(response: ApiResponse, runtime: RuntimeServices) -> Ap
     return response
 
 
+def capability_snapshot_with_runtime(
+    runtime: RuntimeServices,
+    capability_snapshot_provider: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    payload = dict(capability_snapshot_provider() or {})
+    public_hive_auth = dict(runtime.public_hive_auth or {})
+    if public_hive_auth:
+        payload["public_hive_auth"] = public_hive_auth
+    return payload
+
+
 def dispatch_get(
     *,
     path: str,
@@ -99,6 +110,7 @@ def dispatch_get(
     capability_snapshot_provider: Callable[[], dict[str, Any]] = runtime_capability_snapshot,
 ) -> ApiResponse:
     normalized_path = path.rstrip("/") or "/"
+    capability_snapshot = capability_snapshot_with_runtime(runtime, capability_snapshot_provider)
 
     if normalized_path in {"/task-rail", "/trace"}:
         return apply_runtime_headers(
@@ -143,7 +155,7 @@ def dispatch_get(
             "agent": runtime.display_name,
             "daemon": runtime.daemon is not None,
             "runtime": dict(runtime.runtime_version_stamp or {}),
-            "capabilities": capability_snapshot_provider(),
+            "capabilities": capability_snapshot,
         }
         return apply_runtime_headers(json_response(200, payload), runtime)
 
@@ -151,7 +163,7 @@ def dispatch_get(
         return apply_runtime_headers(json_response(200, dict(runtime.runtime_version_stamp or {})), runtime)
 
     if normalized_path in {"/api/runtime/capabilities", "/v1/runtime/capabilities"}:
-        return apply_runtime_headers(json_response(200, capability_snapshot_provider()), runtime)
+        return apply_runtime_headers(json_response(200, capability_snapshot), runtime)
 
     if normalized_path == "/api/runtime/sessions":
         return apply_runtime_headers(json_response(200, {"sessions": list_runtime_sessions(limit=24)}), runtime)

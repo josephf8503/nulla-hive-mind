@@ -58,6 +58,7 @@ class RuntimeServices:
     runtime_parameter_size: str = "7B"
     runtime_started_at: str = ""
     runtime_version_stamp: dict[str, Any] = field(default_factory=dict)
+    public_hive_auth: dict[str, Any] = field(default_factory=dict)
 
     def shutdown(self) -> None:
         if self.daemon:
@@ -180,6 +181,28 @@ def ensure_default_provider(registry: ModelRegistry, model_tag: str) -> None:
         logger.info("Auto-registered default provider: %s", provider_id)
 
 
+def public_hive_auth_snapshot(auth_result: dict[str, Any] | None) -> dict[str, Any]:
+    payload = dict(auth_result or {})
+    status = str(payload.get("status") or "unknown").strip() or "unknown"
+    snapshot: dict[str, Any] = {
+        "ok": bool(payload.get("ok")),
+        "status": status,
+    }
+    requires_auth = payload.get("requires_auth")
+    if requires_auth is not None:
+        snapshot["requires_auth"] = bool(requires_auth)
+    watch_host = str(payload.get("watch_host") or "").strip()
+    if watch_host:
+        snapshot["watch_host"] = watch_host
+    suggested_remote_config_path = str(payload.get("suggested_remote_config_path") or "").strip()
+    if suggested_remote_config_path:
+        snapshot["remote_config_path"] = suggested_remote_config_path
+    suggested_command = str(payload.get("suggested_command") or "").strip()
+    if suggested_command:
+        snapshot["next_step"] = suggested_command
+    return snapshot
+
+
 def bootstrap_runtime_services(*, project_root: Path, workstation_version: str) -> RuntimeServices:
     boot = bootstrap_runtime_mode(
         mode="api_server",
@@ -201,6 +224,7 @@ def bootstrap_runtime_services(*, project_root: Path, workstation_version: str) 
         logger.info("Starter credits seeded for peer %s...", peer_id[:24])
 
     auth_result = ensure_public_hive_auth(project_root=project_root)
+    auth_snapshot = public_hive_auth_snapshot(auth_result)
     if not auth_result.get("ok"):
         auth_status = str(auth_result.get("status") or "unknown").strip() or "unknown"
         suggested_command = str(auth_result.get("suggested_command") or "").strip()
@@ -290,6 +314,7 @@ def bootstrap_runtime_services(*, project_root: Path, workstation_version: str) 
         runtime_parameter_size=runtime_parameter_size,
         runtime_started_at=runtime_started_at,
         runtime_version_stamp=runtime_version_stamp,
+        public_hive_auth=auth_snapshot,
     )
 
 
