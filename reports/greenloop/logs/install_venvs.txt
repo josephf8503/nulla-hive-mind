@@ -1,2 +1,0 @@
-DEV_VENV=/tmp/nulla-green-dev-rCASRr
-RUNTIME_VENV=/tmp/nulla-green-runtime-e4tpA3
