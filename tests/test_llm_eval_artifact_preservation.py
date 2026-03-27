@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 import ops.llm_eval as llm_eval
+from core.llm_eval.pack import collect_recent_llm_inventory
 
 
 def _fake_online_payload(*, failing: bool) -> dict[str, object]:
@@ -103,3 +104,22 @@ def test_git_metadata_falls_back_to_build_source_json_when_git_checkout_is_missi
 
     assert llm_eval._git_branch() == "main"
     assert llm_eval._git_commit() == "15b496e4992038cbd40a582c0e5aed9688d1d70e"
+
+
+def test_collect_recent_llm_inventory_returns_empty_inventory_when_git_history_is_unavailable(monkeypatch, tmp_path: Path) -> None:
+    def _raise_git_failure(*args, **kwargs):
+        raise subprocess.CalledProcessError(128, args[0])
+
+    monkeypatch.setattr(subprocess, "check_output", _raise_git_failure)
+
+    inventory = collect_recent_llm_inventory(tmp_path, since_hours=48)
+
+    assert inventory == {
+        "since_hours": 48,
+        "changed_paths": [],
+        "relevant_paths": [],
+        "tests": [],
+        "scripts": [],
+        "docs": [],
+        "workflows": [],
+    }

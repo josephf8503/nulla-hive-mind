@@ -34,17 +34,20 @@ def _is_llm_related_path(path: str) -> bool:
 
 
 def collect_recent_llm_inventory(repo_root: Path, *, since_hours: int = 48) -> dict[str, Any]:
-    output = subprocess.check_output(
-        [
-            "git",
-            "log",
-            f"--since={since_hours} hours ago",
-            "--name-only",
-            "--pretty=format:",
-        ],
-        cwd=str(repo_root),
-        text=True,
-    )
+    try:
+        output = subprocess.check_output(
+            [
+                "git",
+                "log",
+                f"--since={since_hours} hours ago",
+                "--name-only",
+                "--pretty=format:",
+            ],
+            cwd=str(repo_root),
+            text=True,
+        )
+    except Exception:
+        output = ""
     changed = sorted({line.strip() for line in output.splitlines() if line.strip()})
     relevant = [path for path in changed if _is_llm_related_path(path)]
     tests = [path for path in relevant if path.startswith("tests/") and path.endswith(".py")]
