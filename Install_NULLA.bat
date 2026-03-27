@@ -1,5 +1,5 @@
 @echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
-call "%SCRIPT_DIR%installer\install_nulla.bat"
+call "%SCRIPT_DIR%installer\install_nulla.bat" %*
 endlocal

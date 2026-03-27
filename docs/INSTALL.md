@@ -28,6 +28,16 @@ bash Probe_NULLA_Stack.sh
 .\Probe_NULLA_Stack.bat
 ```
 
+Force a supported install profile instead of taking the honest auto recommendation:
+
+```bash
+bash bootstrap_nulla.sh --install-profile hybrid-kimi
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\bootstrap_nulla.ps1 -InstallProfile hybrid-kimi
+```
+
 The probe reports:
 
 1. machine hardware summary

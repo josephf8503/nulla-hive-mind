@@ -54,7 +54,7 @@ def test_openclaw_launcher_uses_noninteractive_ollama_fallback(tmp_path: Path) -
 def test_openclaw_launcher_exports_project_root_and_health_waits(tmp_path: Path) -> None:
     script = _render_openclaw_launcher(tmp_path)
 
-    assert 'export PYTHONPATH="${PROJECT_ROOT}"' in script
+    assert 'cd "${PROJECT_ROOT}"' in script
     assert 'wait_for_http_ready() {' in script
     assert 'export NULLA_OPENCLAW_API_URL="${NULLA_OPENCLAW_API_URL:-http://127.0.0.1:${NULLA_OPENCLAW_API_PORT}}"' in script
     assert 'wait_for_http_ready "${NULLA_OPENCLAW_API_URL}/healthz" 30 "${api_pid}" 3' in script

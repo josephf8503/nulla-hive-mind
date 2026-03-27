@@ -228,6 +228,9 @@ def _resolve_profile_id(
     env: Mapping[str, str],
 ) -> tuple[str, str, list[str]]:
     reasons: list[str] = []
+    if requested == "auto-recommended":
+        reasons.append("Install profile requested auto-recommended; applying hardware/provider auto selection.")
+        requested = ""
     if requested:
         if requested in _PROFILE_IDS:
             reasons.append(f"Install profile came from NULLA_INSTALL_PROFILE={requested}.")

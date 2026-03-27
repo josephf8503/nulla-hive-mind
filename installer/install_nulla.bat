@@ -7,6 +7,7 @@ set "VENV_DIR=%PROJECT_ROOT%\.venv"
 set "AUTO_YES=0"
 set "AUTO_START=0"
 set "NULLA_HOME_OVERRIDE="
+set "INSTALL_PROFILE_OVERRIDE=%NULLA_INSTALL_PROFILE%"
 set "AGENT_NAME_OVERRIDE=%NULLA_AGENT_NAME%"
 set "OPENCLAW_MODE=default"
 set "OPENCLAW_PATH_OVERRIDE="
@@ -31,6 +32,16 @@ if /i "%~1"=="/Y" (
 )
 if /i "%~1"=="/START" (
   set "AUTO_START=1"
+  shift
+  goto parse_args
+)
+if /i "%~1"=="/INSTALLPROFILE" (
+  shift
+  if "%~1"=="" (
+    echo ERROR: /INSTALLPROFILE requires a value.
+    goto usage
+  )
+  set "INSTALL_PROFILE_OVERRIDE=%~1"
   shift
   goto parse_args
 )
@@ -69,6 +80,11 @@ if /i "%ARG:~0,11%"=="/AGENTNAME=" (
   shift
   goto parse_args
 )
+if /i "%ARG:~0,16%"=="/INSTALLPROFILE=" (
+  set "INSTALL_PROFILE_OVERRIDE=%ARG:~16%"
+  shift
+  goto parse_args
+)
 if /i "%ARG:~0,10%"=="/OPENCLAW=" (
   set "OPENCLAW_RAW=%ARG:~10%"
   if /i "%OPENCLAW_RAW%"=="skip" set "OPENCLAW_MODE=skip"
@@ -85,10 +101,14 @@ echo ERROR: Unknown option %~1
 goto usage
 
 :usage
-echo Usage: install_nulla.bat [/Y] [/START] [/NOOPENCLAW] [/NULLAHOME=PATH] [/AGENTNAME=NAME] [/OPENCLAW=skip^|default^|prompt^|PATH]
+echo Usage: install_nulla.bat [/Y] [/START] [/NOOPENCLAW] [/NULLAHOME=PATH] [/INSTALLPROFILE=ID] [/AGENTNAME=NAME] [/OPENCLAW=skip^|default^|prompt^|PATH]
 exit /b 2
 
 :args_done
+if /i not "%INSTALL_PROFILE_OVERRIDE%"=="" (
+  call :validate_install_profile "%INSTALL_PROFILE_OVERRIDE%"
+  if errorlevel 1 exit /b 2
+)
 
 echo ===============================================
 echo NULLA Installer (Windows)
@@ -247,19 +267,39 @@ set "HARDWARE_SUMMARY="
 set /p HARDWARE_SUMMARY=<"%TEMP%\nulla_hw.txt"
 del /f /q "%TEMP%\nulla_hw.txt" >nul 2>&1
 set "INSTALL_PROFILE=local-only"
+set "RECOMMENDED_INSTALL_PROFILE=local-only"
 "%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).profile_id)" 2>nul > "%TEMP%\nulla_install_profile.txt"
 if exist "%TEMP%\nulla_install_profile.txt" (
-  set /p INSTALL_PROFILE=<"%TEMP%\nulla_install_profile.txt"
+  set /p RECOMMENDED_INSTALL_PROFILE=<"%TEMP%\nulla_install_profile.txt"
   del /f /q "%TEMP%\nulla_install_profile.txt" >nul 2>&1
 )
-set "INSTALL_PROFILE_SUMMARY=%INSTALL_PROFILE% -> %MODEL_TAG%"
+if "%INSTALL_PROFILE_OVERRIDE%"=="" (
+  if "%AUTO_YES%"=="1" (
+    set "INSTALL_PROFILE_OVERRIDE=auto-recommended"
+  ) else (
+    set /p "INSTALL_PROFILE_OVERRIDE=Install profile [auto-recommended/local-only/local-max/hybrid-kimi/hybrid-fallback/full-orchestrated] [auto-recommended]: "
+    if "%INSTALL_PROFILE_OVERRIDE%"=="" set "INSTALL_PROFILE_OVERRIDE=auto-recommended"
+    call :validate_install_profile "%INSTALL_PROFILE_OVERRIDE%"
+    if errorlevel 1 exit /b 2
+  )
+)
+set "NULLA_INSTALL_PROFILE=%INSTALL_PROFILE_OVERRIDE%"
+set "INSTALL_PROFILE_SUMMARY=%RECOMMENDED_INSTALL_PROFILE% -> %MODEL_TAG%"
 "%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).display_summary())" 2>nul > "%TEMP%\nulla_install_profile_summary.txt"
 if exist "%TEMP%\nulla_install_profile_summary.txt" (
   set /p INSTALL_PROFILE_SUMMARY=<"%TEMP%\nulla_install_profile_summary.txt"
   del /f /q "%TEMP%\nulla_install_profile_summary.txt" >nul 2>&1
 )
+set "INSTALL_PROFILE=%RECOMMENDED_INSTALL_PROFILE%"
+"%VENV_DIR%\Scripts\python.exe" -c "from core.runtime_backbone import build_provider_registry_snapshot; from core.runtime_install_profiles import build_install_profile_truth; snapshot = build_provider_registry_snapshot(); print(build_install_profile_truth(selected_model=r'%MODEL_TAG%', runtime_home=r'%NULLA_HOME%', provider_capability_truth=snapshot.capability_truth).profile_id)" 2>nul > "%TEMP%\nulla_selected_install_profile.txt"
+if exist "%TEMP%\nulla_selected_install_profile.txt" (
+  set /p INSTALL_PROFILE=<"%TEMP%\nulla_selected_install_profile.txt"
+  del /f /q "%TEMP%\nulla_selected_install_profile.txt" >nul 2>&1
+)
+set "NULLA_INSTALL_PROFILE=%INSTALL_PROFILE%"
 echo Detected: %HARDWARE_SUMMARY%
 echo Selected model: %MODEL_TAG%
+echo Recommended profile: %RECOMMENDED_INSTALL_PROFILE%
 echo Install profile: %INSTALL_PROFILE%
 echo Profile summary: %INSTALL_PROFILE_SUMMARY%
 
@@ -267,6 +307,7 @@ echo Step 7/14: Creating launchers...
 (
   echo @echo off
   echo set "NULLA_HOME=%NULLA_HOME%"
+  echo set "NULLA_INSTALL_PROFILE=%INSTALL_PROFILE%"
   echo set "PLAYWRIGHT_ENABLED=1"
   echo set "ALLOW_BROWSER_FALLBACK=1"
   echo set "BROWSER_ENGINE=%DEFAULT_BROWSER_ENGINE%"
@@ -284,6 +325,7 @@ echo Step 7/14: Creating launchers...
 (
   echo @echo off
   echo set "NULLA_HOME=%NULLA_HOME%"
+  echo set "NULLA_INSTALL_PROFILE=%INSTALL_PROFILE%"
   echo set "PLAYWRIGHT_ENABLED=1"
   echo set "ALLOW_BROWSER_FALLBACK=1"
   echo set "BROWSER_ENGINE=%DEFAULT_BROWSER_ENGINE%"
@@ -299,6 +341,7 @@ echo Step 7/14: Creating launchers...
   echo @echo off
   echo setlocal enabledelayedexpansion
   echo set "NULLA_HOME=%NULLA_HOME%"
+  echo set "NULLA_INSTALL_PROFILE=%INSTALL_PROFILE%"
   echo set "MODEL_TAG=%MODEL_TAG%"
   echo set "PLAYWRIGHT_ENABLED=1"
   echo set "ALLOW_BROWSER_FALLBACK=1"
@@ -530,6 +573,7 @@ if defined DESKTOP_SHORTCUT echo Desktop:      %DESKTOP_SHORTCUT%
 echo.
 echo NULLA is the default agent, memory is automatic,
 echo mesh daemon is live, starter credits are seeded, and credits are tracked.
+echo Install-profile truth is persisted into launchers and support receipts.
 echo Playwright browser rendering is enabled through install launchers.
 echo Local SearXNG bootstrap is attempted on install and on launcher start.
 echo Decentralized AI. Your machine, your node.
@@ -540,3 +584,15 @@ if "%AUTO_START%"=="1" (
 )
 
 exit /b 0
+
+:validate_install_profile
+set "PROFILE_TO_VALIDATE=%~1"
+if "%PROFILE_TO_VALIDATE%"=="" exit /b 0
+if /i "%PROFILE_TO_VALIDATE%"=="auto-recommended" exit /b 0
+if /i "%PROFILE_TO_VALIDATE%"=="local-only" exit /b 0
+if /i "%PROFILE_TO_VALIDATE%"=="local-max" exit /b 0
+if /i "%PROFILE_TO_VALIDATE%"=="hybrid-kimi" exit /b 0
+if /i "%PROFILE_TO_VALIDATE%"=="hybrid-fallback" exit /b 0
+if /i "%PROFILE_TO_VALIDATE%"=="full-orchestrated" exit /b 0
+echo ERROR: /INSTALLPROFILE must be auto-recommended, local-only, local-max, hybrid-kimi, hybrid-fallback, or full-orchestrated.
+exit /b 1

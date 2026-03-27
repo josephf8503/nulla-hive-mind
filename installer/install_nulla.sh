@@ -12,6 +12,7 @@ MIN_PYTHON_MINOR=10
 AUTO_YES=0
 AUTO_START=0
 RUNTIME_HOME_OVERRIDE=""
+INSTALL_PROFILE_OVERRIDE="${NULLA_INSTALL_PROFILE:-}"
 AGENT_NAME_OVERRIDE="${NULLA_AGENT_NAME:-}"
 OPENCLAW_MODE="default" # prompt|skip|default|path
 OPENCLAW_PATH_OVERRIDE=""
@@ -63,6 +64,7 @@ Options:
   --yes, -y                    Non-interactive install using defaults
   --start                      Launch NULLA immediately after install
   --runtime-home <path>        Override NULLA_HOME path
+  --install-profile <profile>  auto-recommended | local-only | local-max | hybrid-kimi | hybrid-fallback | full-orchestrated
   --agent-name <name>          Visible agent name for OpenClaw and chat
   --openclaw <mode-or-path>    skip | default | prompt | <custom-path>
   --gateway-bind <mode>        OpenClaw gateway bind: loopback | lan | custom
@@ -88,6 +90,14 @@ parse_args() {
           exit 2
         fi
         RUNTIME_HOME_OVERRIDE="$1"
+        ;;
+      --install-profile)
+        shift
+        if [[ $# -eq 0 ]]; then
+          say "ERROR: --install-profile requires a value."
+          exit 2
+        fi
+        INSTALL_PROFILE_OVERRIDE="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
         ;;
       --agent-name)
         shift
@@ -150,6 +160,19 @@ parse_args() {
 }
 
 
+validate_install_profile() {
+  local profile="${1:-}"
+  case "${profile}" in
+    ""|auto-recommended|local-only|local-max|hybrid-kimi|hybrid-fallback|full-orchestrated)
+      ;;
+    *)
+      say "ERROR: --install-profile must be auto-recommended, local-only, local-max, hybrid-kimi, hybrid-fallback, or full-orchestrated."
+      exit 2
+      ;;
+  esac
+}
+
+
 validate_args() {
   case "${OPENCLAW_GATEWAY_BIND}" in
     ""|loopback|lan|custom)
@@ -163,6 +186,7 @@ validate_args() {
     say "ERROR: --gateway-custom-host is required when --gateway-bind custom is used."
     exit 2
   fi
+  validate_install_profile "${INSTALL_PROFILE_OVERRIDE}"
 }
 
 
@@ -368,11 +392,13 @@ print(json.dumps(tier_summary(), ensure_ascii=False))
 detect_install_profile() {
   local runtime_home="$1"
   local model_tag="$2"
-  NULLA_HOME="${runtime_home}" "${VENV_DIR}/bin/python" -c "
+  local requested_profile="${3:-}"
+  NULLA_HOME="${runtime_home}" NULLA_INSTALL_PROFILE="${requested_profile}" "${VENV_DIR}/bin/python" -c "
 from core.runtime_backbone import build_provider_registry_snapshot
 from core.runtime_install_profiles import build_install_profile_truth
 snapshot = build_provider_registry_snapshot()
 profile = build_install_profile_truth(
+    requested_profile='''${requested_profile}''' or None,
     selected_model='${model_tag}',
     runtime_home='${runtime_home}',
     provider_capability_truth=snapshot.capability_truth,
@@ -385,17 +411,29 @@ print(profile.profile_id)
 detect_install_profile_summary() {
   local runtime_home="$1"
   local model_tag="$2"
-  NULLA_HOME="${runtime_home}" "${VENV_DIR}/bin/python" -c "
+  local requested_profile="${3:-}"
+  NULLA_HOME="${runtime_home}" NULLA_INSTALL_PROFILE="${requested_profile}" "${VENV_DIR}/bin/python" -c "
 from core.runtime_backbone import build_provider_registry_snapshot
 from core.runtime_install_profiles import build_install_profile_truth
 snapshot = build_provider_registry_snapshot()
 profile = build_install_profile_truth(
+    requested_profile='''${requested_profile}''' or None,
     selected_model='${model_tag}',
     runtime_home='${runtime_home}',
     provider_capability_truth=snapshot.capability_truth,
 )
 print(profile.display_summary())
 " 2>/dev/null || echo "local-only -> ${model_tag}"
+}
+
+
+prompt_install_profile() {
+  local default_value="${1:-auto-recommended}"
+  local profile=""
+  read -r -p "Install profile [auto-recommended/local-only/local-max/hybrid-kimi/hybrid-fallback/full-orchestrated] [${default_value}]: " profile || true
+  profile="$(printf '%s' "${profile:-$default_value}" | tr '[:upper:]' '[:lower:]')"
+  validate_install_profile "${profile}"
+  printf '%s' "${profile}"
 }
 
 
@@ -443,16 +481,18 @@ EOF
 write_launcher() {
   local target_path="$1"
   local runtime_home="$2"
+  local install_profile="$3"
   cat >"${target_path}" <<'LAUNCHER_HEAD'
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}"
 VENV_PY="${SCRIPT_DIR}/.venv/bin/python"
+cd "${PROJECT_ROOT}"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
-export PYTHONPATH="\${PROJECT_ROOT}"
 export NULLA_HOME="\${NULLA_HOME:-${runtime_home}}"
+export NULLA_INSTALL_PROFILE="\${NULLA_INSTALL_PROFILE:-${install_profile}}"
 $(web_runtime_exports)
 echo "Starting NULLA (API + mesh daemon)..."
 echo "OpenClaw connects to http://127.0.0.1:11435"
@@ -465,16 +505,18 @@ EOF
 write_chat_launcher() {
   local target_path="$1"
   local runtime_home="$2"
+  local install_profile="$3"
   cat >"${target_path}" <<'LAUNCHER_HEAD'
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}"
 VENV_PY="${SCRIPT_DIR}/.venv/bin/python"
+cd "${PROJECT_ROOT}"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
-export PYTHONPATH="\${PROJECT_ROOT}"
 export NULLA_HOME="\${NULLA_HOME:-${runtime_home}}"
+export NULLA_INSTALL_PROFILE="\${NULLA_INSTALL_PROFILE:-${install_profile}}"
 $(web_runtime_exports)
 exec "\${VENV_PY}" -m apps.nulla_chat --platform openclaw --device openclaw
 EOF
@@ -487,17 +529,19 @@ write_openclaw_launcher() {
   local runtime_home="$2"
   local model_tag="$3"
   local openclaw_home="$4"
+  local install_profile="${5:-local-only}"
   cat >"${target_path}" <<'LAUNCHER_HEAD'
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}"
 VENV_PY="${SCRIPT_DIR}/.venv/bin/python"
+cd "${PROJECT_ROOT}"
 LAUNCHER_HEAD
   cat >>"${target_path}" <<EOF
 MODEL_TAG="${model_tag}"
-export PYTHONPATH="\${PROJECT_ROOT}"
 export NULLA_HOME="\${NULLA_HOME:-${runtime_home}}"
+export NULLA_INSTALL_PROFILE="\${NULLA_INSTALL_PROFILE:-${install_profile}}"
 export NULLA_OLLAMA_MODEL="\${NULLA_OLLAMA_MODEL:-\${MODEL_TAG}}"
 export NULLA_OPENCLAW_API_PORT="\${NULLA_OPENCLAW_API_PORT:-11435}"
 export NULLA_OPENCLAW_API_URL="\${NULLA_OPENCLAW_API_URL:-http://127.0.0.1:\${NULLA_OPENCLAW_API_PORT}}"
@@ -1006,24 +1050,36 @@ main() {
 
   local hardware_summary
   local model_tag
+  local recommended_install_profile
+  local requested_install_profile
   local install_profile
   local install_profile_summary
   local openclaw_home_override
   hardware_summary="$(detect_hardware_summary)"
   model_tag="$(detect_model_tag)"
-  install_profile="$(detect_install_profile "${runtime_home}" "${model_tag}")"
-  install_profile_summary="$(detect_install_profile_summary "${runtime_home}" "${model_tag}")"
+  recommended_install_profile="$(detect_install_profile "${runtime_home}" "${model_tag}" "")"
+  requested_install_profile="${INSTALL_PROFILE_OVERRIDE}"
+  if [[ -z "${requested_install_profile}" && "${AUTO_YES}" -eq 0 ]]; then
+    requested_install_profile="$(prompt_install_profile "auto-recommended")"
+  fi
+  if [[ -z "${requested_install_profile}" ]]; then
+    requested_install_profile="auto-recommended"
+  fi
+  install_profile="$(detect_install_profile "${runtime_home}" "${model_tag}" "${requested_install_profile}")"
+  install_profile_summary="$(detect_install_profile_summary "${runtime_home}" "${model_tag}" "${requested_install_profile}")"
+  export NULLA_INSTALL_PROFILE="${install_profile}"
   openclaw_home_override="$(resolve_openclaw_home_override)"
   say "Step 6/14: Hardware probe complete."
   say "Detected: ${hardware_summary}"
   say "Selected model: ${model_tag}"
+  say "Recommended profile: ${recommended_install_profile}"
   say "Install profile: ${install_profile}"
   say "Profile summary: ${install_profile_summary}"
 
   say "Step 7/14: Creating launchers..."
-  write_launcher "${PROJECT_ROOT}/Start_NULLA.sh" "${runtime_home}"
-  write_chat_launcher "${PROJECT_ROOT}/Talk_To_NULLA.sh" "${runtime_home}"
-  write_openclaw_launcher "${PROJECT_ROOT}/OpenClaw_NULLA.sh" "${runtime_home}" "${model_tag}" "${openclaw_home_override}"
+  write_launcher "${PROJECT_ROOT}/Start_NULLA.sh" "${runtime_home}" "${install_profile}"
+  write_chat_launcher "${PROJECT_ROOT}/Talk_To_NULLA.sh" "${runtime_home}" "${install_profile}"
+  write_openclaw_launcher "${PROJECT_ROOT}/OpenClaw_NULLA.sh" "${runtime_home}" "${model_tag}" "${openclaw_home_override}" "${install_profile}"
   write_mac_wrapper "${PROJECT_ROOT}/Start_NULLA.command" "${PROJECT_ROOT}/Start_NULLA.sh"
   write_mac_wrapper "${PROJECT_ROOT}/Talk_To_NULLA.command" "${PROJECT_ROOT}/Talk_To_NULLA.sh"
   write_mac_wrapper "${PROJECT_ROOT}/OpenClaw_NULLA.command" "${PROJECT_ROOT}/OpenClaw_NULLA.sh"
@@ -1065,7 +1121,7 @@ main() {
   fi
   say "Chat:    ${PROJECT_ROOT}/Talk_To_NULLA.sh"
   say "Probe:   ${PROJECT_ROOT}/Probe_NULLA_Stack.sh"
-  say "Credits: PYTHONPATH='${PROJECT_ROOT}' ${VENV_DIR}/bin/python -m apps.nulla_cli credits"
+  say "Credits: cd '${PROJECT_ROOT}' && ${VENV_DIR}/bin/python -m apps.nulla_cli credits"
   say
   say "NULLA is now wired for OpenClaw-friendly launch,"
   say "with Ollama checked, hardware-tier model selection applied,"

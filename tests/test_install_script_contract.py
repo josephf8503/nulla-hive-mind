@@ -23,9 +23,12 @@ def test_install_script_rebuilds_unsupported_venv() -> None:
 def test_install_script_hardens_openclaw_launcher_bootstrap() -> None:
     script = (PROJECT_ROOT / "installer" / "install_nulla.sh").read_text(encoding="utf-8")
 
+    assert "--install-profile <profile>" in script
+    assert 'export NULLA_INSTALL_PROFILE="\\${NULLA_INSTALL_PROFILE:-${install_profile}}"' in script
+    assert 'Recommended profile: ${recommended_install_profile}' in script
     assert 'wait_for_http_ready() {' in script
     assert 'curl -sf --max-time 2 "\\${url}" >/dev/null 2>&1' in script
-    assert 'export PYTHONPATH="\\${PROJECT_ROOT}"' in script
+    assert 'cd "${PROJECT_ROOT}"' in script
     assert 'export NULLA_HOME="\\${NULLA_HOME:-${runtime_home}}"' in script
     assert 'export NULLA_OPENCLAW_API_URL="\\${NULLA_OPENCLAW_API_URL:-http://127.0.0.1:\\${NULLA_OPENCLAW_API_PORT}}"' in script
     assert 'wait_for_http_ready "\\${NULLA_OPENCLAW_API_URL}/healthz" 30 "\\${api_pid}" 3' in script
@@ -38,6 +41,16 @@ def test_install_script_hardens_openclaw_launcher_bootstrap() -> None:
     assert 'disown "\\${openclaw_pid}"' in script
     assert 'open "${PROJECT_ROOT}/OpenClaw_NULLA.command"' in script
     assert 'Handing off launch to Terminal.app...' in script
+
+
+def test_install_wrappers_forward_install_profile_and_extra_args() -> None:
+    install_and_run = (PROJECT_ROOT / "Install_And_Run_NULLA.sh").read_text(encoding="utf-8")
+    install_and_run_bat = (PROJECT_ROOT / "Install_And_Run_NULLA.bat").read_text(encoding="utf-8")
+    install_bat = (PROJECT_ROOT / "Install_NULLA.bat").read_text(encoding="utf-8")
+
+    assert '--start "$@"' in install_and_run
+    assert "%*" in install_and_run_bat
+    assert "%*" in install_bat
 
 
 def test_install_script_surfaces_machine_probe_command() -> None:

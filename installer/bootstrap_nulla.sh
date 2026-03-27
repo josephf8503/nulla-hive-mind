@@ -9,6 +9,7 @@ ARCHIVE_URL="${NULLA_ARCHIVE_URL:-https://github.com/${OWNER}/${REPO}/archive/re
 ARCHIVE_SHA256="${NULLA_ARCHIVE_SHA256:-}"
 TMP_DIR=""
 AUTO_START=1
+INSTALL_PROFILE="${NULLA_INSTALL_PROFILE:-}"
 
 
 say() {
@@ -32,6 +33,7 @@ Options:
   --dir <install-dir>      Target install folder (default: ${INSTALL_DIR})
   --archive-url <url>      Override the source archive URL
   --sha256 <hex>           Verify the downloaded archive against a SHA-256 digest
+  --install-profile <id>   auto-recommended | local-only | local-max | hybrid-kimi | hybrid-fallback | full-orchestrated
   --no-start               Install but do not launch NULLA
   --help, -h               Show this help
 
@@ -42,6 +44,7 @@ Environment overrides:
   NULLA_INSTALL_DIR
   NULLA_ARCHIVE_URL
   NULLA_ARCHIVE_SHA256
+  NULLA_INSTALL_PROFILE
 EOF
 }
 
@@ -69,6 +72,11 @@ parse_args() {
         shift
         [[ $# -gt 0 ]] || { say "ERROR: --sha256 requires a value."; exit 2; }
         ARCHIVE_SHA256="$1"
+        ;;
+      --install-profile)
+        shift
+        [[ $# -gt 0 ]] || { say "ERROR: --install-profile requires a value."; exit 2; }
+        INSTALL_PROFILE="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
         ;;
       --no-start)
         AUTO_START=0
@@ -169,8 +177,12 @@ launch_installer() {
   local launcher="${INSTALL_DIR}/Install_And_Run_NULLA.sh"
   local guided="${INSTALL_DIR}/Install_NULLA.sh"
   local canonical="${INSTALL_DIR}/installer/install_nulla.sh"
+  local -a profile_args=()
   if [[ ! -f "${canonical}" ]]; then
     canonical="${INSTALL_DIR}/install_nulla.sh"
+  fi
+  if [[ -n "${INSTALL_PROFILE}" ]]; then
+    profile_args=(--install-profile "${INSTALL_PROFILE}")
   fi
 
   chmod +x "${launcher}" "${guided}" "${canonical}" 2>/dev/null || true
@@ -178,17 +190,17 @@ launch_installer() {
   say "Running NULLA installer..."
   if [[ "${AUTO_START}" -eq 1 ]]; then
     if [[ -f "${launcher}" ]]; then
-      exec "${launcher}"
+      exec "${launcher}" "${profile_args[@]}"
     fi
     if [[ -f "${canonical}" ]]; then
-      exec "${canonical}" --yes --start --openclaw default
+      exec "${canonical}" --yes --start --openclaw default "${profile_args[@]}"
     fi
   fi
   if [[ -f "${guided}" ]]; then
-    exec "${guided}" --yes --openclaw default
+    exec "${guided}" --yes --openclaw default "${profile_args[@]}"
   fi
   if [[ -f "${canonical}" ]]; then
-    exec "${canonical}" --yes --openclaw default
+    exec "${canonical}" --yes --openclaw default "${profile_args[@]}"
   fi
   say "ERROR: Bootstrap download succeeded, but no usable installer entrypoint was found."
   exit 1

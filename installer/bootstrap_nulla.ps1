@@ -6,6 +6,7 @@ param(
     [string]$InstallDir = $env:NULLA_INSTALL_DIR,
     [string]$ArchiveUrl = $env:NULLA_ARCHIVE_URL,
     [string]$ArchiveSha256 = $env:NULLA_ARCHIVE_SHA256,
+    [string]$InstallProfile = $env:NULLA_INSTALL_PROFILE,
     [switch]$NoStart
 )
 
@@ -85,23 +86,27 @@ function Run-Installer {
     }
 
     Write-Info "Running NULLA installer..."
+    $profileArgs = @()
+    if (-not [string]::IsNullOrWhiteSpace($InstallProfile)) {
+        $profileArgs = @("/INSTALLPROFILE=$InstallProfile")
+    }
     if ($NoStart) {
         if (Test-Path -LiteralPath $guided) {
-            & $guided /Y "/OPENCLAW=default"
+            & $guided /Y "/OPENCLAW=default" @profileArgs
             return
         }
         if (Test-Path -LiteralPath $canonical) {
-            & $canonical /Y "/OPENCLAW=default"
+            & $canonical /Y "/OPENCLAW=default" @profileArgs
             return
         }
     }
     else {
         if (Test-Path -LiteralPath $launcher) {
-            & $launcher
+            & $launcher @profileArgs
             return
         }
         if (Test-Path -LiteralPath $canonical) {
-            & $canonical /Y /START "/OPENCLAW=default"
+            & $canonical /Y /START "/OPENCLAW=default" @profileArgs
             return
         }
     }
@@ -113,10 +118,10 @@ function Run-Installer {
         throw "Bootstrap download succeeded, but no guided installer entrypoint was found."
     }
     elseif (Test-Path -LiteralPath $launcher) {
-        & $launcher
+        & $launcher @profileArgs
     }
     elseif (Test-Path -LiteralPath $canonical) {
-        & $canonical /Y /START "/OPENCLAW=default"
+        & $canonical /Y /START "/OPENCLAW=default" @profileArgs
     }
     else {
         throw "Bootstrap download succeeded, but no auto-start installer entrypoint was found."

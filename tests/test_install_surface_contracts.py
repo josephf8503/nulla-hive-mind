@@ -119,3 +119,17 @@ def test_bootstrap_scripts_support_checksum_verification_and_docs_do_not_pipe_re
     assert "Invoke-WebRequest https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.ps1 -OutFile bootstrap_nulla.ps1" in readme
     assert "curl -fsSLo bootstrap_nulla.sh" in install_doc
     assert "Invoke-WebRequest https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.ps1 -OutFile bootstrap_nulla.ps1" in install_doc
+
+
+def test_install_profile_selection_is_available_across_bootstrap_and_installer_surfaces() -> None:
+    sh_installer = (REPO_ROOT / "installer" / "install_nulla.sh").read_text(encoding="utf-8")
+    bat_installer = (REPO_ROOT / "installer" / "install_nulla.bat").read_text(encoding="utf-8")
+    sh_bootstrap = (REPO_ROOT / "installer" / "bootstrap_nulla.sh").read_text(encoding="utf-8")
+    ps_bootstrap = (REPO_ROOT / "installer" / "bootstrap_nulla.ps1").read_text(encoding="utf-8")
+    install_doc = (REPO_ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+
+    assert "--install-profile <profile>" in sh_installer
+    assert "/INSTALLPROFILE=ID" in bat_installer
+    assert "--install-profile <id>" in sh_bootstrap
+    assert '-InstallProfile hybrid-kimi' in install_doc
+    assert '/INSTALLPROFILE=$InstallProfile' in ps_bootstrap
