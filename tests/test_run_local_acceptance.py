@@ -307,3 +307,65 @@ def test_run_full_acceptance_restores_online_runtime(monkeypatch, tmp_path: Path
     assert not (runtime_home / "config" / "default_policy.yaml").exists()
     assert calls.count("report") == 1
     assert calls.count("start:9141b55:60220") == 3
+
+
+def test_run_full_acceptance_uses_build_source_commit_when_git_is_unavailable(monkeypatch, tmp_path: Path) -> None:
+    profile = acceptance.load_profile()
+    calls: list[str] = []
+    runtime_home = tmp_path / "runtime_home"
+    workspace_root = tmp_path / "workspace"
+    start_script = tmp_path / "Start_NULLA.sh"
+    start_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "build-source.json").write_text(
+        json.dumps({"commit": "82fb2a030909deadbeef"}),
+        encoding="utf-8",
+    )
+
+    def _raise_git(*args, **kwargs):
+        raise acceptance.subprocess.CalledProcessError(128, args[0])
+
+    monkeypatch.setattr(acceptance.subprocess, "check_output", _raise_git)
+    monkeypatch.setattr(acceptance, "_pick_isolated_daemon_bind_port", lambda **kwargs: 60220)
+    monkeypatch.setattr(acceptance, "_stop_runtime", lambda base_url: calls.append(f"stop:{base_url}"))
+    monkeypatch.setattr(
+        acceptance,
+        "_start_runtime",
+        lambda **kwargs: calls.append(f"start:{kwargs['expected_commit']}:{kwargs['daemon_bind_port']}") or object(),
+    )
+    monkeypatch.setattr(
+        acceptance.AcceptanceRunner,
+        "run_online",
+        lambda self: _fake_online_payload(commit="82fb2a030909"),
+    )
+    monkeypatch.setattr(
+        acceptance,
+        "fetch_manual_btc_verification",
+        lambda **kwargs: {
+            "pass": True,
+            "source": "CoinGecko",
+            "observed": "$70,573.00 at 2026-03-20 23:09 UTC",
+            "assessment": "tight",
+            "acceptance_response": "Bitcoin is $70,576.00 USD.",
+        },
+    )
+    monkeypatch.setattr(
+        acceptance,
+        "run_offline_honesty",
+        lambda *args, **kwargs: {"result": {"latency_seconds": 0.05, "pass": True}},
+    )
+    monkeypatch.setattr(acceptance, "render_report", lambda **kwargs: calls.append("report"))
+
+    exit_code = acceptance.run_full_acceptance(
+        base_url="http://127.0.0.1:11435",
+        repo_root=tmp_path,
+        run_root=tmp_path,
+        profile=profile,
+        runtime_home=runtime_home,
+        workspace_root=workspace_root,
+        start_script=start_script,
+    )
+
+    assert exit_code == 0
+    assert calls.count("start:82fb2a030909:60220") == 3

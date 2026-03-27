@@ -130,6 +130,21 @@ def _read_json_if_exists(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def _expected_repo_commit(repo_root: Path) -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=str(repo_root), text=True).strip()
+    except Exception:
+        build_source = _read_json_if_exists(repo_root / "config" / "build-source.json") or {}
+        commit = str(build_source.get("commit") or "").strip()
+        if commit:
+            return commit[:12]
+        receipt = _read_json_if_exists(repo_root / "install_receipt.json") or {}
+        commit = str(receipt.get("commit") or receipt.get("build_commit") or "").strip()
+        if commit:
+            return commit[:12]
+        return "archive"
+
+
 def _copy_tree_with_timestamp(root: Path, *, status: str) -> Path:
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     archive_root = root.parent / f"{root.name}_preserved_{status}_{stamp}"
@@ -763,7 +778,7 @@ def run_full_acceptance(
     start_script: Path,
 ) -> int:
     _preserve_previous_run_artifacts(run_root=run_root, profile=profile)
-    expected_commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=str(repo_root), text=True).strip()
+    expected_commit = _expected_repo_commit(repo_root)
     daemon_bind_port = _pick_isolated_daemon_bind_port(host="127.0.0.1")
     _stop_runtime(base_url)
     _start_runtime(
