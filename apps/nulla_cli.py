@@ -36,8 +36,8 @@ from core.runtime_install_profiles import (
     active_install_profile_id,
     build_install_profile_truth,
     format_install_profile_id,
-    installed_profile_id,
     install_profile_display_choices,
+    installed_profile_id,
     normalize_install_profile_id,
     persist_install_profile_record,
 )
