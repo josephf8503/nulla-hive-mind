@@ -36,6 +36,7 @@ def test_install_script_hardens_openclaw_launcher_bootstrap() -> None:
     assert 'detect_install_profile_display() {' in script
     assert script.count('cd "${PROJECT_ROOT}" && "${VENV_DIR}/bin/python" -c "') >= 3
     assert 'cd "${PROJECT_ROOT}" && NULLA_HOME="${runtime_home}" NULLA_INSTALL_PROFILE="${requested_profile}" "${VENV_DIR}/bin/python" -c "' in script
+    assert 'Profile: ${install_profile_display}' in script
     assert 'Recommended profile: ${recommended_install_profile_display}' in script
     assert 'Install profile: ${install_profile_display}' in script
     assert 'wait_for_http_ready() {' in script

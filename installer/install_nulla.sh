@@ -1310,7 +1310,7 @@ main() {
   say
   say "Visible agent name: ${agent_name}"
   say "Selected model: ${model_tag}"
-  say "Profile: ${install_profile} (${install_profile_summary})"
+  say "Profile: ${install_profile_display}"
   say "Start:   ${PROJECT_ROOT}/OpenClaw_NULLA.sh"
   if [[ -n "${DESKTOP_SHORTCUT_PATH}" ]]; then
     say "Desktop: ${DESKTOP_SHORTCUT_PATH}"
