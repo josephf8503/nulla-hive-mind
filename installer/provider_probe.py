@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 from urllib import request
 
@@ -17,7 +18,7 @@ if PROJECT_ROOT not in sys.path:
 from core.hardware_tier import MachineProbe, select_qwen_tier, tier_summary
 from core.provider_routing import ProviderCapabilityTruth
 from core.runtime_backbone import build_provider_registry_snapshot
-from core.runtime_install_profiles import build_install_profile_truth
+from core.runtime_install_profiles import build_install_profile_truth, default_ollama_models_path
 
 
 def detect_ollama_binary() -> str:
@@ -56,11 +57,30 @@ def _format_ollama_size_label(value: Any) -> str:
 def _list_ollama_models_via_api(api_url: str | None = None) -> list[dict[str, str]]:
     base = str(api_url or "").strip() or _ollama_api_url()
     url = f"{base.rstrip('/')}/api/tags"
-    try:
-        with request.urlopen(url, timeout=3) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
-        return []
+    curl_binary = shutil.which("curl")
+    if curl_binary:
+        try:
+            completed = subprocess.run(
+                [curl_binary, "-fsS", url],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            if completed.returncode == 0 and str(completed.stdout or "").strip():
+                payload = json.loads(completed.stdout)
+            else:
+                payload = None
+        except Exception:
+            payload = None
+    else:
+        payload = None
+    if payload is None:
+        try:
+            with request.urlopen(url, timeout=3) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception:
+            return []
     rows: list[dict[str, str]] = []
     for raw in list(payload.get("models") or []):
         if not isinstance(raw, dict):
@@ -80,10 +100,58 @@ def _list_ollama_models_via_api(api_url: str | None = None) -> list[dict[str, st
     return rows
 
 
+def _list_ollama_models_via_manifests() -> list[dict[str, str]]:
+    manifest_root = (default_ollama_models_path() / "manifests").resolve()
+    if not manifest_root.exists():
+        return []
+    rows: list[dict[str, str]] = []
+    for manifest_path in sorted(path for path in manifest_root.glob("**/*") if path.is_file()):
+        try:
+            relative = manifest_path.relative_to(manifest_root)
+        except Exception:
+            continue
+        parts = relative.parts
+        if len(parts) < 2:
+            continue
+        model_name = f"{parts[-2]}:{parts[-1]}"
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+        digest = ""
+        size_label = ""
+        if isinstance(payload, dict):
+            layers = list(payload.get("layers") or [])
+            model_layer = next(
+                (
+                    layer
+                    for layer in layers
+                    if isinstance(layer, dict)
+                    and str(layer.get("mediaType") or "").strip() == "application/vnd.ollama.image.model"
+                ),
+                None,
+            )
+            if isinstance(model_layer, dict):
+                digest = str(model_layer.get("digest") or "").strip().removeprefix("sha256:")
+                size_label = _format_ollama_size_label(model_layer.get("size"))
+        rows.append(
+            {
+                "name": model_name,
+                "id": digest[:12] if digest else "",
+                "size": size_label,
+                "modified": str(int(manifest_path.stat().st_mtime)),
+            }
+        )
+    return rows
+
+
 def list_ollama_models(ollama_binary: str | None = None, ollama_api_url: str | None = None) -> list[dict[str, str]]:
     api_rows = _list_ollama_models_via_api(ollama_api_url)
     if api_rows:
         return api_rows
+    manifest_rows = _list_ollama_models_via_manifests()
+    if manifest_rows:
+        return manifest_rows
     binary = str(ollama_binary or "").strip() or detect_ollama_binary()
     if not binary:
         return []

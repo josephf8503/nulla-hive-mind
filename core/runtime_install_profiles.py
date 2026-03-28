@@ -841,6 +841,21 @@ def _installed_ollama_model_tags(
                 tags.add(model_id.lower())
     if override_present:
         return tags
+    manifest_root = (default_ollama_models_path(env) / "manifests").resolve()
+    if manifest_root.exists():
+        for manifest_path in manifest_root.glob("**/*"):
+            if not manifest_path.is_file():
+                continue
+            try:
+                relative = manifest_path.relative_to(manifest_root)
+            except Exception:
+                continue
+            parts = relative.parts
+            if len(parts) < 2:
+                continue
+            tags.add(f"{parts[-2]}:{parts[-1]}".lower())
+        if tags:
+            return tags
     binary = shutil.which("ollama")
     if not binary:
         return tags

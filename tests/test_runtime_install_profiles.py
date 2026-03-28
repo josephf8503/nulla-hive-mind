@@ -491,6 +491,56 @@ def test_local_max_reuses_installed_ollama_models_when_budgeting_disk() -> None:
     assert profile.volume_checks[0].free_gb == 23.0
 
 
+def test_local_max_detects_installed_models_from_ollama_manifests(tmp_path) -> None:
+    manifest_root = tmp_path / "models" / "manifests" / "registry.ollama.ai" / "library" / "qwen2.5"
+    manifest_root.mkdir(parents=True)
+    (manifest_root / "14b").write_text("{}", encoding="utf-8")
+    (manifest_root / "7b").write_text("{}", encoding="utf-8")
+    probe = MachineProbe(
+        cpu_cores=10,
+        ram_gb=24.0,
+        gpu_name="Apple Silicon",
+        vram_gb=24.0,
+        accelerator="mps",
+    )
+    tier = QwenTier("mid", "qwen2.5:14b", 14.0, 10.0, 24.0)
+    with mock.patch("core.runtime_install_profiles.shutil.disk_usage", return_value=_fake_disk_usage_with_free_gb(23.0)), mock.patch(
+        "core.runtime_install_profiles.default_ollama_models_path",
+        return_value=(tmp_path / "models").resolve(),
+    ):
+        profile = build_install_profile_truth(
+            requested_profile="local-max",
+            probe=probe,
+            tier=tier,
+            selected_model="qwen2.5:14b",
+            env={},
+            provider_capability_truth=(
+                ProviderCapabilityTruth(
+                    provider_id="ollama-local:qwen2.5:14b",
+                    model_id="qwen2.5:14b",
+                    role_fit="coder",
+                    context_window=32768,
+                    tool_support=("structured_json",),
+                    structured_output_support=True,
+                    tokens_per_second=16.0,
+                    ram_budget_gb=24.0,
+                    vram_budget_gb=0.0,
+                    quantization="Q4_K_M",
+                    locality="local",
+                    privacy_class="local_private",
+                    queue_depth=0,
+                    max_safe_concurrency=1,
+                    availability_state="ready",
+                ),
+            ),
+            runtime_home="/tmp/nulla-runtime",
+        )
+
+    assert profile.profile_id == "local-max"
+    assert profile.ready is True
+    assert profile.minimum_free_space_gb == 3.5
+
+
 def test_hybrid_kimi_profile_fails_closed_when_selected_remote_lane_is_blocked() -> None:
     probe = MachineProbe(
         cpu_cores=8,

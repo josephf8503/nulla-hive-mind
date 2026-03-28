@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from unittest import mock
 
@@ -154,6 +155,7 @@ def test_default_probe_report_hides_unsupported_remote_ideas() -> None:
 
 def test_list_ollama_models_preserves_size_and_modified_columns(monkeypatch) -> None:
     monkeypatch.setattr("installer.provider_probe._list_ollama_models_via_api", lambda *args, **kwargs: [])
+    monkeypatch.setattr("installer.provider_probe._list_ollama_models_via_manifests", lambda: [])
 
     def fake_run(*args, **kwargs) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
@@ -182,23 +184,19 @@ def test_list_ollama_models_preserves_size_and_modified_columns(monkeypatch) -> 
 
 
 def test_list_ollama_models_prefers_tags_api_and_avoids_cli_shellout(monkeypatch) -> None:
-    class _Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def read(self) -> bytes:
-            return (
-                b'{"models":[{"name":"qwen2.5:14b","digest":"7cdf5a0187d5abcd","size":8988124069,'
-                b'"modified_at":"2026-03-28T09:38:28Z"}]}'
-            )
-
-    monkeypatch.setattr("installer.provider_probe.request.urlopen", lambda *args, **kwargs: _Response())
+    monkeypatch.setattr("installer.provider_probe.shutil.which", lambda name: "/usr/bin/curl" if name == "curl" else "")
+    monkeypatch.setattr("installer.provider_probe._list_ollama_models_via_manifests", lambda: [])
     monkeypatch.setattr(
         "installer.provider_probe.subprocess.run",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("CLI fallback should not run when tags API works")),
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout=(
+                '{"models":[{"name":"qwen2.5:14b","digest":"7cdf5a0187d5abcd","size":8988124069,'
+                '"modified_at":"2026-03-28T09:38:28Z"}]}'
+            ),
+            stderr="",
+        ),
     )
 
     rows = list_ollama_models("/usr/local/bin/ollama")
@@ -211,6 +209,45 @@ def test_list_ollama_models_prefers_tags_api_and_avoids_cli_shellout(monkeypatch
             "modified": "2026-03-28T09:38:28Z",
         }
     ]
+
+
+def test_list_ollama_models_falls_back_to_manifest_inventory(monkeypatch, tmp_path) -> None:
+    manifest_root = tmp_path / "models" / "manifests" / "registry.ollama.ai" / "library" / "qwen2.5"
+    manifest_root.mkdir(parents=True)
+    (manifest_root / "14b").write_text(
+        json.dumps(
+            {
+                "layers": [
+                    {
+                        "mediaType": "application/vnd.ollama.image.model",
+                        "digest": "sha256:2049f5674b1e92b4464e5729975c9689fcfbf0b0e4443ccf10b5339f370f9a54",
+                        "size": 8988110688,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (manifest_root / "7b").write_text(
+        json.dumps(
+            {
+                "layers": [
+                    {
+                        "mediaType": "application/vnd.ollama.image.model",
+                        "digest": "sha256:2bada8a7450677000f678be90653b85d364de7db25eb5ea54136ada5f3933730",
+                        "size": 4683073952,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("installer.provider_probe._list_ollama_models_via_api", lambda *args, **kwargs: [])
+    monkeypatch.setattr("installer.provider_probe.default_ollama_models_path", lambda: (tmp_path / "models").resolve())
+
+    rows = list_ollama_models("/usr/local/bin/ollama")
+
+    assert [row["name"] for row in rows] == ["qwen2.5:14b", "qwen2.5:7b"]
 
 
 def test_remote_env_statuses_accepts_moonshot_aliases_for_kimi() -> None:
